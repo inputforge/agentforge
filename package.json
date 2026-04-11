@@ -1,0 +1,46 @@
+{
+  "name": "agentforge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:frontend": "vite",
+    "dev:backend": "bun --hot src/backend/index.ts",
+    "build:frontend": "vite build",
+    "build:backend": "bun build src/backend/index.ts --target bun --outdir dist/server",
+    "build": "bun run build:frontend && bun run build:backend",
+    "preview": "vite preview",
+    "start": "bun dist/server/index.js",
+    "typecheck:frontend": "tsc --build src/frontend/tsconfig.json",
+    "typecheck:backend": "tsc --build src/backend/tsconfig.json",
+    "typecheck:common": "tsc --build src/common/tsconfig.json",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.1.0",
+    "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "hono": "^4.4.13",
+    "lucide-react": "^1.8.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "simple-git": "^3.25.0",
+    "tailwindcss": "^4.2.2",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.12",
+    "@types/node": "^25.6.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.0"
+  }
+}

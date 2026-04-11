@@ -1,0 +1,326 @@
+import { ChevronRight, FileDiff, GitMerge, Plus, Square, Terminal as TerminalIcon, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { api } from '../../lib/api'
+import { useStore } from '../../store'
+import { useXTerm } from '../../hooks/useXTerm'
+import type { AgentType, DiffFile, DiffResult, Ticket } from '../../types'
+
+export function AgentDetailPanel() {
+  const { getActiveTicket, getActiveAgent, closeTicket, addNotification } = useStore()
+
+  const ticket = getActiveTicket()
+  const agent = getActiveAgent()
+
+  // Diff state
+  const [diff, setDiff] = useState<DiffResult | null>(null)
+  const [selectedFile, setSelectedFile] = useState<DiffFile | null>(null)
+  const [isDiffLoading, setIsDiffLoading] = useState(false)
+  const [isMerging, setIsMerging] = useState(false)
+
+  const agentId = agent?.id
+
+  // ── Terminal ─────────────────────────────────────────────────────────────
+
+  const { containerRef: termContainerRef } = useXTerm(agentId ? `/ws/agent/${agentId}` : null)
+
+  // ── Diff ─────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!agentId) { setDiff(null); return }
+    setIsDiffLoading(true)
+    setDiff(null)
+    setSelectedFile(null)
+
+    api.agents.getDiff(agentId)
+      .then((result) => {
+        setDiff(result)
+        setSelectedFile(result.files[0] ?? null)
+      })
+      .catch(() => {
+        // No diff yet (agent still running) — that's fine
+      })
+      .finally(() => setIsDiffLoading(false))
+  }, [agentId])
+
+  async function handleMerge() {
+    if (!agentId || !ticket) return
+    setIsMerging(true)
+    try {
+      const result = await api.agents.merge(agentId)
+      if (result.success) {
+        addNotification({ type: 'info', message: `Merged ${ticket.branch} to main.` })
+        closeTicket()
+      } else if (result.conflicted) {
+        addNotification({ type: 'merge-conflict', message: 'Conflict during rebase — retrying.', ticketId: ticket.id, agentId })
+      } else {
+        addNotification({ type: 'error', message: result.error ?? 'Merge failed.' })
+      }
+    } catch (err) {
+      addNotification({ type: 'error', message: (err as Error).message })
+    } finally {
+      setIsMerging(false)
+    }
+  }
+
+  if (!ticket) return null
+
+  // Show agent picker when ticket is in-progress but no agent spawned yet
+  if (!agent) {
+    return <AgentLauncher ticket={ticket} onClose={closeTicket} />
+  }
+
+  return (
+    <div className="flex flex-col h-full border-l border-forge-border animate-slide-in-right bg-forge-black">
+      {/* Panel header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-forge-border bg-forge-panel flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-forge-text-dim text-xs uppercase tracking-widest flex-shrink-0">
+            AGENT
+          </span>
+          <span className="text-forge-amber text-xs truncate">{ticket.branch ?? ticket.title}</span>
+          <span
+            className={`text-xs border px-1.5 py-0.5 uppercase tracking-widest flex-shrink-0 ${
+              agent.status === 'running' ? 'text-forge-blue border-forge-blue' :
+              agent.status === 'waiting-input' ? 'text-forge-amber border-forge-amber' :
+              agent.status === 'error' ? 'text-forge-red border-forge-red' :
+              'text-forge-green border-forge-green'
+            }`}
+          >
+            {agent.status.toUpperCase()}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {ticket.status === 'review' && (
+            <button className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5" onClick={handleMerge} disabled={isMerging}>
+              <GitMerge size={12} />
+              {isMerging ? 'MERGING...' : 'MERGE TO MAIN'}
+            </button>
+          )}
+          <button
+            className="forge-btn-danger py-0.5 px-2 flex items-center gap-1.5"
+            onClick={() => api.agents.kill(agent.id).catch(() => {})}
+            title="Kill agent"
+          >
+            <Square size={11} />
+            KILL
+          </button>
+          <button className="forge-btn-ghost py-0.5 px-2" onClick={closeTicket}>
+            <X size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Split body: terminal | diff */}
+      <div className="flex-1 flex overflow-hidden">
+
+        {/* ── LEFT: Terminal ── */}
+        <div className="flex flex-col" style={{ width: '60%' }}>
+          <div className="px-3 py-1.5 border-b border-r border-forge-border flex items-center gap-2 flex-shrink-0 bg-forge-panel">
+            <TerminalIcon size={11} className="text-forge-text-muted" />
+            <span className="text-forge-text-muted text-xs uppercase tracking-widest">TERMINAL</span>
+          </div>
+
+          <div className="flex-1 overflow-hidden border-r border-forge-border bg-forge-black p-1">
+            <div ref={termContainerRef} className="w-full h-full" />
+          </div>
+        </div>
+
+        {/* ── RIGHT: Diff ── */}
+        <div className="flex flex-col" style={{ width: '40%' }}>
+          <div className="px-3 py-1.5 border-b border-forge-border flex items-center justify-between flex-shrink-0 bg-forge-panel">
+            <div className="flex items-center gap-2">
+              <FileDiff size={11} className="text-forge-text-muted" />
+              <span className="text-forge-text-muted text-xs uppercase tracking-widest">DIFF</span>
+            </div>
+            {diff && (
+              <span className="text-xs text-forge-text-dim">
+                <span className="text-forge-green">+{diff.totalAdditions}</span>
+                {' '}
+                <span className="text-forge-red">-{diff.totalDeletions}</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-1 overflow-hidden">
+            {/* File list */}
+            {diff && diff.files.length > 0 && (
+              <div className="w-36 flex-shrink-0 border-r border-forge-border overflow-y-auto bg-forge-panel">
+                {diff.files.map((file) => (
+                  <button
+                    key={file.path}
+                    className={`w-full text-left px-2 py-1.5 text-xs border-b border-forge-border hover:bg-forge-surface transition-colors ${
+                      selectedFile?.path === file.path
+                        ? 'bg-forge-surface text-forge-text-bright'
+                        : 'text-forge-text-dim'
+                    }`}
+                    onClick={() => setSelectedFile(file)}
+                    title={file.path}
+                  >
+                    <div className="truncate">{file.path.split('/').pop()}</div>
+                    <div className="flex gap-1.5 mt-0.5">
+                      <span className="text-forge-green">+{file.additions}</span>
+                      <span className="text-forge-red">-{file.deletions}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Diff content */}
+            <div className="flex-1 overflow-auto bg-forge-black text-xs font-mono leading-5">
+              {isDiffLoading && (
+                <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
+                  LOADING...
+                </div>
+              )}
+              {!isDiffLoading && !diff && (
+                <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
+                  NO DIFF YET
+                </div>
+              )}
+              {selectedFile && selectedFile.chunks.map((chunk, ci) => (
+                <div key={ci}>
+                  <div className="diff-chunk-header px-3 py-0.5">{chunk.header}</div>
+                  {chunk.lines.map((line, li) => (
+                    <div
+                      key={li}
+                      className={`px-3 py-px whitespace-pre ${
+                        line.type === 'add' ? 'diff-line-add' :
+                        line.type === 'remove' ? 'diff-line-remove' :
+                        'diff-line-context'
+                      }`}
+                    >
+                      {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}{line.content}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Launcher — shown when ticket is in-progress but no agent spawned yet
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AGENTS: { type: AgentType; label: string; sub: string; command: string }[] = [
+  {
+    type: 'claude-code',
+    label: 'CLAUDE',
+    sub: 'Anthropic · claude --dangerously-skip-permissions',
+    command: 'claude --dangerously-skip-permissions',
+  },
+  {
+    type: 'codex',
+    label: 'CODEX',
+    sub: 'OpenAI · codex',
+    command: 'codex',
+  },
+]
+
+function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
+  const { addNotification, updateTicket, setAgent } = useStore()
+  const [launching, setLaunching] = useState<AgentType | null>(null)
+  const [showCustom, setShowCustom] = useState(false)
+  const [customCmd, setCustomCmd] = useState('')
+
+  async function launch(type: AgentType, custom?: string) {
+    setLaunching(type)
+    try {
+      const { ticket: updatedTicket, agent } = await api.tickets.spawn(ticket.id, type, custom)
+      // Apply immediately — don't wait for the WS round-trip
+      updateTicket(updatedTicket.id, updatedTicket)
+      if (agent) setAgent(agent)
+    } catch (err) {
+      addNotification({ type: 'error', message: (err as Error).message })
+      setLaunching(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full border-l border-forge-border bg-forge-black animate-slide-in-right">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-forge-border bg-forge-panel flex-shrink-0">
+        <span className="text-forge-text-dim text-xs uppercase tracking-widest">LAUNCH AGENT</span>
+        <button className="forge-btn-ghost py-0.5 px-2" onClick={onClose}><X size={13} /></button>
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
+        {/* Ticket context */}
+        <div className="w-full max-w-md forge-panel p-4">
+          <p className="forge-label mb-1">TICKET</p>
+          <p className="text-forge-text-bright text-sm font-medium">{ticket.title}</p>
+          {ticket.description && (
+            <p className="text-forge-text-dim text-xs mt-1 leading-relaxed">{ticket.description}</p>
+          )}
+        </div>
+
+        {/* Agent buttons */}
+        <div className="w-full max-w-md flex flex-col gap-3">
+          <p className="forge-label text-center">SELECT AGENT</p>
+
+          {AGENTS.map((a) => (
+            <button
+              key={a.type}
+              className="w-full forge-surface border border-forge-border hover:border-forge-amber group transition-colors p-4 text-left disabled:opacity-40"
+              onClick={() => launch(a.type)}
+              disabled={!!launching}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-forge-text-bright text-sm uppercase tracking-widest group-hover:text-forge-amber transition-colors">
+                  {launching === a.type ? 'LAUNCHING...' : a.label}
+                </span>
+                {launching === a.type
+                  ? <span className="status-dot-running" />
+                  : <ChevronRight size={15} className="text-forge-text-muted group-hover:text-forge-amber transition-colors" />
+                }
+              </div>
+              <p className="text-forge-text-muted text-xs mt-1 font-mono">{a.command}</p>
+              <p className="text-forge-text-dim text-xs mt-0.5">{a.sub.split(' · ')[0]}</p>
+            </button>
+          ))}
+
+          {/* Custom command */}
+          {showCustom ? (
+            <div className="forge-surface border border-forge-border p-4 flex flex-col gap-2">
+              <label className="forge-label">CUSTOM COMMAND</label>
+              <input
+                className="forge-input"
+                placeholder="e.g. aider --yes-always"
+                value={customCmd}
+                onChange={(e) => setCustomCmd(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && customCmd.trim() && launch('custom', customCmd.trim())}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  className="forge-btn-primary py-1 px-4 flex-1"
+                  onClick={() => customCmd.trim() && launch('custom', customCmd.trim())}
+                  disabled={!!launching || !customCmd.trim()}
+                >
+                  {launching === 'custom' ? 'LAUNCHING...' : 'LAUNCH'}
+                </button>
+                <button className="forge-btn-ghost py-1 px-3" onClick={() => setShowCustom(false)}>
+                  CANCEL
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="w-full flex items-center justify-center gap-1.5 text-forge-text-muted hover:text-forge-text text-xs uppercase tracking-widest py-2 transition-colors"
+              onClick={() => setShowCustom(true)}
+              disabled={!!launching}
+            >
+              <Plus size={11} />
+              CUSTOM COMMAND
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

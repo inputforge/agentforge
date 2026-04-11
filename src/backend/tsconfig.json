@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["bun"],
+    "composite": true,
+    "declaration": true,
+    "outDir": "../../out/backend"
+  },
+  "references": [
+    { "path": "../common" }
+  ],
+  "include": ["./**/*"]
+}
