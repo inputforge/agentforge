@@ -1,5 +1,5 @@
 export type TicketStatus = 'backlog' | 'in-progress' | 'review' | 'done'
-export type AgentStatus = 'running' | 'waiting-input' | 'done' | 'error'
+export type AgentStatus = 'running' | 'waiting-input' | 'waiting-permission' | 'done' | 'error'
 export type AgentType = 'claude-code' | 'codex' | 'custom'
 
 export interface Ticket {
@@ -10,6 +10,7 @@ export interface Ticket {
   agentId?: string | null
   worktree?: string | null
   branch?: string | null
+  agentTitle?: string | null
   createdAt: number
   updatedAt: number
 }

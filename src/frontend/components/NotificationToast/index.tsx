@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertCircle, AlertTriangle, CheckCircle2, HelpCircle, Info, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, HelpCircle, Info, ShieldAlert, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useStore } from '../../store'
 import type { NotificationType } from '../../types'
@@ -10,6 +10,7 @@ const TYPE_META: Record<NotificationType, { Icon: LucideIcon; color: string; ico
   'merge-conflict': { Icon: AlertTriangle, color: 'border-forge-red', iconColor: 'text-forge-red' },
   'error': { Icon: AlertCircle, color: 'border-forge-red', iconColor: 'text-forge-red' },
   'info': { Icon: Info, color: 'border-forge-blue', iconColor: 'text-forge-blue' },
+  'permission-request': { Icon: ShieldAlert, color: 'border-forge-amber', iconColor: 'text-forge-amber' },
 }
 
 export function NotificationToast() {

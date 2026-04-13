@@ -2,16 +2,6 @@ import { EventEmitter } from 'events'
 import { agentStmts } from '../db'
 import { appendScrollback } from '../ws/hub'
 
-const INPUT_PATTERNS = [
-  /\?\s*$/m,
-  /\[y\/n\]/i,
-  /\[Y\/n\]/,
-  /press enter/i,
-  /waiting for input/i,
-  /─{3,}\s*$/m,
-  />\s*$/m,
-]
-
 const decoder = new TextDecoder()
 
 export interface AgentProcess {
@@ -27,7 +17,6 @@ export class AgentProcessManager {
     agentId: string,
     command: string,
     worktreePath: string,
-    onNeedsInput: (agentId: string) => void,
     onExit: (agentId: string, code: number) => void,
   ): AgentProcess {
     const emitter = new EventEmitter()
@@ -53,17 +42,6 @@ export class AgentProcessManager {
           const data = decoder.decode(raw)
           appendScrollback(agentId, data)
           emitter.emit('data', data)
-
-          // Check if agent is waiting for input
-          if (INPUT_PATTERNS.some((p) => p.test(data))) {
-            agentStmts.updateStatus.run({
-              $id: agentId,
-              $status: 'waiting-input',
-              $needsInput: 1,
-              $endedAt: null,
-            })
-            onNeedsInput(agentId)
-          }
         },
       },
     })

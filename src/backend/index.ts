@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { remoteStmts } from './db'
 import { agentsRouter } from './routes/agents'
+import { hooksRouter } from './routes/hooks'
 import { remoteRouter } from './routes/remote'
 import { shellRouter } from './routes/shell'
 import { ticketsRouter } from './routes/tickets'
@@ -44,6 +45,7 @@ app.use('*', cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'] }
 // REST API
 app.route('/api/tickets', ticketsRouter(orchestrator))
 app.route('/api/agents', agentsRouter)
+app.route('/api/hooks', hooksRouter)
 app.route('/api/remote', remoteRouter)
 app.route('/api/shell', shellRouter)
 

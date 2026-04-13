@@ -15,6 +15,7 @@ interface Props {
 const AGENT_STATUS_CLASSES: Record<string, string> = {
   running: 'text-forge-blue border-forge-blue',
   'waiting-input': 'text-forge-amber border-forge-amber',
+  'waiting-permission': 'text-forge-amber border-forge-amber',
   done: 'text-forge-green border-forge-green',
   error: 'text-forge-red border-forge-red',
 }
@@ -22,8 +23,17 @@ const AGENT_STATUS_CLASSES: Record<string, string> = {
 const AGENT_STATUS_DOT: Record<string, string> = {
   running: 'status-dot-running',
   'waiting-input': 'status-dot-waiting',
+  'waiting-permission': 'status-dot-waiting',
   done: 'status-dot-done',
   error: 'status-dot-error',
+}
+
+const AGENT_STATUS_LABEL: Record<string, string> = {
+  running: 'RUNNING',
+  'waiting-input': 'INPUT',
+  'waiting-permission': 'PERMISSION',
+  done: 'DONE',
+  error: 'ERROR',
 }
 
 export function TicketCard({ ticket, agent }: Props) {
@@ -39,7 +49,7 @@ export function TicketCard({ ticket, agent }: Props) {
   const columnMeta = COLUMN_META[ticket.status]
   const hasAgent = !!agent
   // Tickets with a live agent need a confirm step before discard
-  const needsConfirm = hasAgent && (agent.status === 'running' || agent.status === 'waiting-input')
+  const needsConfirm = hasAgent && (agent.status === 'running' || agent.status === 'waiting-input' || agent.status === 'waiting-permission')
 
   function handleCardClick() {
     if (confirmDiscard) { setConfirmDiscard(false); return }
@@ -77,7 +87,7 @@ export function TicketCard({ ticket, agent }: Props) {
         {agent?.needsInput && (
           <span className="flex items-center gap-1 text-forge-amber text-xs uppercase tracking-widest animate-blink">
             <span className="status-dot bg-forge-amber" />
-            AWAITING INPUT
+            {agent.status === 'waiting-permission' ? 'AWAITING PERMISSION' : 'AWAITING INPUT'}
           </span>
         )}
 
@@ -109,6 +119,12 @@ export function TicketCard({ ticket, agent }: Props) {
           {ticket.title}
         </p>
 
+        {ticket.agentTitle && (
+          <p className="text-forge-amber text-xs leading-snug mb-1.5 font-mono opacity-80">
+            ↳ {ticket.agentTitle}
+          </p>
+        )}
+
         {ticket.description && (
           <p className="text-forge-text-dim text-xs leading-relaxed mb-2.5 line-clamp-2">
             {ticket.description}
@@ -132,7 +148,7 @@ export function TicketCard({ ticket, agent }: Props) {
               )}
             >
               <span className={AGENT_STATUS_DOT[agent.status]} />
-              {agent.status === 'waiting-input' ? 'INPUT' : agent.status.toUpperCase()}
+              {AGENT_STATUS_LABEL[agent.status] ?? agent.status.toUpperCase()}
             </span>
           ) : (
             <span className="text-forge-text-muted text-xs">NO AGENT</span>

@@ -9,6 +9,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    watch: {
+      ignored: ['**/.worktrees/**'],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

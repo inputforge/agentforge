@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
-import { mkdirSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { agentStmts, remoteStmts, ticketStmts } from '../db'
 import type { Agent, AgentType } from '../../common/types'
 import { agentProcessManager } from './AgentProcessManager'
@@ -38,6 +39,30 @@ function buildCommand(agentType: AgentType, customCommand: string | undefined, d
     case 'custom':
       return customCommand?.trim() || 'claude --dangerously-skip-permissions'
   }
+}
+
+/** Write .claude/settings.local.json into the worktree so Claude HTTP hooks post back to us. */
+function writeHookSettings(worktreePath: string, agentId: string): void {
+  const port = process.env.PORT ?? '3001'
+  const base = `http://localhost:${port}/api/hooks/${agentId}`
+
+  const hookEntry = (event: string) => ({
+    hooks: [{ type: 'http', url: `${base}/${event}` }],
+  })
+
+  const settings = {
+    hooks: {
+      Stop: [hookEntry('Stop')],
+      Notification: [hookEntry('Notification')],
+      PermissionRequest: [hookEntry('PermissionRequest')],
+      TaskCreated: [hookEntry('TaskCreated')],
+      PostToolUse: [hookEntry('PostToolUse')],
+    },
+  }
+
+  const claudeDir = join(worktreePath, '.claude')
+  mkdirSync(claudeDir, { recursive: true })
+  writeFileSync(join(claudeDir, 'settings.local.json'), JSON.stringify(settings, null, 2))
 }
 
 export class OrchestratorService {
@@ -96,6 +121,9 @@ export class OrchestratorService {
       }
     }
 
+    // Inject Claude hook settings so lifecycle events POST back to us
+    writeHookSettings(worktreePath, agentId)
+
     agentStmts.insert.run({
       $id: agentId,
       $ticketId: ticketId,
@@ -135,20 +163,6 @@ export class OrchestratorService {
         agentId,
         command,
         worktreePath,
-        (id) => {
-          const updatedAgent = agentStmts.get.get(id) as Agent | null
-          if (!updatedAgent) return
-          this.broadcast({ type: 'agent-updated', agent: normalizeAgent(updatedAgent) })
-          this.broadcast({
-            type: 'notification',
-            notification: {
-              type: 'needs-input',
-              message: `Agent on "${ticket.title}" is waiting for input`,
-              ticketId,
-              agentId: id,
-            },
-          })
-        },
         (id, exitCode) => {
           const updatedAgent = agentStmts.get.get(id) as Agent | null
           if (updatedAgent) {
