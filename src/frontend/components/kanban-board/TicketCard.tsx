@@ -1,11 +1,10 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
-import { ChevronRight, GitBranch, Play, Trash2 } from "lucide-react";
+import { ChevronRight, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useStore } from "../../store";
 import type { Agent, Ticket } from "../../types";
-import { COLUMN_META } from "../../types";
 
 interface Props {
   ticket: Ticket;
@@ -50,7 +49,6 @@ export function TicketCard({ ticket, agent }: Props) {
     [transform],
   );
   const isActive = activeTicketId === ticket.id;
-  const columnMeta = COLUMN_META[ticket.status];
   const hasAgent = !!agent;
   // Tickets with a live agent need a confirm step before discard
   const needsConfirm =
@@ -96,8 +94,7 @@ export function TicketCard({ ticket, agent }: Props) {
       ref={setNodeRef}
       style={style}
       className={clsx(
-        "forge-surface border-l-2 select-none transition-all duration-100 group",
-        columnMeta.borderColor,
+        "forge-surface select-none transition-all duration-100 group",
         isDragging && "opacity-30",
         isActive && "ring-1 ring-forge-amber",
         !isDragging && "hover:bg-forge-surface-bright",
@@ -169,13 +166,6 @@ export function TicketCard({ ticket, agent }: Props) {
           <p className="text-forge-text-dim text-xs leading-relaxed mb-2.5 line-clamp-2">
             {ticket.description}
           </p>
-        )}
-
-        {ticket.branch && (
-          <div className="flex items-center gap-1 mb-2.5">
-            <GitBranch size={10} className="text-forge-text-muted flex-shrink-0" />
-            <span className="text-forge-amber text-xs truncate max-w-[200px]">{ticket.branch}</span>
-          </div>
         )}
 
         {/* Footer */}

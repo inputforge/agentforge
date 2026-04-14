@@ -30,6 +30,18 @@ remoteRouter.post("/detect", async (c) => {
   return c.json(detected);
 });
 
+remoteRouter.get("/branch", async (c) => {
+  const config = remoteStmts.get.get();
+  if (!config?.localPath) return c.json({ branch: null });
+  try {
+    const git = new GitWorktreeManager(config.localPath);
+    const branch = await git.currentBranch();
+    return c.json({ branch });
+  } catch {
+    return c.json({ branch: null });
+  }
+});
+
 remoteRouter.post("/clone", async (c) => {
   const body = await c.req.json<{ repoUrl?: string; baseBranch?: string; localPath?: string }>();
   if (!body.repoUrl || !body.localPath) {

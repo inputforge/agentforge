@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ChangeEvent } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 
@@ -13,9 +13,20 @@ function titleFromDescription(description: string): string {
 }
 
 export function CreateTicketModal() {
-  const { isCreateModalOpen, closeCreateModal, addTicket, addNotification } = useStore();
+  const { isCreateModalOpen, closeCreateModal, addTicket, addNotification, moveTicket } =
+    useStore();
   const [description, setDescription] = useState("");
+  const [startNow, setStartNow] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  const handleDescriptionChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value),
+    [],
+  );
+  const handleStartNowChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => setStartNow(e.target.checked),
+    [],
+  );
 
   const handleCreate = useCallback(async () => {
     if (!description.trim()) return;
@@ -26,15 +37,16 @@ export function CreateTicketModal() {
         description: description.trim(),
       });
       addTicket(ticket);
-      addNotification({ type: "info", message: `Ticket created.` });
       closeCreateModal();
       setDescription("");
+      setStartNow(false);
+      if (startNow) await moveTicket(ticket.id, "in-progress");
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCreating(false);
     }
-  }, [description, addTicket, addNotification, closeCreateModal]);
+  }, [description, startNow, addTicket, addNotification, closeCreateModal, moveTicket]);
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
@@ -50,10 +62,6 @@ export function CreateTicketModal() {
     },
     [closeCreateModal, handleCreate],
   );
-
-  const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDescription(e.target.value);
-  }, []);
 
   if (!isCreateModalOpen) return null;
 
@@ -87,6 +95,16 @@ export function CreateTicketModal() {
             />
           </div>
 
+          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+            <input
+              type="checkbox"
+              className="accent-forge-amber"
+              checked={startNow}
+              onChange={handleStartNowChange}
+            />
+            <span className="text-forge-text-dim text-xs uppercase tracking-widest">Start now</span>
+          </label>
+
           <div className="flex justify-end gap-2 pt-1">
             <button className="forge-btn-ghost py-1.5 px-4" onClick={closeCreateModal}>
               CANCEL
@@ -96,7 +114,7 @@ export function CreateTicketModal() {
               onClick={handleCreate}
               disabled={isCreating || !description.trim()}
             >
-              {isCreating ? "CREATING..." : "CREATE TICKET"}
+              {isCreating ? (startNow ? "STARTING..." : "CREATING...") : "CREATE TICKET"}
             </button>
           </div>
         </div>

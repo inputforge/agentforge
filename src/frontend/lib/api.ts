@@ -64,6 +64,7 @@ export const api = {
         body: JSON.stringify({ branch, localPath }),
       }),
     getConfig: () => request<RemoteConfig | null>("/remote/config"),
+    getBranch: () => request<{ branch: string | null }>("/remote/branch"),
     detect: (path?: string) =>
       request<RemoteConfig>("/remote/detect", { method: "POST", body: JSON.stringify({ path }) }),
   },

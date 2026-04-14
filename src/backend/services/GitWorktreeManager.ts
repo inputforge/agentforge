@@ -37,6 +37,10 @@ export class GitWorktreeManager {
     this.baseGit = simpleGit(repoPath);
   }
 
+  async currentBranch(): Promise<string> {
+    return (await this.baseGit.revparse(["--abbrev-ref", "HEAD"])).trim();
+  }
+
   async clone(url: string, targetPath: string): Promise<void> {
     const parentDir = join(targetPath, "..");
     if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
