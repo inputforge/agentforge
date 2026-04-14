@@ -79,14 +79,8 @@ export class GitWorktreeManager {
     const worktreeGit = simpleGit(worktreePath);
     const currentBranch = await worktreeGit.revparse(["--abbrev-ref", "HEAD"]);
 
-    // Fetch latest base branch
-    await worktreeGit.fetch("origin", baseBranch);
-
-    const raw = await worktreeGit.diff([
-      `origin/${baseBranch}...${currentBranch.trim()}`,
-      "--stat=9999",
-    ]);
-    const rawFull = await worktreeGit.diff([`origin/${baseBranch}...${currentBranch.trim()}`]);
+    const raw = await worktreeGit.diff([`${baseBranch}...${currentBranch.trim()}`, "--stat=9999"]);
+    const rawFull = await worktreeGit.diff([`${baseBranch}...${currentBranch.trim()}`]);
 
     return parseDiff(rawFull, raw);
   }
@@ -98,13 +92,11 @@ export class GitWorktreeManager {
     const worktreeGit = simpleGit(worktreePath);
 
     try {
-      await worktreeGit.fetch("origin", baseBranch);
-      await worktreeGit.rebase([`origin/${baseBranch}`]);
+      await worktreeGit.rebase([baseBranch]);
       return { success: true, conflicted: false };
     } catch (err) {
       const msg = String(err);
       if (msg.includes("CONFLICT") || msg.includes("conflict")) {
-        // Abort the failed rebase
         await worktreeGit.rebase(["--abort"]).catch(() => {});
         return { success: false, conflicted: true };
       }
@@ -117,18 +109,25 @@ export class GitWorktreeManager {
     branch: string,
     baseBranch: string,
   ): Promise<{ success: boolean; conflicted: boolean; error?: string }> {
-    // Rebase first to keep history linear
+    // Refuse if the main worktree has uncommitted changes
+    const status = await this.baseGit.status();
+    if (!status.isClean()) {
+      return {
+        success: false,
+        conflicted: false,
+        error: "Working tree has uncommitted changes — commit or stash before merging",
+      };
+    }
+
+    // Rebase agent branch onto local base branch for linear history
     const rebaseResult = await this.rebase(worktreePath, baseBranch);
     if (!rebaseResult.success) {
       return { success: false, conflicted: true };
     }
 
     try {
-      // Fast-forward merge into base branch
-      await this.baseGit.fetch("origin");
-      await this.baseGit.checkout(baseBranch);
+      // baseBranch is already checked out in the main worktree — just fast-forward it
       await this.baseGit.merge([branch, "--ff-only"]);
-      await this.baseGit.push("origin", baseBranch);
       return { success: true, conflicted: false };
     } catch (err) {
       return { success: false, conflicted: false, error: String(err) };
