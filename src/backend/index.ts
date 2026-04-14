@@ -1,3 +1,4 @@
+import { join } from "path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { agentStmts, initDb, remoteStmts } from "./db/index.ts";
@@ -12,6 +13,7 @@ import { OrchestratorService } from "./services/OrchestratorService.ts";
 import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
+const DIST_DIR = join(import.meta.dir, "../../dist");
 
 const log = logger.child("server");
 const orchestrator = new OrchestratorService(broadcastNotification);
@@ -92,7 +94,7 @@ log.info("backend running", { url: `http://localhost:${PORT}` });
 
 Bun.serve({
   port: PORT,
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
 
     // WebSocket upgrade
@@ -106,6 +108,20 @@ Bun.serve({
 
       log.warn("websocket upgrade failed", { channel, agentId });
       return new Response("WebSocket upgrade failed", { status: 426 });
+    }
+
+    // Static file serving for production frontend build
+    if (!url.pathname.startsWith("/api/") && !url.pathname.startsWith("/ws/")) {
+      const filePath = join(DIST_DIR, url.pathname);
+      // Guard against path traversal
+      if (filePath.startsWith(DIST_DIR)) {
+        const file = Bun.file(filePath);
+        if (await file.exists()) return new Response(file);
+      }
+      // SPA fallback
+      const indexFile = Bun.file(join(DIST_DIR, "index.html"));
+      if (await indexFile.exists())
+        return new Response(indexFile, { headers: { "Content-Type": "text/html" } });
     }
 
     return app.fetch(req, { server });
