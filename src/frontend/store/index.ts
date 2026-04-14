@@ -2,6 +2,12 @@ import { create } from "zustand";
 import type { Agent, AppNotification, RemoteConfig, Ticket, TicketStatus } from "../types";
 import { api } from "../lib/api";
 
+// Registered by NavigateFnRegistrar in App.tsx so the store can trigger navigation.
+let _navigate: ((path: string) => void) | null = null;
+export function registerNavigate(fn: (path: string) => void) {
+  _navigate = fn;
+}
+
 interface AppState {
   // Data
   tickets: Ticket[];
@@ -183,8 +189,14 @@ export const useStore = create<AppState>((set, get) => ({
   dismissNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
 
-  openTicket: (ticketId) => set({ activeTicketId: ticketId }),
-  closeTicket: () => set({ activeTicketId: null }),
+  openTicket: (ticketId) => {
+    set({ activeTicketId: ticketId });
+    _navigate?.(`/agent/${ticketId}`);
+  },
+  closeTicket: () => {
+    set({ activeTicketId: null });
+    _navigate?.("/");
+  },
   openCreateModal: () => set({ isCreateModalOpen: true }),
   closeCreateModal: () => set({ isCreateModalOpen: false }),
   setConnected: (isConnected) => set({ isConnected }),
