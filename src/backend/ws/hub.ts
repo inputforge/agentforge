@@ -1,4 +1,6 @@
 import type { ServerWebSocket } from "bun";
+import { agentStmts } from "../db/index.ts";
+import type { Agent } from "../../common/types.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 
@@ -97,10 +99,22 @@ export const wsHandlers = {
       (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
       (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
     } else if (scrollback.length === 0) {
-      // Process never produced output and isn't running — likely failed to spawn
-      ws.send(
-        "\x1b[31m[agent failed to start — check that the agent command is in your PATH]\x1b[0m\r\n",
-      );
+      const agent = agentStmts.get.get(agentId) as Agent | null;
+      const status = agent?.status;
+      if (status === "done" || status === "error") {
+        // Agent ran and finished; scrollback lost after server restart
+        ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
+      } else if (
+        status === "running" ||
+        status === "waiting-input" ||
+        status === "waiting-permission"
+      ) {
+        // Process should be running but isn't in the process map — spawn failed
+        ws.send(
+          "\x1b[31m[agent failed to start — check that the agent command is in your PATH]\x1b[0m\r\n",
+        );
+      }
+      // No message for unknown/null status (e.g. agent record not found)
     }
   },
 
@@ -170,6 +184,6 @@ export const wsHandlers = {
   },
 
   error(ws: ServerWebSocket<{ channel: string; agentId?: string }>, error: Error) {
-    console.error("[WS error]", ws.data, error.message);
+    console.error("[WS error]", ws.data, error?.message ?? error);
   },
 };

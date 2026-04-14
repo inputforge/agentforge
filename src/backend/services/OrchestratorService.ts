@@ -158,18 +158,10 @@ export class OrchestratorService {
       $ticketId: ticketId,
     });
 
-    const agent = agentStmts.get.get(agentId) as Agent;
-    this.broadcast({ type: "agent-updated", agent: normalizeAgent(agent) });
-
-    const updatedTicket = ticketStmts.get.get(ticketId);
-    if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
-
     // Derive title from description the moment the agent starts working
     const derivedTitle = titleFromDescription(ticket.description);
     if (derivedTitle && derivedTitle !== ticket.title) {
       ticketStmts.updateTitle.run({ $title: derivedTitle, $updatedAt: Date.now(), $id: ticketId });
-      const t = ticketStmts.get.get(ticketId);
-      if (t) this.broadcast({ type: "ticket-updated", ticket: t });
     }
 
     try {
@@ -200,6 +192,14 @@ export class OrchestratorService {
 
         this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
       });
+
+      // Broadcast only after the process is registered so WS clients connecting
+      // immediately on agent-updated find a live emitter and non-empty scrollback.
+      const agent = agentStmts.get.get(agentId) as Agent;
+      this.broadcast({ type: "agent-updated", agent: normalizeAgent(agent) });
+      const updatedTicket = ticketStmts.get.get(ticketId);
+      if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
+      this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
     } catch (err) {
       const msg = (err as Error).message;
       console.error("Failed to spawn agent process:", msg);

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
 import { agentStmts, ticketStmts } from "../db/index.ts";
+import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import type { Agent, AgentType, Ticket, TicketStatus } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
@@ -82,7 +83,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     if (ticket.status !== "in-progress") {
       return c.json({ error: "ticket must be in-progress to spawn an agent" }, 400);
     }
-    if (ticket.agentId) {
+    if (ticket.agentId && agentProcessManager.isRunning(ticket.agentId)) {
       return c.json({ error: "agent already running for this ticket" }, 409);
     }
 

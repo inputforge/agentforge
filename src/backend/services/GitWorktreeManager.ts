@@ -61,8 +61,18 @@ export class GitWorktreeManager {
       mkdirSync(join(this.repoPath, ".worktrees"), { recursive: true });
     }
 
-    // Create a new branch from the current HEAD
-    await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath]);
+    // Worktree already registered and directory exists — reuse it
+    if (existsSync(worktreePath)) {
+      return { worktreePath, branch };
+    }
+
+    try {
+      // Happy path: create new branch and worktree together
+      await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath]);
+    } catch {
+      // Branch already exists (e.g. agent restarted after exit) — check it out without -b
+      await this.baseGit.raw(["worktree", "add", worktreePath, branch]);
+    }
 
     return { worktreePath, branch };
   }
