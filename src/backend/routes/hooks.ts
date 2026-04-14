@@ -34,6 +34,10 @@ hooksRouter.post("/:agentId/:event", async (c) => {
     // empty or non-JSON body is fine
   }
 
+  if (typeof body.session_id === "string" && !agent.sessionId) {
+    agentStmts.updateSessionId.run({ $sessionId: body.session_id, $id: agentId });
+  }
+
   switch (event) {
     case "Stop": {
       // Move agent to done and ticket to review — the Stop hook is the authoritative signal.

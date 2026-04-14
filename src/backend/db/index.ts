@@ -54,6 +54,12 @@ db.exec(`
     db.exec("ALTER TABLE tickets ADD COLUMN agent_title TEXT");
   }
 }
+{
+  const cols = db.prepare("PRAGMA table_info(agents)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "session_id")) {
+    db.exec("ALTER TABLE agents ADD COLUMN session_id TEXT");
+  }
+}
 
 // Prepared statements
 
@@ -97,21 +103,21 @@ export const agentStmts = {
     SELECT id, ticket_id as ticketId, type, command, status,
            worktree_path as worktreePath, branch, pid,
            started_at as startedAt, ended_at as endedAt,
-           needs_input as needsInput
+           needs_input as needsInput, session_id as sessionId
     FROM agents WHERE id = ?
   `),
   listByTicket: db.prepare(`
     SELECT id, ticket_id as ticketId, type, command, status,
            worktree_path as worktreePath, branch, pid,
            started_at as startedAt, ended_at as endedAt,
-           needs_input as needsInput
+           needs_input as needsInput, session_id as sessionId
     FROM agents WHERE ticket_id = ? ORDER BY started_at DESC LIMIT 1
   `),
   listRunning: db.prepare(`
     SELECT id, ticket_id as ticketId, type, command, status,
            worktree_path as worktreePath, branch, pid,
            started_at as startedAt, ended_at as endedAt,
-           needs_input as needsInput
+           needs_input as needsInput, session_id as sessionId
     FROM agents WHERE status IN ('running', 'waiting-input', 'waiting-permission')
   `),
   insert: db.prepare(`
@@ -122,6 +128,9 @@ export const agentStmts = {
     UPDATE agents SET status = $status, needs_input = $needsInput, ended_at = $endedAt WHERE id = $id
   `),
   updatePid: db.prepare(`UPDATE agents SET pid = $pid WHERE id = $id`),
+  updateSessionId: db.prepare(
+    `UPDATE agents SET session_id = $sessionId WHERE id = $id AND session_id IS NULL`,
+  ),
 };
 
 export const remoteStmts = {

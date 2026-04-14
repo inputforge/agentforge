@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { remoteStmts } from "./db/index.ts";
+import { agentStmts, remoteStmts } from "./db/index.ts";
 import { agentsRouter } from "./routes/agents.ts";
 import { hooksRouter } from "./routes/hooks.ts";
 import { remoteRouter } from "./routes/remote.ts";
@@ -9,6 +9,7 @@ import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
 import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
 import { OrchestratorService } from "./services/OrchestratorService.ts";
+import type { Agent } from "../common/types.ts";
 import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
@@ -40,6 +41,21 @@ async function seedRemoteConfigIfEmpty() {
 }
 
 await seedRemoteConfigIfEmpty();
+
+// Re-attach to any agents that were running when the server last shut down
+{
+  const runningAgents = agentStmts.listRunning.all() as Agent[];
+  if (runningAgents.length > 0) {
+    console.log(`[agentforge] Resuming ${runningAgents.length} interrupted agent(s)…`);
+    for (const agent of runningAgents) {
+      orchestrator
+        .resumeAgent(agent)
+        .catch((err: Error) =>
+          console.error(`[agentforge] Failed to resume agent ${agent.id}:`, err.message),
+        );
+    }
+  }
+}
 
 const app = new Hono();
 

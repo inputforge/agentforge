@@ -27,6 +27,7 @@ export interface Agent {
   startedAt: number;
   endedAt?: number | null;
   needsInput: boolean;
+  sessionId?: string | null;
 }
 
 export interface RemoteConfig {

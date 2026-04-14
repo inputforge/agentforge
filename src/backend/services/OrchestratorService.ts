@@ -29,10 +29,14 @@ function buildCommand(
   agentType: AgentType,
   customCommand: string | undefined,
   description: string,
+  sessionId?: string | null,
 ): string {
   const prompt = description.trim();
   switch (agentType) {
     case "claude-code":
+      if (sessionId) {
+        return `claude --resume ${sessionId} --dangerously-skip-permissions`;
+      }
       return prompt
         ? `claude --dangerously-skip-permissions ${shellQuote(prompt)}`
         : "claude --dangerously-skip-permissions";
@@ -216,6 +220,82 @@ export class OrchestratorService {
         },
       });
       throw err;
+    }
+  }
+
+  /** Re-attach to a previously running agent after a server restart. */
+  async resumeAgent(agent: Agent): Promise<void> {
+    const ticket = ticketStmts.get.get(agent.ticketId) as {
+      id: string;
+      title: string;
+      description: string;
+    } | null;
+    if (!ticket) return;
+
+    if (!agent.sessionId) {
+      // No session to resume — mark as error so the UI shows a clear state
+      agentStmts.updateStatus.run({
+        $id: agent.id,
+        $status: "error",
+        $needsInput: 0,
+        $endedAt: Date.now(),
+      });
+      this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
+      return;
+    }
+
+    const command = buildCommand(agent.type, undefined, ticket.description, agent.sessionId);
+
+    // Reset to running before re-spawning
+    agentStmts.updateStatus.run({
+      $id: agent.id,
+      $status: "running",
+      $needsInput: 0,
+      $endedAt: null,
+    });
+
+    writeHookSettings(agent.worktreePath, agent.id);
+
+    try {
+      agentProcessManager.spawn(agent.id, command, agent.worktreePath, (id, exitCode) => {
+        const updatedAgent = agentStmts.get.get(id) as Agent | null;
+        if (updatedAgent) {
+          this.broadcast({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
+        }
+
+        if (exitCode === 0) {
+          ticketStmts.updateStatus.run({
+            $status: "review",
+            $updatedAt: Date.now(),
+            $id: ticket.id,
+          });
+          const t = ticketStmts.get.get(ticket.id);
+          if (t) this.broadcast({ type: "ticket-updated", ticket: t });
+          this.broadcast({
+            type: "notification",
+            notification: {
+              type: "agent-done",
+              message: `Agent on "${ticket.title}" finished — ready for review`,
+              ticketId: ticket.id,
+              agentId: id,
+            },
+          });
+        }
+
+        this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+      });
+
+      appendScrollback(agent.id, `\r\n\x1b[33m[resuming session ${agent.sessionId}]\x1b[0m\r\n`);
+    } catch (err) {
+      const msg = (err as Error).message;
+      console.error("Failed to resume agent process:", msg);
+      appendScrollback(agent.id, `\x1b[31m[resume failed] ${msg}\x1b[0m\r\n`);
+      agentStmts.updateStatus.run({
+        $id: agent.id,
+        $status: "error",
+        $needsInput: 0,
+        $endedAt: Date.now(),
+      });
     }
   }
 
