@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
-import { ChevronRight, GitBranch, Trash2 } from "lucide-react";
+import { ChevronRight, GitBranch, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useStore } from "../../store";
 import type { Agent, Ticket } from "../../types";
@@ -37,8 +37,9 @@ const AGENT_STATUS_LABEL: Record<string, string> = {
 };
 
 export function TicketCard({ ticket, agent }: Props) {
-  const { openTicket, activeTicketId, discardTicket } = useStore();
+  const { openTicket, activeTicketId, discardTicket, moveTicket } = useStore();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [isLaunching, setIsLaunching] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: ticket.id,
@@ -80,6 +81,16 @@ export function TicketCard({ ticket, agent }: Props) {
 
   const handleMouseLeave = useCallback(() => setConfirmDiscard(false), []);
 
+  const handleRunClick = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setIsLaunching(true);
+      await moveTicket(ticket.id, "in-progress");
+      setIsLaunching(false);
+    },
+    [moveTicket, ticket.id],
+  );
+
   return (
     <div
       ref={setNodeRef}
@@ -106,8 +117,22 @@ export function TicketCard({ ticket, agent }: Props) {
           </span>
         )}
 
-        {/* Trash button — appears on hover, right-aligned */}
-        <div className="ml-auto">
+        {/* Action buttons — right-aligned, appear on hover */}
+        <div className="ml-auto flex items-center gap-1.5">
+          {ticket.status === "backlog" && (
+            <button
+              className="text-forge-text-muted hover:text-forge-green transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-30"
+              onClick={handleRunClick}
+              disabled={isLaunching}
+              title="Start ticket"
+            >
+              {isLaunching ? (
+                <span className="status-dot-running" />
+              ) : (
+                <Play size={13} strokeWidth={1.2} />
+              )}
+            </button>
+          )}
           {confirmDiscard ? (
             <button
               className="text-xs text-forge-red border border-forge-red px-1.5 py-0.5 uppercase tracking-widest hover:bg-forge-red hover:text-forge-black transition-colors"
