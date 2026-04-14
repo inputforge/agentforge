@@ -41,10 +41,10 @@ function buildCommand(
         return `claude --resume ${sessionId} --dangerously-skip-permissions`;
       }
       return prompt
-        ? `claude --dangerously-skip-permissions ${shellQuote(prompt)}`
+        ? `claude --dangerously-skip-permissions -- ${shellQuote(prompt)}`
         : "claude --dangerously-skip-permissions";
     case "codex":
-      return prompt ? `codex ${shellQuote(prompt)}` : "codex";
+      return prompt ? `codex -- ${shellQuote(prompt)}` : "codex";
     case "custom":
       return customCommand?.trim() || "claude --dangerously-skip-permissions";
   }

@@ -27,6 +27,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@icons-pack/react-simple-icons": "^13.13.0",
+    "@pierre/diffs": "^1.1.15",
     "@tailwindcss/vite": "^4.2.2",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",

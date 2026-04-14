@@ -9,38 +9,15 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { PatchDiff } from "@pierre/diffs/react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import { useXTerm } from "../hooks/useXTerm";
-import type { AgentType, DiffFile, DiffResult, Ticket } from "../types";
+import type { AgentType, DiffResult, Ticket } from "../types";
 
 const TERMINAL_STYLE = { width: "60%" };
 const DIFF_STYLE = { width: "40%" };
-
-interface DiffFileButtonProps {
-  file: DiffFile;
-  isSelected: boolean;
-  onSelect: (file: DiffFile) => void;
-}
-
-function DiffFileButton({ file, isSelected, onSelect }: DiffFileButtonProps) {
-  const handleClick = useCallback(() => onSelect(file), [file, onSelect]);
-  return (
-    <button
-      className={`w-full text-left px-2 py-1.5 text-xs border-b border-forge-border hover:bg-forge-surface transition-colors ${
-        isSelected ? "bg-forge-surface text-forge-text-bright" : "text-forge-text-dim"
-      }`}
-      onClick={handleClick}
-      title={file.path}
-    >
-      <div className="truncate">{file.path.split("/").pop()}</div>
-      <div className="flex gap-1.5 mt-0.5">
-        <span className="text-forge-green">+{file.additions}</span>
-        <span className="text-forge-red">-{file.deletions}</span>
-      </div>
-    </button>
-  );
-}
+const PATCH_DIFF_OPTIONS = { theme: "pierre-dark", diffStyle: "unified" } as const;
 
 export function AgentDetailPanel() {
   const { getActiveTicket, getActiveAgent, closeTicket, addNotification, updateTicket, setAgent } =
@@ -51,7 +28,6 @@ export function AgentDetailPanel() {
 
   // Diff state
   const [diff, setDiff] = useState<DiffResult | null>(null);
-  const [selectedFile, setSelectedFile] = useState<DiffFile | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
@@ -90,13 +66,11 @@ export function AgentDetailPanel() {
     }
     setIsDiffLoading(true);
     setDiff(null);
-    setSelectedFile(null);
 
     api.agents
       .getDiff(agentId)
       .then((result) => {
         setDiff(result);
-        setSelectedFile(result.files[0] ?? null);
       })
       .catch(() => {
         // No diff yet — that's fine
@@ -113,12 +87,6 @@ export function AgentDetailPanel() {
         .getDiff(agentId)
         .then((result) => {
           setDiff(result);
-          // Keep the currently-selected file if it still exists in the new diff.
-          setSelectedFile((prev) =>
-            prev
-              ? (result.files.find((f) => f.path === prev.path) ?? result.files[0] ?? null)
-              : (result.files[0] ?? null),
-          );
         })
         .catch(() => {});
     }, 5000);
@@ -269,55 +237,18 @@ export function AgentDetailPanel() {
             )}
           </div>
 
-          <div className="flex flex-1 overflow-hidden">
-            {/* File list */}
-            {diff && diff.files.length > 0 && (
-              <div className="w-36 flex-shrink-0 border-r border-forge-border overflow-y-auto bg-forge-panel">
-                {diff.files.map((file) => (
-                  <DiffFileButton
-                    key={file.path}
-                    file={file}
-                    isSelected={selectedFile?.path === file.path}
-                    onSelect={setSelectedFile}
-                  />
-                ))}
+          <div className="flex-1 overflow-auto bg-forge-black">
+            {isDiffLoading && (
+              <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
+                LOADING...
               </div>
             )}
-
-            {/* Diff content */}
-            <div className="flex-1 overflow-auto bg-forge-black text-xs font-mono leading-5">
-              {isDiffLoading && (
-                <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
-                  LOADING...
-                </div>
-              )}
-              {!isDiffLoading && !diff && (
-                <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
-                  NO DIFF YET
-                </div>
-              )}
-              {selectedFile &&
-                selectedFile.chunks.map((chunk, ci) => (
-                  <div key={ci}>
-                    <div className="diff-chunk-header px-3 py-0.5">{chunk.header}</div>
-                    {chunk.lines.map((line, li) => (
-                      <div
-                        key={`${ci}-${li}`}
-                        className={`px-3 py-px whitespace-pre ${
-                          line.type === "add"
-                            ? "diff-line-add"
-                            : line.type === "remove"
-                              ? "diff-line-remove"
-                              : "diff-line-context"
-                        }`}
-                      >
-                        {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
-                        {line.content}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-            </div>
+            {!isDiffLoading && !diff && (
+              <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
+                NO DIFF YET
+              </div>
+            )}
+            {diff && diff.raw && <PatchDiff patch={diff.raw} options={PATCH_DIFF_OPTIONS} />}
           </div>
         </div>
       </div>
