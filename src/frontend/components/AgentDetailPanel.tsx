@@ -1,8 +1,9 @@
 import { GitMerge, RefreshCw, Square, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType } from "../types";
+import type { AgentType, DiffResult } from "../types";
+import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
 
@@ -15,6 +16,9 @@ export function AgentDetailPanel() {
 
   const [isMerging, setIsMerging] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
+  const [diff, setDiff] = useState<DiffResult | null>(null);
+  const [isDiffLoading, setIsDiffLoading] = useState(false);
+  const diffIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const agentId = agent?.id;
 
@@ -35,6 +39,36 @@ export function AgentDetailPanel() {
     // Run once when this panel mounts for a given ticket+agent combo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.id, agent?.id]);
+
+  // ── Diff polling ─────────────────────────────────────────────────────────
+
+  const fetchDiff = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const result = await api.agents.getDiff(agentId);
+      setDiff(result);
+    } catch {
+      // ignore transient errors
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    setIsDiffLoading(true);
+    fetchDiff().finally(() => setIsDiffLoading(false));
+
+    // Poll while agent is running or waiting for input
+    if (agent?.status === "running" || agent?.status === "waiting-input") {
+      diffIntervalRef.current = setInterval(fetchDiff, 5000);
+    }
+
+    return () => {
+      if (diffIntervalRef.current) {
+        clearInterval(diffIntervalRef.current);
+        diffIntervalRef.current = null;
+      }
+    };
+  }, [agentId, agent?.status, fetchDiff]);
 
   const handleMerge = useCallback(async () => {
     if (!agentId || !ticket) return;
@@ -151,6 +185,8 @@ export function AgentDetailPanel() {
       {/* Split body: terminal | diff */}
       <div className="flex-1 flex overflow-hidden">
         <AgentTerminalPanel agentId={agentId!} />
+        <div className="w-px bg-forge-border flex-shrink-0" />
+        <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
       </div>
     </div>
   );

@@ -7,6 +7,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  worker: {
+    format: 'es',
+  },
   server: {
     port: 5173,
     watch: {
