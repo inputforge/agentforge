@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "react-perf", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "rules": {
+    // Covered by TypeScript
+    "no-undef": "off",
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "typescript/no-explicit-any": "warn",
+    "typescript/consistent-type-imports": ["warn", { "prefer": "type-imports" }],
+
+    // React
+    "react/react-in-jsx-scope": "off",
+    "react/no-array-index-key": "off",
+    "react/jsx-key": "error",
+    "react/no-direct-mutation-state": "error",
+    "react-perf/jsx-no-new-object-as-prop": "warn",
+    "react-perf/jsx-no-new-array-as-prop": "warn",
+    "react-perf/jsx-no-new-function-as-prop": "warn",
+
+    // Unicorn — disable noisy ones
+    "unicorn/filename-case": "off",
+    "unicorn/no-null": "off",
+    "unicorn/no-array-for-each": "off"
+  },
+  "ignorePatterns": ["dist/", "node_modules/", "*.config.*"]
+}

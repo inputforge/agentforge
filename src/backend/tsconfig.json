@@ -11,8 +11,6 @@
     "declaration": true,
     "outDir": "../../out/backend"
   },
-  "references": [
-    { "path": "../common" }
-  ],
+  "references": [{ "path": "../common" }],
   "include": ["./**/*"]
 }

@@ -1,15 +1,15 @@
-import { Plus, TerminalSquare } from 'lucide-react'
-import { useStore } from '../../store'
-import { RemoteBar } from '../RemoteBar'
+import { Plus, TerminalSquare } from "lucide-react";
+import { useStore } from "../../store";
+import { RemoteBar } from "../RemoteBar";
 
 export function Header({ onOpenShell }: { onOpenShell: () => void }) {
-  const { tickets, agents, isConnected, openCreateModal } = useStore()
+  const { tickets, agents, isConnected, openCreateModal } = useStore();
 
   const runningAgents = Object.values(agents).filter(
-    (a) => a.status === 'running' || a.status === 'waiting-input',
-  )
-  const needsInputCount = Object.values(agents).filter((a) => a.needsInput).length
-  const totalTickets = tickets.length
+    (a) => a.status === "running" || a.status === "waiting-input",
+  );
+  const needsInputCount = Object.values(agents).filter((a) => a.needsInput).length;
+  const totalTickets = tickets.length;
 
   return (
     <header className="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-forge-border bg-forge-panel">
@@ -29,9 +29,11 @@ export function Header({ onOpenShell }: { onOpenShell: () => void }) {
             <span className="text-forge-text-bright">{totalTickets}</span> TICKETS
           </span>
           <span className="text-forge-text-dim">
-            <span className={runningAgents.length > 0 ? 'text-forge-blue' : 'text-forge-text-bright'}>
+            <span
+              className={runningAgents.length > 0 ? "text-forge-blue" : "text-forge-text-bright"}
+            >
               {runningAgents.length}
-            </span>{' '}
+            </span>{" "}
             AGENTS
           </span>
           {needsInputCount > 0 && (
@@ -58,20 +60,21 @@ export function Header({ onOpenShell }: { onOpenShell: () => void }) {
           <span className="text-xs">TERMINAL</span>
         </button>
 
-        <button className="forge-btn-primary py-0.5 px-3 flex items-center gap-1" onClick={openCreateModal}>
+        <button
+          className="forge-btn-primary py-0.5 px-3 flex items-center gap-1"
+          onClick={openCreateModal}
+        >
           <Plus size={13} />
           <span>TICKET</span>
         </button>
 
         <div className="flex items-center gap-1.5">
           <span
-            className={`status-dot ${isConnected ? 'bg-forge-green' : 'bg-forge-red animate-blink'}`}
+            className={`status-dot ${isConnected ? "bg-forge-green" : "bg-forge-red animate-blink"}`}
           />
-          <span className="text-forge-text-dim text-xs">
-            {isConnected ? 'LIVE' : 'OFFLINE'}
-          </span>
+          <span className="text-forge-text-dim text-xs">{isConnected ? "LIVE" : "OFFLINE"}</span>
         </div>
       </div>
     </header>
-  )
+  );
 }

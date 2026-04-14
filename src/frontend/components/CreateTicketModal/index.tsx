@@ -1,51 +1,61 @@
-import { X } from 'lucide-react'
-import { useState } from 'react'
-import { api } from '../../lib/api'
-import { useStore } from '../../store'
+import { X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { api } from "../../lib/api";
+import { useStore } from "../../store";
 
 function titleFromDescription(description: string): string {
-  const trimmed = description.trim()
-  if (!trimmed) return 'Untitled'
-  const firstSentence = trimmed.split(/(?<=[.!?])\s+/)[0] ?? trimmed
-  const firstLine = trimmed.split(/\r?\n/)[0] ?? trimmed
-  const candidate = firstSentence.length <= firstLine.length ? firstSentence : firstLine
-  return candidate.length > 72 ? candidate.slice(0, 69).trimEnd() + '…' : candidate
+  const trimmed = description.trim();
+  if (!trimmed) return "Untitled";
+  const firstSentence = trimmed.split(/(?<=[.!?])\s+/)[0] ?? trimmed;
+  const firstLine = trimmed.split(/\r?\n/)[0] ?? trimmed;
+  const candidate = firstSentence.length <= firstLine.length ? firstSentence : firstLine;
+  return candidate.length > 72 ? candidate.slice(0, 69).trimEnd() + "…" : candidate;
 }
 
 export function CreateTicketModal() {
-  const { isCreateModalOpen, closeCreateModal, addTicket, addNotification } = useStore()
-  const [description, setDescription] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
+  const { isCreateModalOpen, closeCreateModal, addTicket, addNotification } = useStore();
+  const [description, setDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
-  if (!isCreateModalOpen) return null
-
-  async function handleCreate() {
-    if (!description.trim()) return
-    setIsCreating(true)
+  const handleCreate = useCallback(async () => {
+    if (!description.trim()) return;
+    setIsCreating(true);
     try {
       const ticket = await api.tickets.create({
         title: titleFromDescription(description),
         description: description.trim(),
-      })
-      addTicket(ticket)
-      addNotification({ type: 'info', message: `Ticket created.` })
-      closeCreateModal()
-      setDescription('')
+      });
+      addTicket(ticket);
+      addNotification({ type: "info", message: `Ticket created.` });
+      closeCreateModal();
+      setDescription("");
     } catch (err) {
-      addNotification({ type: 'error', message: (err as Error).message })
+      addNotification({ type: "error", message: (err as Error).message });
     } finally {
-      setIsCreating(false)
+      setIsCreating(false);
     }
-  }
+  }, [description, addTicket, addNotification, closeCreateModal]);
 
-  function handleBackdrop(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) closeCreateModal()
-  }
+  const handleBackdrop = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) closeCreateModal();
+    },
+    [closeCreateModal],
+  );
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape') closeCreateModal()
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleCreate()
-  }
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") closeCreateModal();
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreate();
+    },
+    [closeCreateModal, handleCreate],
+  );
+
+  const handleDescriptionChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDescription(e.target.value);
+  }, []);
+
+  if (!isCreateModalOpen) return null;
 
   return (
     <div
@@ -56,7 +66,11 @@ export function CreateTicketModal() {
       <div className="forge-panel w-[480px] p-6 animate-fade-in">
         <div className="flex items-center justify-between mb-5">
           <span className="forge-label">NEW TICKET</span>
-          <button className="text-forge-text-muted hover:text-forge-text" onClick={closeCreateModal} title="ESC">
+          <button
+            className="text-forge-text-muted hover:text-forge-text"
+            onClick={closeCreateModal}
+            title="ESC"
+          >
             <X size={13} />
           </button>
         </div>
@@ -68,7 +82,7 @@ export function CreateTicketModal() {
               className="forge-input resize-none h-36"
               placeholder="Describe what needs to be built or fixed…"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={handleDescriptionChange}
               autoFocus
             />
           </div>
@@ -82,15 +96,13 @@ export function CreateTicketModal() {
               onClick={handleCreate}
               disabled={isCreating || !description.trim()}
             >
-              {isCreating ? 'CREATING...' : 'CREATE TICKET'}
+              {isCreating ? "CREATING..." : "CREATE TICKET"}
             </button>
           </div>
         </div>
 
-        <p className="text-forge-text-muted text-xs mt-3">
-          ⌘+ENTER to create
-        </p>
+        <p className="text-forge-text-muted text-xs mt-3">⌘+ENTER to create</p>
       </div>
     </div>
-  )
+  );
 }

@@ -17,8 +17,6 @@
     "declaration": true,
     "outDir": "../../out/frontend"
   },
-  "references": [
-    { "path": "../common" }
-  ],
+  "references": [{ "path": "../common" }],
   "include": ["."]
 }

@@ -1,38 +1,44 @@
-import { useEffect, useState } from 'react'
-import { X, TerminalSquare, FolderOpen } from 'lucide-react'
-import { api } from '../../lib/api'
-import { useXTerm } from '../../hooks/useXTerm'
+import { useEffect, useState } from "react";
+import { X, TerminalSquare, FolderOpen } from "lucide-react";
+import { api } from "../../lib/api";
+import { useXTerm } from "../../hooks/useXTerm";
 
 interface ShellTerminalProps {
-  onClose: () => void
+  onClose: () => void;
 }
 
 export function ShellTerminal({ onClose }: ShellTerminalProps) {
-  const [wsUrl, setWsUrl] = useState<string | null>(null)
-  const [cwd, setCwd] = useState('')
-  const { containerRef } = useXTerm(wsUrl)
+  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [cwd, setCwd] = useState("");
+  const { containerRef } = useXTerm(wsUrl);
 
   useEffect(() => {
-    let cancelled = false
-    let sessionId: string | null = null
+    let cancelled = false;
+    let sessionId: string | null = null;
 
-    api.shell.create().then(({ id, cwd: dir }) => {
-      if (cancelled) { api.shell.kill(id).catch(() => {}); return }
-      sessionId = id
-      setCwd(dir)
-      setWsUrl(`/ws/shell/${id}`)
-    }).catch(console.error)
+    api.shell
+      .create()
+      .then(({ id, cwd: dir }) => {
+        if (cancelled) {
+          api.shell.kill(id).catch(() => {});
+          return;
+        }
+        sessionId = id;
+        setCwd(dir);
+        setWsUrl(`/ws/shell/${id}`);
+      })
+      .catch(console.error);
 
     return () => {
-      cancelled = true
-      if (sessionId) api.shell.kill(sessionId).catch(() => {})
-    }
-  }, [])
+      cancelled = true;
+      if (sessionId) api.shell.kill(sessionId).catch(() => {});
+    };
+  }, []);
 
   // Shorten the cwd for display — show last 2 path segments
   const displayCwd = cwd
-    ? cwd.replace(/^.*?\/([^/]+\/[^/]+)\/?$/, '$1').replace(/^.*\/([^/]+)\/?$/, '$1') || cwd
-    : ''
+    ? cwd.replace(/^.*?\/([^/]+\/[^/]+)\/?$/, "$1").replace(/^.*\/([^/]+)\/?$/, "$1") || cwd
+    : "";
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[42vh] min-h-[200px] bg-forge-black border-t-2 border-forge-amber z-50 flex flex-col animate-slide-in-bottom shadow-[0_-8px_32px_rgba(0,0,0,0.8)]">
@@ -69,5 +75,5 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
         <div ref={containerRef} className="w-full h-full" />
       </div>
     </div>
-  )
+  );
 }
