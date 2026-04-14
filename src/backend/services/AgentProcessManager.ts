@@ -36,8 +36,8 @@ export class AgentProcessManager {
       },
       terminal: {
         name: "xterm-256color",
-        cols: 220,
-        rows: 50,
+        cols: 80,
+        rows: 24,
         data(_, raw) {
           const data = decoder.decode(raw);
           appendScrollback(agentId, data);
