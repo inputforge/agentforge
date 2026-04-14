@@ -21,7 +21,7 @@ You can drag tickets between columns manually at any time.
 
 ### Creating a ticket
 
-Click **+ NEW TICKET** and write a description. Be specific — the description is passed directly to the agent as its task prompt. The first line (up to 72 characters) becomes the ticket title.
+Click **+ TICKET** in the header and write a description. Be specific — the description is passed directly to the agent as its task prompt. The first line (up to 72 characters) becomes the ticket title. Check **Start now** to create and immediately move the ticket to **In Progress** in one step.
 
 ### Moving a ticket
 
@@ -58,6 +58,10 @@ Click the terminal area and type to send input to the agent. This is useful if t
 ### Killing an agent
 
 Click **KILL** in the panel header to terminate the agent process. The ticket stays in **In Progress** so you can re-launch a different agent or investigate the output.
+
+### Relaunching an agent
+
+If an agent exits with an error while the ticket is still **In Progress**, a **RELAUNCH** button appears in the panel header. This respawns the same agent type in the existing worktree without changing the branch or losing previous work. AgentForge also auto-relaunches automatically when you re-open the panel for an errored agent.
 
 ## Review and merge
 

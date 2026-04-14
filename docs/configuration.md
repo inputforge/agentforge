@@ -2,33 +2,21 @@
 
 ## Repository setup
 
-AgentForge needs to know which git repository agents should work in. Configure this from the **RemoteBar** in the top-right of the UI.
+AgentForge needs to know which git repository agents should work in.
 
 ### Auto-detect
 
-Click **DETECT** to automatically detect the git repository that the AgentForge backend is running from. This is the fastest path if you're running AgentForge inside (or next to) the repo you want to use.
+By default AgentForge detects the git repository it was started from (`process.cwd()`). The header displays the repo URL (with an icon for GitHub/GitLab/Bitbucket) and the current branch, refreshed every 5 seconds.
 
-You can also set the `REPO_PATH` environment variable to point the backend at a specific repository on startup — **DETECT** will pick it up.
+### Point to a specific repository
 
-### Point to a local clone
+Set `REPO_PATH` before starting AgentForge:
 
-Open **CONFIG**, enter the path to an existing local repository under **DETECT FROM PATH**, and click **DETECT**.
+```bash
+REPO_PATH=/path/to/myproject bun run start
+```
 
-### Clone a remote repository
-
-Open **CONFIG** and fill in:
-
-| Field | Description |
-|---|---|
-| **Repo URL** | HTTPS or SSH URL of the remote (e.g. `https://github.com/org/repo.git`) |
-| **Base branch** | Branch agents will branch off and merge back into (default: `main`) |
-| **Local path** | Absolute path where AgentForge should clone the repo |
-
-Click **CLONE REPOSITORY**. AgentForge runs `git clone` and saves the configuration.
-
-### Pull / Push
-
-Once a repository is connected, **PULL** and **PUSH** buttons appear in the top bar. These operate on the base branch of the configured repository.
+This overrides auto-detection and persists for the lifetime of that process.
 
 ## Environment variables
 

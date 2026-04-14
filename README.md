@@ -20,14 +20,11 @@ Open [http://localhost:5173](http://localhost:5173). The backend runs on port `3
 
 ### 1. Connect your repository
 
-Click **DETECT** in the header to auto-detect the git repo that AgentForge is running from. Alternatively, open **CONFIG** to:
-
-- Point to an existing local repo by path
-- Clone a remote repository into a local path
+Set the `REPO_PATH` environment variable to point at the repository you want agents to work in, or run AgentForge from inside that repo. The header shows the active repo URL and current branch once detected.
 
 ### 2. Create a ticket
 
-Click **+ NEW TICKET** and describe the task. The first line becomes the ticket title automatically.
+Click **+ TICKET** in the header and describe the task. The first line becomes the ticket title automatically. Check **Start now** to immediately move the ticket to **In Progress**.
 
 ### 3. Launch an agent
 
@@ -43,13 +40,13 @@ AgentForge creates an isolated git worktree and branch (`agent/<ticketId>`) and 
 
 ### 4. Watch and interact
 
-The panel shows a live terminal on the left and a diff view on the right. You can type directly in the terminal if the agent needs input.
+The panel shows a live terminal on the left and a diff view on the right. You can type directly in the terminal if the agent needs input. If the agent exits with an error, a **RELAUNCH** button appears to restart it in the same worktree.
 
 ### 5. Review and merge
 
 When the agent finishes, the ticket moves to **REVIEW** automatically. Click **MERGE TO MAIN** to rebase the agent branch onto your base branch. On success the ticket moves to **DONE** and the worktree is cleaned up.
 
-You can also drag tickets between columns manually at any point, or **KILL** a running agent to stop it.
+You can also drag tickets between columns manually at any point, **KILL** a running agent to stop it, or open the built-in **TERMINAL** (header) for a shell in the configured repository.
 
 ## Commands
 
@@ -67,7 +64,7 @@ bun run start         # run production build
 | Environment variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `3001` | Backend port |
-| `REPO_PATH` | `process.cwd()` | Git repo to manage (overrides auto-detect) |
+| `REPO_PATH` | `process.cwd()` | Git repo for agents to work in |
 
 ## Stack
 
