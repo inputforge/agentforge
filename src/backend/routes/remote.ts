@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { remoteStmts } from "../db";
-import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager";
-import type { RemoteConfig } from "../../common/types";
+import { remoteStmts } from "../db/index.ts";
+import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager.ts";
+import type { RemoteConfig } from "../../common/types.ts";
 
 export const remoteRouter = new Hono();
 

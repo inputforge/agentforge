@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, TerminalSquare, FolderOpen } from "lucide-react";
-import { api } from "../../lib/api";
-import { useXTerm } from "../../hooks/useXTerm";
+import { api } from "../lib/api";
+import { useXTerm } from "../hooks/useXTerm";
 
 interface ShellTerminalProps {
   onClose: () => void;

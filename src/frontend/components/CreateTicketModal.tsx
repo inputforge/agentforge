@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useCallback, useState } from "react";
-import { api } from "../../lib/api";
-import { useStore } from "../../store";
+import { api } from "../lib/api";
+import { useStore } from "../store";
 
 function titleFromDescription(description: string): string {
   const trimmed = description.trim();

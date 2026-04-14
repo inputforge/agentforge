@@ -1,6 +1,6 @@
 import { EventEmitter } from "events";
-import { agentStmts } from "../db";
-import { appendScrollback } from "../ws/hub";
+import { agentStmts } from "../db/index.ts";
+import { appendScrollback } from "../ws/hub.ts";
 
 const decoder = new TextDecoder();
 

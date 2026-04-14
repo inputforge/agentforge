@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
-import { remoteStmts } from "../db";
-import { shellSessionManager } from "../services/ShellSessionManager";
-import { clearShellScrollback } from "../ws/hub";
+import { remoteStmts } from "../db/index.ts";
+import { shellSessionManager } from "../services/ShellSessionManager.ts";
+import { clearShellScrollback } from "../ws/hub.ts";
 
 export const shellRouter = new Hono();
 

@@ -19,7 +19,8 @@
     "lint": "oxlint src/",
     "lint:fix": "oxlint --fix src/",
     "format": "oxfmt src/",
-    "format:check": "oxfmt --check src/"
+    "format:check": "oxfmt --check src/",
+    "prepare": "git config core.hooksPath scripts/githooks"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

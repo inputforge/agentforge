@@ -8,10 +8,10 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
-import { useStore } from "../../store";
-import { useXTerm } from "../../hooks/useXTerm";
-import type { AgentType, DiffFile, DiffResult, Ticket } from "../../types";
+import { api } from "../lib/api";
+import { useStore } from "../store";
+import { useXTerm } from "../hooks/useXTerm";
+import type { AgentType, DiffFile, DiffResult, Ticket } from "../types";
 
 const TERMINAL_STYLE = { width: "60%" };
 const DIFF_STYLE = { width: "40%" };

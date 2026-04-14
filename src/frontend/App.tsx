@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentDetailPanel } from "./components/AgentDetailPanel";
 import { CreateTicketModal } from "./components/CreateTicketModal";
-import { KanbanBoard } from "./components/KanbanBoard";
+import { KanbanBoard } from "./components/kanban-board/KanbanBoard";
 import { ShellTerminal } from "./components/ShellTerminal";
 import { Header } from "./components/layout/Header";
 import { NotificationToast } from "./components/NotificationToast";

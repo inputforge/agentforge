@@ -6,8 +6,10 @@
     "strict": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "composite": true,
     "declaration": true,
+    "emitDeclarationOnly": true,
     "outDir": "../../out/common"
   },
   "include": ["."]

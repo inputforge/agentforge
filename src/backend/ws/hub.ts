@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
-import { agentProcessManager } from "../services/AgentProcessManager";
-import { shellSessionManager } from "../services/ShellSessionManager";
+import { agentProcessManager } from "../services/AgentProcessManager.ts";
+import { shellSessionManager } from "../services/ShellSessionManager.ts";
 
 // Global notification subscribers
 const notificationClients = new Set<ServerWebSocket<{ channel: string; agentId?: string }>>();

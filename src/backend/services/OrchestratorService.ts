@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { agentStmts, remoteStmts, ticketStmts } from "../db";
-import type { Agent, AgentType } from "../../common/types";
-import { agentProcessManager } from "./AgentProcessManager";
-import { GitWorktreeManager } from "./GitWorktreeManager";
-import { appendScrollback } from "../ws/hub";
+import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
+import type { Agent, AgentType } from "../../common/types.ts";
+import { agentProcessManager } from "./AgentProcessManager.ts";
+import { GitWorktreeManager } from "./GitWorktreeManager.ts";
+import { appendScrollback } from "../ws/hub.ts";
 
 /** Derive a concise title from the description — first sentence, capped at 72 chars. */
 function titleFromDescription(description: string): string | null {

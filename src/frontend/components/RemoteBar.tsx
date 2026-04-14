@@ -1,7 +1,7 @@
 import { Download, GitBranch, Settings, Upload, Wifi } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../../lib/api";
-import { useStore } from "../../store";
+import { api } from "../lib/api";
+import { useStore } from "../store";
 
 export function RemoteBar() {
   const { remoteConfig, setRemoteConfig, addNotification } = useStore();

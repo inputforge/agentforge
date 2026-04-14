@@ -41,7 +41,7 @@ AgentForge is a Kanban board that spawns AI coding agents (Claude Code, Codex, o
 ### Backend (`src/backend/`)
 
 - `index.ts` — Hono HTTP server + Bun native WebSocket server on port 3001. On startup, auto-detects the local git repo (or reads `REPO_PATH` env var) and seeds `remote_config` if empty.
-- `db/index.ts` — SQLite via `bun:sqlite`. DB file is at `db/agentforge.db` (relative to repo root). Three tables: `tickets`, `agents`, `remote_config`.
+- `db/index.ts` — SQLite via `bun:sqlite`. DB file is at `data/agentforge.db` (relative to repo root). Three tables: `tickets`, `agents`, `remote_config`.
 - `services/OrchestratorService.ts` — coordinates agent lifecycle: worktree creation, spawn, status transitions, broadcast.
 - `services/AgentProcessManager.ts` — singleton that manages all live PTY processes. Keeps a scrollback buffer (last 600 chunks) so late-connecting terminals see history.
 - `services/GitWorktreeManager.ts` — wraps `simple-git` for worktree create/remove, diff, rebase, and merge-to-base operations.

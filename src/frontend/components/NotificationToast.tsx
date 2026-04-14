@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback } from "react";
-import { useStore } from "../../store";
-import type { AppNotification, NotificationType } from "../../types";
+import { useStore } from "../store";
+import type { AppNotification, NotificationType } from "../types";
 
 const TYPE_META: Record<NotificationType, { Icon: LucideIcon; color: string; iconColor: string }> =
   {

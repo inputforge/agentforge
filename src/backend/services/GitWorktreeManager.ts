@@ -1,7 +1,7 @@
 import { simpleGit, type SimpleGit } from "simple-git";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import type { DiffResult, RemoteConfig } from "../../common/types";
+import type { DiffResult, RemoteConfig } from "../../common/types.ts";
 
 /**
  * Detect the git repo at `searchPath` (walks up to find .git).

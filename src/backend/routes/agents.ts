@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { agentStmts, remoteStmts, ticketStmts } from "../db";
-import { agentProcessManager } from "../services/AgentProcessManager";
-import { GitWorktreeManager } from "../services/GitWorktreeManager";
-import type { Agent, Ticket } from "../../common/types";
+import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
+import { agentProcessManager } from "../services/AgentProcessManager.ts";
+import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
+import type { Agent, Ticket } from "../../common/types.ts";
 
 export const agentsRouter = new Hono();
 

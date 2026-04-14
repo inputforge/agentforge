@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
-import { agentStmts, ticketStmts } from "../db";
-import type { Agent, AgentType, Ticket, TicketStatus } from "../../common/types";
-import { broadcastNotification } from "../ws/hub";
-import type { OrchestratorService } from "../services/OrchestratorService";
+import { agentStmts, ticketStmts } from "../db/index.ts";
+import type { Agent, AgentType, Ticket, TicketStatus } from "../../common/types.ts";
+import { broadcastNotification } from "../ws/hub.ts";
+import type { OrchestratorService } from "../services/OrchestratorService.ts";
 
 const VALID_STATUSES: TicketStatus[] = ["backlog", "in-progress", "review", "done"];
 const VALID_AGENT_TYPES: AgentType[] = ["claude-code", "codex", "custom"];

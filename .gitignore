@@ -139,7 +139,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # AgentForge
-/db/
+/data/
 /out/
 /.worktrees/
 /dist/

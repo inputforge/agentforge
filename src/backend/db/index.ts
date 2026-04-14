@@ -1,13 +1,15 @@
-import { Database } from 'bun:sqlite'
-import { join } from 'path'
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "fs";
+import { join } from "path";
 
-const DB_PATH = join(import.meta.dir, '../../../db/agentforge.db')
+const DB_PATH = join(process.cwd(), "data/agentforge.db");
+mkdirSync(join(process.cwd(), "data"), { recursive: true });
 
-export const db = new Database(DB_PATH, { create: true })
+export const db = new Database(DB_PATH, { create: true });
 
 // Enable WAL mode for better concurrent read performance
-db.exec('PRAGMA journal_mode = WAL;')
-db.exec('PRAGMA foreign_keys = ON;')
+db.exec("PRAGMA journal_mode = WAL;");
+db.exec("PRAGMA foreign_keys = ON;");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS tickets (
@@ -43,13 +45,13 @@ db.exec(`
     base_branch TEXT NOT NULL DEFAULT 'main',
     local_path TEXT NOT NULL
   );
-`)
+`);
 
 // Migrations — add columns that didn't exist in earlier schema versions
 {
-  const cols = db.prepare('PRAGMA table_info(tickets)').all() as { name: string }[]
-  if (!cols.some((c) => c.name === 'agent_title')) {
-    db.exec('ALTER TABLE tickets ADD COLUMN agent_title TEXT')
+  const cols = db.prepare("PRAGMA table_info(tickets)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "agent_title")) {
+    db.exec("ALTER TABLE tickets ADD COLUMN agent_title TEXT");
   }
 }
 
@@ -81,10 +83,14 @@ export const ticketStmts = {
     UPDATE tickets SET agent_id = $agentId, branch = $branch, worktree = $worktree, updated_at = $updatedAt
     WHERE id = $ticketId
   `),
-  updateTitle: db.prepare(`UPDATE tickets SET title = $title, updated_at = $updatedAt WHERE id = $id`),
-  updateAgentTitle: db.prepare(`UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id`),
+  updateTitle: db.prepare(
+    `UPDATE tickets SET title = $title, updated_at = $updatedAt WHERE id = $id`,
+  ),
+  updateAgentTitle: db.prepare(
+    `UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id`,
+  ),
   delete: db.prepare(`DELETE FROM tickets WHERE id = ?`),
-}
+};
 
 export const agentStmts = {
   get: db.prepare(`
@@ -116,12 +122,14 @@ export const agentStmts = {
     UPDATE agents SET status = $status, needs_input = $needsInput, ended_at = $endedAt WHERE id = $id
   `),
   updatePid: db.prepare(`UPDATE agents SET pid = $pid WHERE id = $id`),
-}
+};
 
 export const remoteStmts = {
-  get: db.prepare(`SELECT repo_url as repoUrl, base_branch as baseBranch, local_path as localPath FROM remote_config WHERE id = 1`),
+  get: db.prepare(
+    `SELECT repo_url as repoUrl, base_branch as baseBranch, local_path as localPath FROM remote_config WHERE id = 1`,
+  ),
   upsert: db.prepare(`
     INSERT INTO remote_config (id, repo_url, base_branch, local_path) VALUES (1, $repoUrl, $baseBranch, $localPath)
     ON CONFLICT(id) DO UPDATE SET repo_url = excluded.repo_url, base_branch = excluded.base_branch, local_path = excluded.local_path
   `),
-}
+};
