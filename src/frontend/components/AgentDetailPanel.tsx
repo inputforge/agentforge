@@ -82,6 +82,7 @@ export function AgentDetailPanel() {
 
   // ── Diff ─────────────────────────────────────────────────────────────────
 
+  // Initial load + reset when the active agent changes.
   useEffect(() => {
     if (!agentId) {
       setDiff(null);
@@ -98,10 +99,32 @@ export function AgentDetailPanel() {
         setSelectedFile(result.files[0] ?? null);
       })
       .catch(() => {
-        // No diff yet (agent still running) — that's fine
+        // No diff yet — that's fine
       })
       .finally(() => setIsDiffLoading(false));
   }, [agentId]);
+
+  // Poll every 5 s while the agent is actively running so the diff stays current.
+  useEffect(() => {
+    if (!agentId || (agent?.status !== "running" && agent?.status !== "waiting-input")) return;
+
+    const interval = setInterval(() => {
+      api.agents
+        .getDiff(agentId)
+        .then((result) => {
+          setDiff(result);
+          // Keep the currently-selected file if it still exists in the new diff.
+          setSelectedFile((prev) =>
+            prev
+              ? (result.files.find((f) => f.path === prev.path) ?? result.files[0] ?? null)
+              : (result.files[0] ?? null),
+          );
+        })
+        .catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [agentId, agent?.status]);
 
   const handleMerge = useCallback(async () => {
     if (!agentId || !ticket) return;

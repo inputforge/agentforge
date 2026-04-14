@@ -41,6 +41,7 @@ type RawAgent = {
   status: string;
   worktreePath: string;
   branch: string;
+  baseBranch: string;
   pid: number | null;
   startedAt: number;
   endedAt: number | null;
@@ -63,7 +64,9 @@ const AGENT_COLS = `
   ticket_id    AS ticketId,
   type, command, status,
   worktree_path AS worktreePath,
-  branch, pid,
+  branch,
+  base_branch  AS baseBranch,
+  pid,
   started_at   AS startedAt,
   ended_at     AS endedAt,
   needs_input  AS needsInput,
@@ -194,12 +197,13 @@ export const agentStmts = {
       $status: string;
       $worktreePath: string;
       $branch: string;
+      $baseBranch: string;
       $startedAt: number;
       $needsInput: number | boolean;
     }): void => {
       db.query(
-        `INSERT INTO agents (id, ticket_id, type, command, status, worktree_path, branch, started_at, needs_input)
-         VALUES ($id, $ticketId, $type, $command, $status, $worktreePath, $branch, $startedAt, $needsInput)`,
+        `INSERT INTO agents (id, ticket_id, type, command, status, worktree_path, branch, base_branch, started_at, needs_input)
+         VALUES ($id, $ticketId, $type, $command, $status, $worktreePath, $branch, $baseBranch, $startedAt, $needsInput)`,
       ).run({ ...args, $needsInput: args.$needsInput ? 1 : 0 });
     },
   },

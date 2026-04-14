@@ -104,15 +104,17 @@ export class OrchestratorService {
 
     const command = buildCommand(agentType, customCommand, ticket.description);
 
-    const git = this.getGitManager();
+    const config = remoteStmts.get.get();
+    const git = config ? new GitWorktreeManager(config.localPath) : null;
     const agentId = randomUUID();
 
     let worktreePath = `/tmp/agentforge/${ticketId}`;
     let branch = `agent/${ticketId}`;
+    const baseBranch = config?.baseBranch ?? "main";
 
     mkdirSync(worktreePath, { recursive: true });
 
-    if (git) {
+    if (git && config) {
       try {
         const result = await git.createWorktree(ticketId);
         worktreePath = result.worktreePath;
@@ -141,6 +143,7 @@ export class OrchestratorService {
       $status: "running",
       $worktreePath: worktreePath,
       $branch: branch,
+      $baseBranch: baseBranch,
       $startedAt: Date.now(),
       $needsInput: 0,
     });

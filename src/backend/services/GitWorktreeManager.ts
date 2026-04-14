@@ -91,10 +91,15 @@ export class GitWorktreeManager {
 
   async getDiff(worktreePath: string, baseBranch: string): Promise<DiffResult> {
     const worktreeGit = simpleGit(worktreePath);
-    const currentBranch = await worktreeGit.revparse(["--abbrev-ref", "HEAD"]);
 
-    const raw = await worktreeGit.diff([`${baseBranch}...${currentBranch.trim()}`, "--stat=9999"]);
-    const rawFull = await worktreeGit.diff([`${baseBranch}...${currentBranch.trim()}`]);
+    // Find the fork point so the diff is always relative to where this branch diverged,
+    // regardless of any new commits on baseBranch since then.
+    const mergeBase = (await worktreeGit.raw(["merge-base", baseBranch, "HEAD"])).trim();
+
+    // Diff merge-base against the working tree (no second ref) so uncommitted edits
+    // are included alongside any committed changes on the agent branch.
+    const raw = await worktreeGit.diff([mergeBase, "--stat=9999"]);
+    const rawFull = await worktreeGit.diff([mergeBase]);
 
     return parseDiff(rawFull, raw);
   }

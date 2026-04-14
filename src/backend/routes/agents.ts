@@ -20,7 +20,7 @@ agentsRouter.get("/:id/diff", async (c) => {
 
   try {
     const git = new GitWorktreeManager(remoteConfig.localPath);
-    const diff = await git.getDiff(agent.worktreePath, remoteConfig.baseBranch);
+    const diff = await git.getDiff(agent.worktreePath, agent.baseBranch);
     return c.json(diff);
   } catch (err) {
     return c.json({ error: (err as Error).message }, 500);

@@ -23,6 +23,7 @@ export interface Agent {
   status: AgentStatus;
   worktreePath: string;
   branch: string;
+  baseBranch: string;
   pid?: number | null;
   startedAt: number;
   endedAt?: number | null;
