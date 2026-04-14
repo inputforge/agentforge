@@ -2,21 +2,20 @@ import { Hono } from "hono";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
-import type { Agent, Ticket } from "../../common/types.ts";
 
 export const agentsRouter = new Hono();
 
 agentsRouter.get("/:id", (c) => {
-  const agent = agentStmts.get.get(c.req.param("id")) as Agent | null;
+  const agent = agentStmts.get.get(c.req.param("id"));
   if (!agent) return c.json({ error: "agent not found" }, 404);
   return c.json({ ...agent, needsInput: Boolean(agent.needsInput) });
 });
 
 agentsRouter.get("/:id/diff", async (c) => {
-  const agent = agentStmts.get.get(c.req.param("id")) as Agent | null;
+  const agent = agentStmts.get.get(c.req.param("id"));
   if (!agent) return c.json({ error: "agent not found" }, 404);
 
-  const remoteConfig = remoteStmts.get.get() as { baseBranch: string; localPath: string } | null;
+  const remoteConfig = remoteStmts.get.get();
   if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
 
   try {
@@ -29,10 +28,10 @@ agentsRouter.get("/:id/diff", async (c) => {
 });
 
 agentsRouter.post("/:id/merge", async (c) => {
-  const agent = agentStmts.get.get(c.req.param("id")) as Agent | null;
+  const agent = agentStmts.get.get(c.req.param("id"));
   if (!agent) return c.json({ error: "agent not found" }, 404);
 
-  const remoteConfig = remoteStmts.get.get() as { baseBranch: string; localPath: string } | null;
+  const remoteConfig = remoteStmts.get.get();
   if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
 
   try {
@@ -41,7 +40,7 @@ agentsRouter.post("/:id/merge", async (c) => {
 
     if (result.success) {
       // Move ticket to done
-      const ticket = ticketStmts.get.get(agent.ticketId) as Ticket | null;
+      const ticket = ticketStmts.get.get(agent.ticketId);
       if (ticket) {
         ticketStmts.updateStatus.run({
           $status: "done",
@@ -61,11 +60,16 @@ agentsRouter.post("/:id/merge", async (c) => {
 
 agentsRouter.post("/:id/kill", (c) => {
   const id = c.req.param("id");
-  const agent = agentStmts.get.get(id) as Agent | null;
+  const agent = agentStmts.get.get(id);
   if (!agent) return c.json({ error: "agent not found" }, 404);
 
   agentProcessManager.kill(id);
-  agentStmts.updateStatus.run({ $id: id, $status: "error", $needsInput: 0, $endedAt: Date.now() });
+  agentStmts.updateStatus.run({
+    $id: id,
+    $status: "error",
+    $needsInput: 0,
+    $endedAt: Date.now(),
+  });
   return c.body(null, 204);
 });
 

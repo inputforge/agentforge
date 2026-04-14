@@ -82,11 +82,7 @@ export class OrchestratorService {
   }
 
   private getGitManager(): GitWorktreeManager | null {
-    const config = remoteStmts.get.get() as {
-      repoUrl: string;
-      baseBranch: string;
-      localPath: string;
-    } | null;
+    const config = remoteStmts.get.get();
     if (!config) return null;
     return new GitWorktreeManager(config.localPath);
   }
@@ -103,11 +99,7 @@ export class OrchestratorService {
   }
 
   async spawnAgent(ticketId: string, agentType: AgentType, customCommand?: string): Promise<void> {
-    const ticket = ticketStmts.get.get(ticketId) as {
-      id: string;
-      title: string;
-      description: string;
-    } | null;
+    const ticket = ticketStmts.get.get(ticketId);
     if (!ticket) throw new Error("ticket not found");
 
     const command = buildCommand(agentType, customCommand, ticket.description);
@@ -164,41 +156,22 @@ export class OrchestratorService {
     // Derive title from description the moment the agent starts working
     const derivedTitle = titleFromDescription(ticket.description);
     if (derivedTitle && derivedTitle !== ticket.title) {
-      ticketStmts.updateTitle.run({ $title: derivedTitle, $updatedAt: Date.now(), $id: ticketId });
+      ticketStmts.updateTitle.run({
+        $title: derivedTitle,
+        $updatedAt: Date.now(),
+        $id: ticketId,
+      });
     }
 
     try {
       agentProcessManager.spawn(agentId, command, worktreePath, (id, exitCode) => {
-        const updatedAgent = agentStmts.get.get(id) as Agent | null;
-        if (updatedAgent) {
-          this.broadcast({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
-        }
-
-        if (exitCode === 0) {
-          ticketStmts.updateStatus.run({
-            $status: "review",
-            $updatedAt: Date.now(),
-            $id: ticketId,
-          });
-          const t = ticketStmts.get.get(ticketId);
-          if (t) this.broadcast({ type: "ticket-updated", ticket: t });
-          this.broadcast({
-            type: "notification",
-            notification: {
-              type: "agent-done",
-              message: `Agent on "${ticket.title}" finished — ready for review`,
-              ticketId,
-              agentId: id,
-            },
-          });
-        }
-
-        this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+        void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
       });
 
       // Broadcast only after the process is registered so WS clients connecting
       // immediately on agent-updated find a live emitter and non-empty scrollback.
-      const agent = agentStmts.get.get(agentId) as Agent;
+      const agent = agentStmts.get.get(agentId);
+      if (!agent) throw new Error("agent record was not created");
       this.broadcast({ type: "agent-updated", agent: normalizeAgent(agent) });
       const updatedTicket = ticketStmts.get.get(ticketId);
       if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
@@ -228,11 +201,7 @@ export class OrchestratorService {
 
   /** Re-attach to a previously running agent after a server restart. */
   async resumeAgent(agent: Agent): Promise<void> {
-    const ticket = ticketStmts.get.get(agent.ticketId) as {
-      id: string;
-      title: string;
-      description: string;
-    } | null;
+    const ticket = ticketStmts.get.get(agent.ticketId);
     if (!ticket) return;
 
     if (!agent.sessionId) {
@@ -261,31 +230,7 @@ export class OrchestratorService {
 
     try {
       agentProcessManager.spawn(agent.id, command, agent.worktreePath, (id, exitCode) => {
-        const updatedAgent = agentStmts.get.get(id) as Agent | null;
-        if (updatedAgent) {
-          this.broadcast({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
-        }
-
-        if (exitCode === 0) {
-          ticketStmts.updateStatus.run({
-            $status: "review",
-            $updatedAt: Date.now(),
-            $id: ticket.id,
-          });
-          const t = ticketStmts.get.get(ticket.id);
-          if (t) this.broadcast({ type: "ticket-updated", ticket: t });
-          this.broadcast({
-            type: "notification",
-            notification: {
-              type: "agent-done",
-              message: `Agent on "${ticket.title}" finished — ready for review`,
-              ticketId: ticket.id,
-              agentId: id,
-            },
-          });
-        }
-
-        this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+        void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
       });
 
       appendScrollback(agent.id, `\r\n\x1b[33m[resuming session ${agent.sessionId}]\x1b[0m\r\n`);
@@ -303,7 +248,7 @@ export class OrchestratorService {
   }
 
   private async cleanupTicket(ticketId: string): Promise<void> {
-    const ticket = ticketStmts.get.get(ticketId) as { agentId?: string; worktree?: string } | null;
+    const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
 
     agentProcessManager.kill(ticket.agentId);
@@ -312,6 +257,39 @@ export class OrchestratorService {
       const git = this.getGitManager();
       if (git) await git.removeWorktree(ticket.worktree).catch(() => {});
     }
+  }
+
+  private async handleAgentExit(
+    agentId: string,
+    exitCode: number,
+    ticketId: string,
+    ticketTitle: string,
+  ): Promise<void> {
+    const updatedAgent = agentStmts.get.get(agentId);
+    if (updatedAgent) {
+      this.broadcast({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
+    }
+
+    if (exitCode === 0) {
+      ticketStmts.updateStatus.run({
+        $status: "review",
+        $updatedAt: Date.now(),
+        $id: ticketId,
+      });
+      const ticket = ticketStmts.get.get(ticketId);
+      if (ticket) this.broadcast({ type: "ticket-updated", ticket });
+      this.broadcast({
+        type: "notification",
+        notification: {
+          type: "agent-done",
+          message: `Agent on "${ticketTitle}" finished — ready for review`,
+          ticketId,
+          agentId,
+        },
+      });
+    }
+
+    this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
   }
 }
 

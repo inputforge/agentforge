@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { agentStmts, ticketStmts } from "../db/index.ts";
-import type { Agent, Ticket } from "../../common/types.ts";
+import type { Agent } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 
 function normalizeAgent(agent: Agent): Agent {
@@ -21,10 +21,10 @@ export const hooksRouter = new Hono();
 hooksRouter.post("/:agentId/:event", async (c) => {
   const { agentId, event } = c.req.param();
 
-  const agent = agentStmts.get.get(agentId) as Agent | null;
+  const agent = agentStmts.get.get(agentId);
   if (!agent) return c.json({ ok: true }); // agent may have been cleaned up
 
-  const ticket = ticketStmts.get.get(agent.ticketId) as Ticket | null;
+  const ticket = ticketStmts.get.get(agent.ticketId);
   if (!ticket) return c.json({ ok: true });
 
   let body: Record<string, unknown> = {};
@@ -49,12 +49,17 @@ hooksRouter.post("/:agentId/:event", async (c) => {
           $needsInput: 0,
           $endedAt: Date.now(),
         });
-        const updatedAgent = agentStmts.get.get(agentId) as Agent;
+        const updatedAgent = agentStmts.get.get(agentId);
+        if (!updatedAgent) return c.json({ ok: true });
         broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
       }
 
       if (ticket.status === "in-progress") {
-        ticketStmts.updateStatus.run({ $status: "review", $updatedAt: Date.now(), $id: ticket.id });
+        ticketStmts.updateStatus.run({
+          $status: "review",
+          $updatedAt: Date.now(),
+          $id: ticket.id,
+        });
         broadcastNotification({
           type: "notification",
           notification: {
@@ -72,6 +77,7 @@ hooksRouter.post("/:agentId/:event", async (c) => {
           const { readFileSync } = await import("fs");
           const content = readFileSync(body.transcript_path, "utf-8");
           const lines = content.trim().split("\n").filter(Boolean);
+          let extractedTitle: string | null = null;
           for (const line of lines) {
             try {
               const msg = JSON.parse(line) as {
@@ -83,11 +89,7 @@ hooksRouter.post("/:agentId/:event", async (c) => {
                 if (textBlock?.text) {
                   const firstLine = textBlock.text.split("\n")[0].trim();
                   if (firstLine && firstLine.length <= 100) {
-                    ticketStmts.updateAgentTitle.run({
-                      $agentTitle: firstLine,
-                      $updatedAt: Date.now(),
-                      $id: ticket.id,
-                    });
+                    extractedTitle = firstLine;
                   }
                   break;
                 }
@@ -95,6 +97,13 @@ hooksRouter.post("/:agentId/:event", async (c) => {
             } catch {
               // skip malformed lines
             }
+          }
+          if (extractedTitle) {
+            ticketStmts.updateAgentTitle.run({
+              $agentTitle: extractedTitle,
+              $updatedAt: Date.now(),
+              $id: ticket.id,
+            });
           }
         } catch {
           // transcript unreadable — skip title extraction
@@ -158,7 +167,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
         $needsInput: 1,
         $endedAt: null,
       });
-      const updatedAgent = agentStmts.get.get(agentId) as Agent;
+      const updatedAgent = agentStmts.get.get(agentId);
+      if (!updatedAgent) return c.json({ ok: true });
       broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
       broadcastNotification({
         type: "notification",
@@ -182,7 +192,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
           $needsInput: 0,
           $endedAt: null,
         });
-        const updatedAgent = agentStmts.get.get(agentId) as Agent;
+        const updatedAgent = agentStmts.get.get(agentId);
+        if (!updatedAgent) return c.json({ ok: true });
         broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
       }
       return c.json({ ok: true });

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { agentStmts, remoteStmts } from "./db/index.ts";
+import { agentStmts, initDb, remoteStmts } from "./db/index.ts";
 import { errorMeta, logger, requestLogger, wasErrorLogged } from "./lib/logger.ts";
 import { agentsRouter } from "./routes/agents.ts";
 import { hooksRouter } from "./routes/hooks.ts";
@@ -9,13 +9,14 @@ import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
 import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
 import { OrchestratorService } from "./services/OrchestratorService.ts";
-import type { Agent } from "../common/types.ts";
 import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
 const log = logger.child("server");
 const orchestrator = new OrchestratorService(broadcastNotification);
+
+initDb();
 
 // Auto-detect local git repo on startup — only seeds if no config saved yet
 async function seedRemoteConfigIfEmpty() {
@@ -45,7 +46,7 @@ await seedRemoteConfigIfEmpty();
 
 // Re-attach to any agents that were running when the server last shut down
 {
-  const runningAgents = agentStmts.listRunning.all() as Agent[];
+  const runningAgents = agentStmts.listRunning.all();
   if (runningAgents.length > 0) {
     log.info("resuming interrupted agents", { count: runningAgents.length });
     for (const agent of runningAgents) {

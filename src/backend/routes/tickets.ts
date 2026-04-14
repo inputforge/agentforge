@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { randomUUID } from "crypto";
 import { agentStmts, ticketStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
-import type { Agent, AgentType, Ticket, TicketStatus } from "../../common/types.ts";
+import type { AgentType, Ticket, TicketStatus } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -15,7 +15,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
   const app = new Hono();
 
   app.get("/", (c) => {
-    return c.json(ticketStmts.list.all() as Ticket[]);
+    return c.json(ticketStmts.list.all());
   });
 
   app.post("/", async (c) => {
@@ -54,13 +54,13 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       return c.json({ error: `status must be one of: ${VALID_STATUSES.join(", ")}` }, 400);
     }
 
-    const existing = ticketStmts.get.get(id) as Ticket | null;
+    const existing = ticketStmts.get.get(id);
     if (!existing) return c.json({ error: "ticket not found" }, 404);
 
     const newStatus = body.status as TicketStatus;
     ticketStmts.updateStatus.run({ $status: newStatus, $updatedAt: Date.now(), $id: id });
 
-    const updated = ticketStmts.get.get(id) as Ticket;
+    const updated = ticketStmts.get.get(id);
     broadcastNotification({ type: "ticket-updated", ticket: updated });
 
     orchestrator.onTicketMoved(id, newStatus).catch((err) => {
@@ -84,7 +84,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       return c.json({ error: `agentType must be one of: ${VALID_AGENT_TYPES.join(", ")}` }, 400);
     }
 
-    const ticket = ticketStmts.get.get(id) as Ticket | null;
+    const ticket = ticketStmts.get.get(id);
     if (!ticket) return c.json({ error: "ticket not found" }, 404);
     if (ticket.status !== "in-progress") {
       return c.json({ error: "ticket must be in-progress to spawn an agent" }, 400);
@@ -97,19 +97,17 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       await orchestrator.spawnAgent(id, agentType, body.customCommand);
       // Return the freshly-created agent so the frontend can update immediately
       // without waiting for the WS agent-updated event.
-      const updatedTicket = ticketStmts.get.get(id) as Ticket;
-      const agent = updatedTicket.agentId
-        ? (agentStmts.get.get(updatedTicket.agentId) as Agent)
-        : null;
+      const updatedTicket = ticketStmts.get.get(id);
+      const agent = updatedTicket?.agentId ? agentStmts.get.get(updatedTicket.agentId) : null;
       return c.json({ ticket: updatedTicket, agent });
     } catch (err) {
       return c.json({ error: (err as Error).message }, 500);
     }
   });
 
-  app.delete("/:id", (c) => {
+  app.delete("/:id", async (c) => {
     const id = c.req.param("id");
-    const existing = ticketStmts.get.get(id) as Ticket | null;
+    const existing = ticketStmts.get.get(id);
     if (!existing) return c.json({ error: "ticket not found" }, 404);
 
     ticketStmts.delete.run(id);

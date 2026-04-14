@@ -1,6 +1,5 @@
 import type { ServerWebSocket } from "bun";
 import { agentStmts } from "../db/index.ts";
-import type { Agent } from "../../common/types.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -102,7 +101,7 @@ export const wsHandlers = {
       (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
       (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
     } else if (scrollback.length === 0) {
-      const agent = agentStmts.get.get(agentId) as Agent | null;
+      const agent = agentStmts.get.get(agentId);
       const status = agent?.status;
       if (status === "done" || status === "error") {
         // Agent ran and finished; scrollback lost after server restart

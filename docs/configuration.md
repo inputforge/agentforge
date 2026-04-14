@@ -46,7 +46,9 @@ PORT=4000 REPO_PATH=/home/user/myproject bun run start
 
 ## Data storage
 
-AgentForge stores all state (tickets, agents, remote config) in a SQLite database at `data/agentforge.db` relative to the project root. The file is created automatically on first run. Back it up if you want to preserve ticket history.
+AgentForge stores all state (tickets, agents, remote config) in a SQLite database at `data/agentforge.db` relative to the project root. The file is created automatically on first run; back it up before changing schema if you want to preserve ticket history.
+
+On startup, the backend creates the SQLite file if needed and runs migrations defined in `src/backend/db/migrations/`. Migrations are idempotent TypeScript functions tracked in a `_migrations` table, so re-running a migration is always safe.
 
 ## Claude hooks
 

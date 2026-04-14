@@ -7,7 +7,7 @@ import { clearShellScrollback } from "../ws/hub.ts";
 export const shellRouter = new Hono();
 
 shellRouter.post("/", (c) => {
-  const remoteConfig = remoteStmts.get.get() as { localPath: string } | null;
+  const remoteConfig = remoteStmts.get.get();
   const cwd = remoteConfig?.localPath ?? process.cwd();
 
   const sessionId = randomUUID();

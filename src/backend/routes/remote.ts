@@ -6,7 +6,7 @@ import type { RemoteConfig } from "../../common/types.ts";
 export const remoteRouter = new Hono();
 
 remoteRouter.get("/config", (c) => {
-  const config = remoteStmts.get.get() as RemoteConfig | null;
+  const config = remoteStmts.get.get();
   return c.json(config);
 });
 
@@ -58,7 +58,7 @@ remoteRouter.post("/clone", async (c) => {
 
 remoteRouter.post("/pull", async (c) => {
   const body = await c.req.json<{ localPath?: string }>();
-  const config = remoteStmts.get.get() as RemoteConfig | null;
+  const config = remoteStmts.get.get();
 
   const localPath = body.localPath ?? config?.localPath;
   if (!localPath) return c.json({ error: "localPath is required" }, 400);
@@ -76,7 +76,7 @@ remoteRouter.post("/pull", async (c) => {
 
 remoteRouter.post("/push", async (c) => {
   const body = await c.req.json<{ branch?: string; localPath?: string }>();
-  const config = remoteStmts.get.get() as RemoteConfig | null;
+  const config = remoteStmts.get.get();
 
   const localPath = body.localPath ?? config?.localPath;
   const branch = body.branch ?? config?.baseBranch;
