@@ -47,15 +47,13 @@ export function useXTerm(wsUrl: string | null) {
 
     let terminal: Terminal | null = null;
     let ws: WebSocket | null = null;
-    let observer: ResizeObserver | null = null;
+    let liveObserver: ResizeObserver | null = null;
     let disposed = false;
 
-    // Defer open() to a rAF so React StrictMode's synchronous cleanup/remount
-    // cycle completes before xterm schedules its internal setTimeout. Without
-    // this, the cleanup disposes the terminal while xterm's Viewport setTimeout
-    // is still pending, causing "_renderer.value is undefined" crashes.
-    const rafId = requestAnimationFrame(() => {
-      if (disposed || !containerRef.current) return;
+    const container = containerRef.current;
+
+    const initTerminal = () => {
+      if (disposed || terminal) return; // already inited or cleaned up
 
       terminal = new Terminal({
         cursorBlink: true,
@@ -68,13 +66,13 @@ export function useXTerm(wsUrl: string | null) {
       });
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
-      terminal.open(containerRef.current);
+      terminal.open(container);
 
       const safeFit = () => {
         try {
           fitAddon.fit();
         } catch {
-          // renderer not ready — ResizeObserver will retry
+          // renderer not ready — next ResizeObserver tick will retry
         }
       };
       requestAnimationFrame(safeFit);
@@ -102,19 +100,47 @@ export function useXTerm(wsUrl: string | null) {
         }
       });
 
-      observer = new ResizeObserver(() => {
+      // Replace the size-waiting observer with one that tracks live resizes
+      liveObserver?.disconnect();
+      liveObserver = new ResizeObserver(() => {
         safeFit();
         if (ws!.readyState === WebSocket.OPEN) {
           ws!.send(JSON.stringify({ type: "resize", cols: terminal!.cols, rows: terminal!.rows }));
         }
       });
-      observer.observe(containerRef.current!);
+      liveObserver.observe(container);
+    };
+
+    // xterm crashes if open() is called when the container has zero dimensions
+    // (the Viewport's internal setTimeout fires before the renderer is ready).
+    // Wait until the container has actual layout before calling open().
+    if (container.clientWidth > 0 && container.clientHeight > 0) {
+      // Already laid out — init on next frame to let StrictMode double-invoke
+      // complete its cleanup cycle before xterm's internal setTimeout fires.
+      const rafId = requestAnimationFrame(initTerminal);
+      return () => {
+        disposed = true;
+        cancelAnimationFrame(rafId);
+        liveObserver?.disconnect();
+        ws?.close();
+        terminal?.dispose();
+        wsRef.current = null;
+      };
+    }
+
+    // Container has zero size — watch for it to gain dimensions
+    const sizeWatcher = new ResizeObserver(() => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        sizeWatcher.disconnect();
+        initTerminal();
+      }
     });
+    sizeWatcher.observe(container);
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(rafId);
-      observer?.disconnect();
+      sizeWatcher.disconnect();
+      liveObserver?.disconnect();
       ws?.close();
       terminal?.dispose();
       wsRef.current = null;
