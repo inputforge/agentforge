@@ -16,8 +16,8 @@ export class ShellSessionManager {
     const emitter = new EventEmitter();
 
     const terminal = new Bun.Terminal({
-      cols: 220,
-      rows: 50,
+      cols: 80,
+      rows: 24,
       name: "xterm-256color",
       data: (_terminal, data) => {
         emitter.emit("data", decoder.decode(data));

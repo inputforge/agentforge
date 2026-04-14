@@ -63,7 +63,12 @@ export function useXTerm(wsUrl: string | null) {
     const ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
     wsRef.current = ws;
 
-    ws.addEventListener("open", () => terminal.focus());
+    ws.addEventListener("open", () => {
+      terminal.focus();
+      // Sync the actual xterm dimensions to the PTY on connect.
+      // fitAddon.fit() has already run, so cols/rows reflect the real container size.
+      ws.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
+    });
     ws.addEventListener("message", (e) => {
       if (typeof e.data !== "string") return;
       terminal.write(e.data);
