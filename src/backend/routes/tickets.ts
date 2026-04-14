@@ -5,9 +5,11 @@ import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import type { Agent, AgentType, Ticket, TicketStatus } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
+import { errorMeta, logger } from "../lib/logger.ts";
 
 const VALID_STATUSES: TicketStatus[] = ["backlog", "in-progress", "review", "done"];
 const VALID_AGENT_TYPES: AgentType[] = ["claude-code", "codex", "custom"];
+const log = logger.child("tickets");
 
 export function ticketsRouter(orchestrator: OrchestratorService) {
   const app = new Hono();
@@ -62,7 +64,11 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     broadcastNotification({ type: "ticket-updated", ticket: updated });
 
     orchestrator.onTicketMoved(id, newStatus).catch((err) => {
-      console.error("[Orchestrator error]", err);
+      log.error("orchestrator failed after ticket status change", {
+        ticketId: id,
+        status: newStatus,
+        ...errorMeta(err),
+      });
     });
 
     return c.json(updated);

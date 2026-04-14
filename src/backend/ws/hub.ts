@@ -3,6 +3,9 @@ import { agentStmts } from "../db/index.ts";
 import type { Agent } from "../../common/types.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
+import { errorMeta, logger } from "../lib/logger.ts";
+
+const log = logger.child("ws");
 
 // Global notification subscribers
 const notificationClients = new Set<ServerWebSocket<{ channel: string; agentId?: string }>>();
@@ -184,6 +187,6 @@ export const wsHandlers = {
   },
 
   error(ws: ServerWebSocket<{ channel: string; agentId?: string }>, error: Error) {
-    console.error("[WS error]", ws.data, error?.message ?? error);
+    log.error("websocket error", { ...ws.data, ...errorMeta(error) });
   },
 };

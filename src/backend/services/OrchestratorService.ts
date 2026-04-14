@@ -6,6 +6,9 @@ import type { Agent, AgentType } from "../../common/types.ts";
 import { agentProcessManager } from "./AgentProcessManager.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
 import { appendScrollback } from "../ws/hub.ts";
+import { errorMeta, logger } from "../lib/logger.ts";
+
+const log = logger.child("orchestrator");
 
 /** Derive a concise title from the description — first sentence, capped at 72 chars. */
 function titleFromDescription(description: string): string | null {
@@ -202,7 +205,7 @@ export class OrchestratorService {
       this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
     } catch (err) {
       const msg = (err as Error).message;
-      console.error("Failed to spawn agent process:", msg);
+      log.error("failed to spawn agent process", { agentId, ticketId, ...errorMeta(err) });
       appendScrollback(agentId, `\x1b[31m[spawn failed] ${msg}\x1b[0m\r\n`);
       agentStmts.updateStatus.run({
         $id: agentId,
@@ -288,7 +291,7 @@ export class OrchestratorService {
       appendScrollback(agent.id, `\r\n\x1b[33m[resuming session ${agent.sessionId}]\x1b[0m\r\n`);
     } catch (err) {
       const msg = (err as Error).message;
-      console.error("Failed to resume agent process:", msg);
+      log.error("failed to resume agent process", { agentId: agent.id, ...errorMeta(err) });
       appendScrollback(agent.id, `\x1b[31m[resume failed] ${msg}\x1b[0m\r\n`);
       agentStmts.updateStatus.run({
         $id: agent.id,

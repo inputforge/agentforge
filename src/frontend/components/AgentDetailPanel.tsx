@@ -3,6 +3,7 @@ import {
   FileDiff,
   GitMerge,
   Plus,
+  RefreshCw,
   Square,
   Terminal as TerminalIcon,
   X,
@@ -42,7 +43,8 @@ function DiffFileButton({ file, isSelected, onSelect }: DiffFileButtonProps) {
 }
 
 export function AgentDetailPanel() {
-  const { getActiveTicket, getActiveAgent, closeTicket, addNotification } = useStore();
+  const { getActiveTicket, getActiveAgent, closeTicket, addNotification, updateTicket, setAgent } =
+    useStore();
 
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
@@ -52,8 +54,27 @@ export function AgentDetailPanel() {
   const [selectedFile, setSelectedFile] = useState<DiffFile | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [isRelaunching, setIsRelaunching] = useState(false);
 
   const agentId = agent?.id;
+
+  // ── Auto-relaunch dead agent when ticket is opened ────────────────────────
+
+  useEffect(() => {
+    if (!agent || !ticket) return;
+    if (agent.status !== "error" || ticket.status !== "in-progress") return;
+    setIsRelaunching(true);
+    api.tickets
+      .spawn(ticket.id, agent.type as AgentType)
+      .then(({ ticket: updatedTicket, agent: newAgent }) => {
+        updateTicket(updatedTicket.id, updatedTicket);
+        if (newAgent) setAgent(newAgent);
+      })
+      .catch((err: Error) => addNotification({ type: "error", message: err.message }))
+      .finally(() => setIsRelaunching(false));
+    // Run once when this panel mounts for a given ticket+agent combo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.id, agent?.id]);
 
   // ── Terminal ─────────────────────────────────────────────────────────────
 
@@ -112,6 +133,23 @@ export function AgentDetailPanel() {
     api.agents.kill(agentId).catch(() => {});
   }, [agentId]);
 
+  const handleRelaunch = useCallback(async () => {
+    if (!agent || !ticket) return;
+    setIsRelaunching(true);
+    try {
+      const { ticket: updatedTicket, agent: newAgent } = await api.tickets.spawn(
+        ticket.id,
+        agent.type as AgentType,
+      );
+      updateTicket(updatedTicket.id, updatedTicket);
+      if (newAgent) setAgent(newAgent);
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsRelaunching(false);
+    }
+  }, [agent, ticket, updateTicket, setAgent, addNotification]);
+
   if (!ticket) return null;
 
   // Show agent picker when ticket is in-progress but no agent spawned yet
@@ -151,6 +189,16 @@ export function AgentDetailPanel() {
             >
               <GitMerge size={12} />
               {isMerging ? "MERGING..." : "MERGE TO MAIN"}
+            </button>
+          )}
+          {agent.status === "error" && ticket.status === "in-progress" && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleRelaunch}
+              disabled={isRelaunching}
+            >
+              <RefreshCw size={12} />
+              {isRelaunching ? "LAUNCHING..." : "RELAUNCH"}
             </button>
           )}
           <button

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
 import { agentStmts, remoteStmts } from "./db/index.ts";
+import { errorMeta, logger, requestLogger, wasErrorLogged } from "./lib/logger.ts";
 import { agentsRouter } from "./routes/agents.ts";
 import { hooksRouter } from "./routes/hooks.ts";
 import { remoteRouter } from "./routes/remote.ts";
@@ -14,6 +14,7 @@ import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
+const log = logger.child("server");
 const orchestrator = new OrchestratorService(broadcastNotification);
 
 // Auto-detect local git repo on startup — only seeds if no config saved yet
@@ -24,9 +25,7 @@ async function seedRemoteConfigIfEmpty() {
   const searchPath = process.env.REPO_PATH ?? process.cwd();
   const detected = await detectLocalRepo(searchPath);
   if (!detected) {
-    console.log(
-      "[agentforge] No git repo detected at startup — configure via UI or REPO_PATH env var",
-    );
+    log.info("no git repo detected at startup", { searchPath });
     return;
   }
 
@@ -35,9 +34,11 @@ async function seedRemoteConfigIfEmpty() {
     $baseBranch: detected.baseBranch,
     $localPath: detected.localPath,
   });
-  console.log(
-    `[agentforge] Auto-detected repo: ${detected.repoUrl} (${detected.baseBranch}) @ ${detected.localPath}`,
-  );
+  log.info("auto-detected repo", {
+    repoUrl: detected.repoUrl,
+    baseBranch: detected.baseBranch,
+    localPath: detected.localPath,
+  });
 }
 
 await seedRemoteConfigIfEmpty();
@@ -46,12 +47,12 @@ await seedRemoteConfigIfEmpty();
 {
   const runningAgents = agentStmts.listRunning.all() as Agent[];
   if (runningAgents.length > 0) {
-    console.log(`[agentforge] Resuming ${runningAgents.length} interrupted agent(s)…`);
+    log.info("resuming interrupted agents", { count: runningAgents.length });
     for (const agent of runningAgents) {
       orchestrator
         .resumeAgent(agent)
         .catch((err: Error) =>
-          console.error(`[agentforge] Failed to resume agent ${agent.id}:`, err.message),
+          log.error("failed to resume agent", { agentId: agent.id, ...errorMeta(err) }),
         );
     }
   }
@@ -59,7 +60,7 @@ await seedRemoteConfigIfEmpty();
 
 const app = new Hono();
 
-app.use("*", logger());
+app.use("*", requestLogger());
 app.use("*", cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173"] }));
 
 // REST API
@@ -75,7 +76,18 @@ app.get("/health", (c) => c.json({ status: "ok", ts: Date.now() }));
 // 404 fallback for unmatched API routes
 app.notFound((c) => c.json({ error: "not found" }, 404));
 
-console.log(`AgentForge backend running on http://localhost:${PORT}`);
+app.onError((err, c) => {
+  if (!wasErrorLogged(err)) {
+    log.error("unhandled request error", {
+      method: c.req.method,
+      path: new URL(c.req.url).pathname,
+      ...errorMeta(err),
+    });
+  }
+  return c.json({ error: "internal server error" }, 500);
+});
+
+log.info("backend running", { url: `http://localhost:${PORT}` });
 
 Bun.serve({
   port: PORT,
@@ -91,6 +103,7 @@ Bun.serve({
       const upgraded = server.upgrade(req, { data: { channel, agentId } });
       if (upgraded) return undefined;
 
+      log.warn("websocket upgrade failed", { channel, agentId });
       return new Response("WebSocket upgrade failed", { status: 426 });
     }
 
