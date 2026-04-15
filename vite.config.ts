@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     watch: {
-      ignored: ['**/.worktrees/**', '**/data/**', '**/out/**'],
+      ignored: ['**/.agentforge/**', '**/out/**'],
     },
     proxy: {
       '/api': {

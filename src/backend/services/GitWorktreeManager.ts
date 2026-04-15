@@ -59,10 +59,10 @@ export class GitWorktreeManager {
 
   async createWorktree(ticketId: string): Promise<{ worktreePath: string; branch: string }> {
     const branch = `agent/${ticketId}`;
-    const worktreePath = join(this.repoPath, ".worktrees", ticketId);
+    const worktreePath = join(this.repoPath, ".agentforge/worktrees", ticketId);
 
-    if (!existsSync(join(this.repoPath, ".worktrees"))) {
-      mkdirSync(join(this.repoPath, ".worktrees"), { recursive: true });
+    if (!existsSync(join(this.repoPath, ".agentforge/worktrees"))) {
+      mkdirSync(join(this.repoPath, ".agentforge/worktrees"), { recursive: true });
     }
 
     // Worktree already registered and directory exists — reuse it

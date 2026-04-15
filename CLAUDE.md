@@ -34,14 +34,14 @@ AgentForge is a Kanban board that spawns AI coding agents (Claude Code, Codex, o
 
 1. User creates a ticket → moves it to **in-progress** in the Kanban board
 2. Frontend prompts user to pick an agent type; calls `POST /api/agents/spawn`
-3. `OrchestratorService` creates a git worktree (`<repo>/.worktrees/<ticketId>`) on branch `agent/<ticketId>`, then spawns the agent CLI via `AgentProcessManager`
+3. `OrchestratorService` creates a git worktree (`<repo>/.agentforge/worktrees/<ticketId>`) on branch `agent/<ticketId>`, then spawns the agent CLI via `AgentProcessManager`
 4. `AgentProcessManager` runs the CLI through `node-pty` (using the login shell so PATH is correct), streams PTY output to connected WebSocket clients, and detects input-wait patterns
 5. When the agent exits cleanly → ticket auto-moves to **review**; moving ticket to **done** kills the agent and removes the worktree
 
 ### Backend (`src/backend/`)
 
 - `index.ts` — Hono HTTP server + Bun native WebSocket server on port 3001. On startup, auto-detects the local git repo (or reads `REPO_PATH` env var) and seeds `remote_config` if empty.
-- `db/index.ts` — SQLite via `bun:sqlite`. DB file is at `data/agentforge.db` (relative to repo root). Three tables: `tickets`, `agents`, `remote_config`.
+- `db/index.ts` — SQLite via `bun:sqlite`. DB file is at `.agentforge/data/agentforge.db` (relative to repo root). Three tables: `tickets`, `agents`, `remote_config`.
 - `services/OrchestratorService.ts` — coordinates agent lifecycle: worktree creation, spawn, status transitions, broadcast.
 - `services/AgentProcessManager.ts` — singleton that manages all live PTY processes. Keeps a scrollback buffer (last 600 chunks) so late-connecting terminals see history.
 - `services/GitWorktreeManager.ts` — wraps `simple-git` for worktree create/remove, diff, rebase, and merge-to-base operations.

@@ -37,7 +37,7 @@ Moving a ticket to **DONE** stops any running agent and removes its git worktree
 
 Move a ticket to **In Progress** to open the agent launcher. Pick an agent type and AgentForge will:
 
-1. Create a git worktree at `<repo>/.worktrees/<ticketId>` on a new branch `agent/<ticketId>`
+1. Create a git worktree at `<repo>/.agentforge/worktrees/<ticketId>` on a new branch `agent/<ticketId>`
 2. Spawn the agent CLI in that worktree with your ticket description as the initial prompt
 3. Stream the terminal output live to the panel
 
