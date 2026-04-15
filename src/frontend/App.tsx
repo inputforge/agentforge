@@ -23,7 +23,7 @@ function KanbanPage() {
   const closeShell = useCallback(() => setShellOpen(false), []);
 
   return (
-    <div className="scanlines h-full flex flex-col bg-forge-black overflow-hidden">
+    <div className="h-full flex flex-col bg-forge-black overflow-hidden">
       <Header onOpenShell={openShell} />
       <main className="flex-1 overflow-hidden">
         <KanbanBoard />

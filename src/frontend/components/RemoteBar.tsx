@@ -72,12 +72,12 @@ export function RemoteBar() {
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="text-forge-amber text-xs truncate max-w-[220px] hover:underline"
+          className="text-forge-accent text-xs truncate max-w-[220px] hover:underline"
         >
           {label}
         </a>
       ) : (
-        <span className="text-forge-amber text-xs truncate max-w-[220px]">{label}</span>
+        <span className="text-forge-accent text-xs truncate max-w-[220px]">{label}</span>
       )}
       {branch && (
         <>

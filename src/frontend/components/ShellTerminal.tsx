@@ -41,12 +41,12 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
     : "";
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-[42vh] min-h-[200px] bg-forge-black border-t-2 border-forge-amber z-50 flex flex-col animate-slide-in-bottom shadow-[0_-8px_32px_rgba(0,0,0,0.8)]">
+    <div className="fixed bottom-0 left-0 right-0 h-[42vh] min-h-[200px] bg-forge-black border-t-2 border-forge-accent z-50 flex flex-col animate-slide-in-bottom shadow-[0_-8px_32px_rgba(0,0,0,0.8)]">
       {/* Drag handle / header */}
       <div className="flex items-center justify-between px-4 h-8 flex-shrink-0 bg-forge-panel border-b border-forge-border select-none">
         <div className="flex items-center gap-2.5 min-w-0">
-          <TerminalSquare size={13} className="text-forge-amber flex-shrink-0" />
-          <span className="text-forge-amber text-xs font-mono uppercase tracking-widest flex-shrink-0">
+          <TerminalSquare size={13} className="text-forge-accent flex-shrink-0" />
+          <span className="text-forge-accent text-xs font-mono uppercase tracking-widest flex-shrink-0">
             SHELL
           </span>
           {displayCwd && (

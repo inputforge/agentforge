@@ -147,7 +147,9 @@ export function AgentDetailPanel() {
           <span className="text-forge-text-dim text-xs uppercase tracking-widest flex-shrink-0">
             AGENT
           </span>
-          <span className="text-forge-amber text-xs truncate">{ticket.branch ?? ticket.title}</span>
+          <span className="text-forge-accent text-xs truncate">
+            {ticket.branch ?? ticket.title}
+          </span>
           <span
             className={`text-xs border px-1.5 py-0.5 uppercase tracking-widest flex-shrink-0 ${
               agent.status === "running"

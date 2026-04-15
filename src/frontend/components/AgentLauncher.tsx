@@ -29,12 +29,12 @@ function AgentButton({ a, launching, onLaunch }: AgentButtonProps) {
   const handleClick = useCallback(() => onLaunch(a.type), [a.type, onLaunch]);
   return (
     <button
-      className="w-full forge-surface border border-forge-border hover:border-forge-amber group transition-colors p-4 text-left disabled:opacity-40"
+      className="w-full forge-surface border border-forge-border hover:border-forge-accent group transition-colors p-4 text-left disabled:opacity-40"
       onClick={handleClick}
       disabled={!!launching}
     >
       <div className="flex items-center justify-between">
-        <span className="text-forge-text-bright text-sm uppercase tracking-widest group-hover:text-forge-amber transition-colors">
+        <span className="text-forge-text-bright text-sm uppercase tracking-widest group-hover:text-forge-accent transition-colors">
           {launching === a.type ? "LAUNCHING..." : a.label}
         </span>
         {launching === a.type ? (
@@ -42,7 +42,7 @@ function AgentButton({ a, launching, onLaunch }: AgentButtonProps) {
         ) : (
           <ChevronRight
             size={15}
-            className="text-forge-text-muted group-hover:text-forge-amber transition-colors"
+            className="text-forge-text-muted group-hover:text-forge-accent transition-colors"
           />
         )}
       </div>

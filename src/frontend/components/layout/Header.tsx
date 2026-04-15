@@ -9,11 +9,14 @@ export function Header({ onOpenShell }: { onOpenShell: () => void }) {
     <header className="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-forge-border bg-forge-panel">
       {/* Left: Logo */}
       <div className="flex items-center gap-5">
-        <div className="flex items-center gap-2">
-          <span className="text-forge-amber font-semibold text-sm tracking-wider uppercase">
-            AGENTFORGE
+        <div className="flex items-center">
+          <span className="text-forge-text text-[13px] tracking-tight uppercase font-mono">
+            AGENT
           </span>
-          <span className="text-forge-text-muted text-xs">v0.1</span>
+          <span className="text-forge-accent text-[13px] tracking-tight uppercase font-mono">
+            FORGE
+          </span>
+          <span className="text-forge-accent text-[13px] font-mono animate-blink">▍</span>
         </div>
       </div>
 

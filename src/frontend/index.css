@@ -1,13 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-forge-black: #080808;
-  --color-forge-dark: #0e0e0e;
-  --color-forge-panel: #131313;
-  --color-forge-surface: #1a1a1a;
-  --color-forge-surface-bright: #202020;
-  --color-forge-border: #222222;
-  --color-forge-border-bright: #333333;
+  /* Warm near-black palette */
+  --color-forge-black: #080706;
+  --color-forge-dark: #0f0e0c;
+  --color-forge-panel: #0f0e0c;
+  --color-forge-surface: #1a1918;
+  --color-forge-surface-bright: #201f1d;
+  --color-forge-border: #1f1e1c;
+  --color-forge-border-bright: #2e2d2b;
+
+  /* Ice blue accent — brand / interactive */
+  --color-forge-accent: #67e8f9;
+  --color-forge-accent-dim: #0e3a40;
+
+  /* Semantic status colors — keep unchanged */
   --color-forge-amber: #f59e0b;
   --color-forge-amber-dim: #78350f;
   --color-forge-amber-glow: #fbbf24;
@@ -17,19 +24,32 @@
   --color-forge-blue-dim: #1e3a5f;
   --color-forge-red: #ef4444;
   --color-forge-red-dim: #7f1d1d;
-  --color-forge-text: #c8c8c8;
-  --color-forge-text-dim: #5a5a5a;
-  --color-forge-text-bright: #f0f0f0;
-  --color-forge-text-muted: #3d3d3d;
+
+  /* Warm off-white text */
+  --color-forge-text: #ede8df;
+  --color-forge-text-dim: #6e6860;
+  --color-forge-text-bright: #f5f0e8;
+  --color-forge-text-muted: #3d3a36;
 
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --animate-blink: blink 1.2s ease-in-out infinite;
+  --animate-blink: blink 1.1s step-end infinite;
   --animate-fade-in: fade-in 0.15s ease-out;
   --animate-slide-in-right: slide-in-right 0.25s ease-out;
   --animate-slide-in-bottom: slide-in-bottom 0.25s ease-out;
+  --animate-status-blink: status-blink 1.2s ease-in-out infinite;
 
   @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes status-blink {
     0%,
     100% {
       opacity: 1;
@@ -84,10 +104,21 @@
 
   body {
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    background-color: #080808;
-    color: #c8c8c8;
+    background-color: #080706;
+    color: #ede8df;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* SVG grain texture overlay */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.04;
+    z-index: 9999;
   }
 
   ::-webkit-scrollbar {
@@ -100,17 +131,16 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 2px;
+    background: #2e2d2b;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #444;
+    background: #3d3a36;
   }
 
   ::selection {
-    background: #f59e0b33;
-    color: #f0f0f0;
+    background: #67e8f930;
+    color: #f5f0e8;
   }
 }
 
@@ -128,11 +158,11 @@
   }
 
   .forge-btn-primary {
-    @apply px-3 py-1 text-xs uppercase tracking-widest border font-mono transition-colors duration-100 cursor-pointer border-forge-amber text-forge-amber hover:bg-forge-amber hover:text-forge-black;
+    @apply px-3 py-1 text-xs uppercase tracking-widest border font-mono transition-colors duration-100 cursor-pointer border-forge-accent bg-forge-accent text-forge-black hover:bg-transparent hover:text-forge-accent;
   }
 
   .forge-btn-ghost {
-    @apply px-3 py-1 text-xs uppercase tracking-widest border font-mono transition-colors duration-100 cursor-pointer border-forge-border text-forge-text-dim hover:border-forge-border-bright hover:text-forge-text;
+    @apply px-3 py-1 text-xs uppercase tracking-widest border font-mono transition-colors duration-100 cursor-pointer border-forge-border text-forge-text-dim hover:border-forge-text/20 hover:text-forge-text;
   }
 
   .forge-btn-danger {
@@ -140,7 +170,7 @@
   }
 
   .forge-input {
-    @apply bg-forge-surface border border-forge-border text-forge-text font-mono text-xs px-3 py-2 outline-none focus:border-forge-amber transition-colors w-full placeholder:text-forge-text-muted;
+    @apply bg-forge-surface border border-forge-border text-forge-text font-mono text-xs px-3 py-2 outline-none focus:border-forge-accent transition-colors w-full placeholder:text-forge-text-muted;
   }
 
   .forge-label {
@@ -148,23 +178,23 @@
   }
 
   .status-dot {
-    @apply inline-block w-2 h-2 rounded-full;
+    @apply inline-block w-1.5 h-1.5;
   }
 
   .status-dot-running {
-    @apply inline-block w-2 h-2 rounded-full bg-forge-blue animate-blink;
+    @apply inline-block w-1.5 h-1.5 bg-forge-blue animate-status-blink;
   }
 
   .status-dot-waiting {
-    @apply inline-block w-2 h-2 rounded-full bg-forge-amber animate-blink;
+    @apply inline-block w-1.5 h-1.5 bg-forge-amber animate-status-blink;
   }
 
   .status-dot-done {
-    @apply inline-block w-2 h-2 rounded-full bg-forge-green;
+    @apply inline-block w-1.5 h-1.5 bg-forge-green;
   }
 
   .status-dot-error {
-    @apply inline-block w-2 h-2 rounded-full bg-forge-red;
+    @apply inline-block w-1.5 h-1.5 bg-forge-red;
   }
 
   /* xterm.js container overrides */
@@ -181,22 +211,6 @@
   }
 }
 
-/* scanline overlay */
-.scanlines::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
-  );
-  pointer-events: none;
-  z-index: 9999;
-}
-
 /* Diff viewer */
 .diff-line-add {
   background-color: rgba(34, 197, 94, 0.08);
@@ -209,11 +223,11 @@
 }
 
 .diff-line-context {
-  color: #5a5a5a;
+  color: #6e6860;
 }
 
 .diff-chunk-header {
-  background-color: rgba(59, 130, 246, 0.08);
-  color: #3b82f6;
+  background-color: rgba(103, 232, 249, 0.06);
+  color: #67e8f9;
   font-style: italic;
 }

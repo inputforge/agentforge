@@ -55,7 +55,7 @@ function NotificationItem({ n, onDismiss, onOpenTicket }: NotificationItemProps)
           <div className="flex gap-2 mt-1.5">
             {n.ticketId && (
               <button
-                className="text-forge-amber text-xs uppercase tracking-widest hover:underline"
+                className="text-forge-accent text-xs uppercase tracking-widest hover:underline"
                 onClick={handleOpenTicket}
               >
                 OPEN →

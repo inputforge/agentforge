@@ -98,7 +98,7 @@ export function CreateTicketModal() {
           <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
             <input
               type="checkbox"
-              className="accent-forge-amber"
+              className="accent-forge-accent"
               checked={startNow}
               onChange={handleStartNowChange}
             />

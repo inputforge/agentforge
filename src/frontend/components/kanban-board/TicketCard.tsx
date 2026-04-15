@@ -86,7 +86,7 @@ export function TicketCard({ ticket, agent }: Props) {
       className={clsx(
         "forge-surface select-none transition-all duration-100 group",
         isDragging && "opacity-30",
-        isActive && "ring-1 ring-forge-amber",
+        isActive && "ring-1 ring-forge-accent",
         !isDragging && "hover:bg-forge-surface-bright",
         hasAgent ? "cursor-pointer" : "cursor-grab",
       )}
@@ -140,7 +140,7 @@ export function TicketCard({ ticket, agent }: Props) {
         </p>
 
         {ticket.agentTitle && (
-          <p className="text-forge-amber text-xs leading-snug mb-1.5 font-mono opacity-80">
+          <p className="text-forge-accent text-xs leading-snug mb-1.5 font-mono opacity-80">
             ↳ {ticket.agentTitle}
           </p>
         )}
