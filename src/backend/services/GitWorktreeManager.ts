@@ -104,6 +104,12 @@ export class GitWorktreeManager {
     return parseDiff(rawFull, raw);
   }
 
+  async commitWorktree(worktreePath: string, message: string): Promise<void> {
+    const worktreeGit = simpleGit(worktreePath);
+    await worktreeGit.add("-A");
+    await worktreeGit.commit(message, { "--allow-empty": null });
+  }
+
   async rebase(
     worktreePath: string,
     baseBranch: string,

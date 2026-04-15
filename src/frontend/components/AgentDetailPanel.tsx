@@ -1,4 +1,4 @@
-import { GitMerge, RefreshCw, Square, X } from "lucide-react";
+import { GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
@@ -15,6 +15,7 @@ export function AgentDetailPanel() {
   const agent = getActiveAgent();
 
   const [isMerging, setIsMerging] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
@@ -100,6 +101,20 @@ export function AgentDetailPanel() {
     api.agents.kill(agentId).catch(() => {});
   }, [agentId]);
 
+  const handleCommit = useCallback(async () => {
+    if (!agentId) return;
+    setIsCommitting(true);
+    try {
+      await api.agents.commit(agentId);
+      addNotification({ type: "info", message: "Changes committed." });
+      fetchDiff();
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsCommitting(false);
+    }
+  }, [agentId, addNotification, fetchDiff]);
+
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;
     setIsRelaunching(true);
@@ -164,6 +179,17 @@ export function AgentDetailPanel() {
             >
               <RefreshCw size={12} />
               {isRelaunching ? "LAUNCHING..." : "RELAUNCH"}
+            </button>
+          )}
+          {ticket.status === "review" && diff && diff.files.length > 0 && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleCommit}
+              disabled={isCommitting}
+              title="Ask agent to commit current changes"
+            >
+              <GitCommit size={12} />
+              {isCommitting ? "COMMITTING..." : "COMMIT"}
             </button>
           )}
           <button

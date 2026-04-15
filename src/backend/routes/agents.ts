@@ -58,6 +58,25 @@ agentsRouter.post("/:id/merge", async (c) => {
   }
 });
 
+agentsRouter.post("/:id/commit", async (c) => {
+  const agent = agentStmts.get.get(c.req.param("id"));
+  if (!agent) return c.json({ error: "agent not found" }, 404);
+
+  const remoteConfig = remoteStmts.get.get();
+  if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+
+  const body = await c.req.json<{ message?: string }>().catch(() => ({ message: undefined }));
+  const message = body.message?.trim() || "chore: commit agent changes";
+
+  try {
+    const git = new GitWorktreeManager(remoteConfig.localPath);
+    await git.commitWorktree(agent.worktreePath, message);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
+});
+
 agentsRouter.post("/:id/kill", (c) => {
   const id = c.req.param("id");
   const agent = agentStmts.get.get(id);
