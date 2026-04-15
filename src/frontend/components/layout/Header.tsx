@@ -3,13 +3,11 @@ import { useStore } from "../../store";
 import { RemoteBar } from "../RemoteBar";
 
 export function Header({ onOpenShell }: { onOpenShell: () => void }) {
-  const { agents, isConnected, openCreateModal } = useStore();
-
-  const needsInputCount = Object.values(agents).filter((a) => a.needsInput).length;
+  const { isConnected, openCreateModal } = useStore();
 
   return (
     <header className="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-forge-border bg-forge-panel">
-      {/* Left: Logo + stats */}
+      {/* Left: Logo */}
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-2">
           <span className="text-forge-amber font-semibold text-sm tracking-wider uppercase">
@@ -17,16 +15,6 @@ export function Header({ onOpenShell }: { onOpenShell: () => void }) {
           </span>
           <span className="text-forge-text-muted text-xs">v0.1</span>
         </div>
-
-        {needsInputCount > 0 && (
-          <>
-            <div className="w-px h-4 bg-forge-border" />
-            <span className="flex items-center gap-1 text-forge-amber text-xs">
-              <span className="status-dot-waiting" />
-              {needsInputCount} AWAITING INPUT
-            </span>
-          </>
-        )}
       </div>
 
       {/* Right: Remote bar + create button + connection status */}

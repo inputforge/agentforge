@@ -1,20 +1,6 @@
 import { Hono } from "hono";
 import { agentStmts, ticketStmts } from "../db/index.ts";
-import type { Agent } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
-
-function normalizeAgent(agent: Agent): Agent {
-  return { ...agent, needsInput: Boolean(agent.needsInput) };
-}
-
-/** Returns true if the message looks like a session title rather than a tool/error notification. */
-function isLikelyTitle(message: string): boolean {
-  return (
-    message.length <= 100 &&
-    !message.includes("\n") &&
-    !/^(error|tool|warning|failed|running|executing)/i.test(message)
-  );
-}
 
 export const hooksRouter = new Hono();
 
@@ -46,12 +32,11 @@ hooksRouter.post("/:agentId/:event", async (c) => {
         agentStmts.updateStatus.run({
           $id: agentId,
           $status: "done",
-          $needsInput: 0,
           $endedAt: Date.now(),
         });
         const updatedAgent = agentStmts.get.get(agentId);
         if (!updatedAgent) return c.json({ ok: true });
-        broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
+        broadcastNotification({ type: "agent-updated", agent: updatedAgent });
       }
 
       if (ticket.status === "in-progress") {
@@ -123,23 +108,9 @@ hooksRouter.post("/:agentId/:event", async (c) => {
     case "Notification": {
       const message = typeof body.message === "string" ? body.message : undefined;
       if (message) {
-        if (!ticket.agentTitle && isLikelyTitle(message)) {
-          ticketStmts.updateAgentTitle.run({
-            $agentTitle: message,
-            $updatedAt: Date.now(),
-            $id: ticket.id,
-          });
-          const updated = ticketStmts.get.get(ticket.id);
-          if (updated) broadcastNotification({ type: "ticket-updated", ticket: updated });
-        }
         broadcastNotification({
           type: "notification",
-          notification: {
-            type: "info",
-            message,
-            ticketId: ticket.id,
-            agentId,
-          },
+          notification: { type: "info", message, ticketId: ticket.id, agentId },
         });
       }
       return c.json({ ok: true });
@@ -160,43 +131,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
     }
 
     case "PermissionRequest": {
-      const toolName = typeof body.tool_name === "string" ? body.tool_name : "unknown tool";
-      agentStmts.updateStatus.run({
-        $id: agentId,
-        $status: "waiting-permission",
-        $needsInput: 1,
-        $endedAt: null,
-      });
-      const updatedAgent = agentStmts.get.get(agentId);
-      if (!updatedAgent) return c.json({ ok: true });
-      broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
-      broadcastNotification({
-        type: "notification",
-        notification: {
-          type: "permission-request",
-          message: `Agent on "${ticket.title}" requested permission for: ${toolName}`,
-          ticketId: ticket.id,
-          agentId,
-        },
-      });
-      // Auto-approve so Claude is not blocked
+      // Auto-approve all permission requests — no status update needed
       return c.json({ permissionDecision: "allow" });
-    }
-
-    case "PostToolUse": {
-      // Reset waiting-permission back to running once the tool actually executes
-      if (agent.status === "waiting-permission") {
-        agentStmts.updateStatus.run({
-          $id: agentId,
-          $status: "running",
-          $needsInput: 0,
-          $endedAt: null,
-        });
-        const updatedAgent = agentStmts.get.get(agentId);
-        if (!updatedAgent) return c.json({ ok: true });
-        broadcastNotification({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
-      }
-      return c.json({ ok: true });
     }
 
     default:

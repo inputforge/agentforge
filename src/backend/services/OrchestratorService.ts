@@ -63,9 +63,7 @@ function writeHookSettings(worktreePath: string, agentId: string): void {
     hooks: {
       Stop: [hookEntry("Stop")],
       Notification: [hookEntry("Notification")],
-      PermissionRequest: [hookEntry("PermissionRequest")],
       TaskCreated: [hookEntry("TaskCreated")],
-      PostToolUse: [hookEntry("PostToolUse")],
     },
   };
 
@@ -145,7 +143,6 @@ export class OrchestratorService {
       $branch: branch,
       $baseBranch: baseBranch,
       $startedAt: Date.now(),
-      $needsInput: 0,
     });
 
     ticketStmts.linkAgent.run({
@@ -175,7 +172,7 @@ export class OrchestratorService {
       // immediately on agent-updated find a live emitter and non-empty scrollback.
       const agent = agentStmts.get.get(agentId);
       if (!agent) throw new Error("agent record was not created");
-      this.broadcast({ type: "agent-updated", agent: normalizeAgent(agent) });
+      this.broadcast({ type: "agent-updated", agent: agent });
       const updatedTicket = ticketStmts.get.get(ticketId);
       if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
       this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
@@ -186,7 +183,6 @@ export class OrchestratorService {
       agentStmts.updateStatus.run({
         $id: agentId,
         $status: "error",
-        $needsInput: 0,
         $endedAt: Date.now(),
       });
       this.broadcast({
@@ -212,7 +208,6 @@ export class OrchestratorService {
       agentStmts.updateStatus.run({
         $id: agent.id,
         $status: "error",
-        $needsInput: 0,
         $endedAt: Date.now(),
       });
       this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
@@ -225,7 +220,6 @@ export class OrchestratorService {
     agentStmts.updateStatus.run({
       $id: agent.id,
       $status: "running",
-      $needsInput: 0,
       $endedAt: null,
     });
 
@@ -244,7 +238,6 @@ export class OrchestratorService {
       agentStmts.updateStatus.run({
         $id: agent.id,
         $status: "error",
-        $needsInput: 0,
         $endedAt: Date.now(),
       });
     }
@@ -270,10 +263,11 @@ export class OrchestratorService {
   ): Promise<void> {
     const updatedAgent = agentStmts.get.get(agentId);
     if (updatedAgent) {
-      this.broadcast({ type: "agent-updated", agent: normalizeAgent(updatedAgent) });
+      this.broadcast({ type: "agent-updated", agent: updatedAgent });
     }
 
-    if (exitCode === 0) {
+    const currentTicket = ticketStmts.get.get(ticketId);
+    if (exitCode === 0 && currentTicket?.status === "in-progress") {
       ticketStmts.updateStatus.run({
         $status: "review",
         $updatedAt: Date.now(),
@@ -294,8 +288,4 @@ export class OrchestratorService {
 
     this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
   }
-}
-
-function normalizeAgent(agent: Agent): Agent {
-  return { ...agent, needsInput: Boolean(agent.needsInput) };
 }

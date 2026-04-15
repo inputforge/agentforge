@@ -1,5 +1,5 @@
 export type TicketStatus = "backlog" | "in-progress" | "review" | "done";
-export type AgentStatus = "running" | "waiting-input" | "waiting-permission" | "done" | "error";
+export type AgentStatus = "running" | "done" | "error";
 export type AgentType = "claude-code" | "codex" | "custom";
 
 export interface Ticket {
@@ -27,7 +27,6 @@ export interface Agent {
   pid?: number | null;
   startedAt: number;
   endedAt?: number | null;
-  needsInput: boolean;
   sessionId?: string | null;
 }
 

@@ -13,24 +13,18 @@ interface Props {
 
 const AGENT_STATUS_CLASSES: Record<string, string> = {
   running: "text-forge-blue border-forge-blue",
-  "waiting-input": "text-forge-amber border-forge-amber",
-  "waiting-permission": "text-forge-amber border-forge-amber",
   done: "text-forge-green border-forge-green",
   error: "text-forge-red border-forge-red",
 };
 
 const AGENT_STATUS_DOT: Record<string, string> = {
   running: "status-dot-running",
-  "waiting-input": "status-dot-waiting",
-  "waiting-permission": "status-dot-waiting",
   done: "status-dot-done",
   error: "status-dot-error",
 };
 
 const AGENT_STATUS_LABEL: Record<string, string> = {
   running: "RUNNING",
-  "waiting-input": "INPUT",
-  "waiting-permission": "PERMISSION",
   done: "DONE",
   error: "ERROR",
 };
@@ -51,11 +45,7 @@ export function TicketCard({ ticket, agent }: Props) {
   const isActive = activeTicketId === ticket.id;
   const hasAgent = !!agent;
   // Tickets with a live agent need a confirm step before discard
-  const needsConfirm =
-    hasAgent &&
-    (agent.status === "running" ||
-      agent.status === "waiting-input" ||
-      agent.status === "waiting-permission");
+  const needsConfirm = hasAgent && agent.status === "running";
 
   const handleCardClick = useCallback(() => {
     if (confirmDiscard) {
@@ -105,15 +95,8 @@ export function TicketCard({ ticket, agent }: Props) {
       {...listeners}
       {...attributes}
     >
-      {/* Card header: needs-input indicator + trash */}
+      {/* Card header: action buttons */}
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
-        {agent?.needsInput && (
-          <span className="flex items-center gap-1 text-forge-amber text-xs uppercase tracking-widest animate-blink">
-            <span className="status-dot bg-forge-amber" />
-            {agent.status === "waiting-permission" ? "AWAITING PERMISSION" : "AWAITING INPUT"}
-          </span>
-        )}
-
         {/* Action buttons — right-aligned, appear on hover */}
         <div className="ml-auto flex items-center gap-1.5">
           {ticket.status === "backlog" && (

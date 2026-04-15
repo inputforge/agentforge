@@ -57,8 +57,8 @@ export function AgentDetailPanel() {
     setIsDiffLoading(true);
     fetchDiff().finally(() => setIsDiffLoading(false));
 
-    // Poll while agent is running or waiting for input
-    if (agent?.status === "running" || agent?.status === "waiting-input") {
+    // Poll while agent is running
+    if (agent?.status === "running") {
       diffIntervalRef.current = setInterval(fetchDiff, 5000);
     }
 
@@ -137,11 +137,9 @@ export function AgentDetailPanel() {
             className={`text-xs border px-1.5 py-0.5 uppercase tracking-widest flex-shrink-0 ${
               agent.status === "running"
                 ? "text-forge-blue border-forge-blue"
-                : agent.status === "waiting-input"
-                  ? "text-forge-amber border-forge-amber"
-                  : agent.status === "error"
-                    ? "text-forge-red border-forge-red"
-                    : "text-forge-green border-forge-green"
+                : agent.status === "error"
+                  ? "text-forge-red border-forge-red"
+                  : "text-forge-green border-forge-green"
             }`}
           >
             {agent.status.toUpperCase()}

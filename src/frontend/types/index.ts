@@ -1,13 +1,7 @@
 export * from "../../common/types";
 import type { TicketStatus } from "../../common/types";
 
-export type NotificationType =
-  | "needs-input"
-  | "agent-done"
-  | "merge-conflict"
-  | "error"
-  | "info"
-  | "permission-request";
+export type NotificationType = "agent-done" | "merge-conflict" | "error" | "info";
 
 export interface AppNotification {
   id: string;

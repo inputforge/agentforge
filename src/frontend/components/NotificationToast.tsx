@@ -1,13 +1,5 @@
 import { clsx } from "clsx";
-import {
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle2,
-  HelpCircle,
-  Info,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback } from "react";
 import { useStore } from "../store";
@@ -15,7 +7,6 @@ import type { AppNotification, NotificationType } from "../types";
 
 const TYPE_META: Record<NotificationType, { Icon: LucideIcon; color: string; iconColor: string }> =
   {
-    "needs-input": { Icon: HelpCircle, color: "border-forge-amber", iconColor: "text-forge-amber" },
     "agent-done": {
       Icon: CheckCircle2,
       color: "border-forge-green",
@@ -28,11 +19,6 @@ const TYPE_META: Record<NotificationType, { Icon: LucideIcon; color: string; ico
     },
     error: { Icon: AlertCircle, color: "border-forge-red", iconColor: "text-forge-red" },
     info: { Icon: Info, color: "border-forge-blue", iconColor: "text-forge-blue" },
-    "permission-request": {
-      Icon: ShieldAlert,
-      color: "border-forge-amber",
-      iconColor: "text-forge-amber",
-    },
   };
 
 interface NotificationItemProps {

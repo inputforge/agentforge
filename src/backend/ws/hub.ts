@@ -106,11 +106,7 @@ export const wsHandlers = {
       if (status === "done" || status === "error") {
         // Agent ran and finished; scrollback lost after server restart
         ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
-      } else if (
-        status === "running" ||
-        status === "waiting-input" ||
-        status === "waiting-permission"
-      ) {
+      } else if (status === "running") {
         // Process should be running but isn't in the process map — spawn failed
         ws.send(
           "\x1b[31m[agent failed to start — check that the agent command is in your PATH]\x1b[0m\r\n",

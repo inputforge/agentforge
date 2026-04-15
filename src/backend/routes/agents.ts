@@ -8,7 +8,7 @@ export const agentsRouter = new Hono();
 agentsRouter.get("/:id", (c) => {
   const agent = agentStmts.get.get(c.req.param("id"));
   if (!agent) return c.json({ error: "agent not found" }, 404);
-  return c.json({ ...agent, needsInput: Boolean(agent.needsInput) });
+  return c.json(agent);
 });
 
 agentsRouter.get("/:id/diff", async (c) => {
@@ -64,12 +64,7 @@ agentsRouter.post("/:id/kill", (c) => {
   if (!agent) return c.json({ error: "agent not found" }, 404);
 
   agentProcessManager.kill(id);
-  agentStmts.updateStatus.run({
-    $id: id,
-    $status: "error",
-    $needsInput: 0,
-    $endedAt: Date.now(),
-  });
+  agentStmts.updateStatus.run({ $id: id, $status: "error", $endedAt: Date.now() });
   return c.body(null, 204);
 });
 

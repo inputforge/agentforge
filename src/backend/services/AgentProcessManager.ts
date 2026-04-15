@@ -50,7 +50,6 @@ export class AgentProcessManager {
       agentStmts.updateStatus.run({
         $id: agentId,
         $status: exitCode === 0 ? "done" : "error",
-        $needsInput: 0,
         $endedAt: Date.now(),
       });
       processes.delete(agentId);
@@ -76,14 +75,6 @@ export class AgentProcessManager {
     const ap = processes.get(agentId);
     if (!ap) throw new Error(`No process for agent ${agentId}`);
     ap.proc.terminal!.write(input);
-
-    // Clear needs-input flag
-    agentStmts.updateStatus.run({
-      $id: agentId,
-      $status: "running",
-      $needsInput: 0,
-      $endedAt: null,
-    });
   }
 
   kill(agentId: string): void {

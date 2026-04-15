@@ -45,7 +45,6 @@ type RawAgent = {
   pid: number | null;
   startedAt: number;
   endedAt: number | null;
-  needsInput: number;
   sessionId: string | null;
 };
 
@@ -69,7 +68,6 @@ const AGENT_COLS = `
   pid,
   started_at   AS startedAt,
   ended_at     AS endedAt,
-  needs_input  AS needsInput,
   session_id   AS sessionId
 `;
 
@@ -82,7 +80,6 @@ function mapAgent(row: RawAgent): Agent {
     ...row,
     type: row.type as Agent["type"],
     status: row.status as Agent["status"],
-    needsInput: Boolean(row.needsInput),
   };
 }
 
@@ -181,10 +178,7 @@ export const agentStmts = {
   listRunning: {
     all: (): Agent[] =>
       db
-        .query<RawAgent, []>(
-          `SELECT ${AGENT_COLS} FROM agents
-           WHERE status IN ('running', 'waiting-input', 'waiting-permission')`,
-        )
+        .query<RawAgent, []>(`SELECT ${AGENT_COLS} FROM agents WHERE status = 'running'`)
         .all()
         .map(mapAgent),
   },
@@ -199,26 +193,16 @@ export const agentStmts = {
       $branch: string;
       $baseBranch: string;
       $startedAt: number;
-      $needsInput: number | boolean;
     }): void => {
       db.query(
-        `INSERT INTO agents (id, ticket_id, type, command, status, worktree_path, branch, base_branch, started_at, needs_input)
-         VALUES ($id, $ticketId, $type, $command, $status, $worktreePath, $branch, $baseBranch, $startedAt, $needsInput)`,
-      ).run({ ...args, $needsInput: args.$needsInput ? 1 : 0 });
+        `INSERT INTO agents (id, ticket_id, type, command, status, worktree_path, branch, base_branch, started_at)
+         VALUES ($id, $ticketId, $type, $command, $status, $worktreePath, $branch, $baseBranch, $startedAt)`,
+      ).run(args);
     },
   },
   updateStatus: {
-    run: (args: {
-      $id: string;
-      $status: string;
-      $needsInput: number | boolean;
-      $endedAt: number | null;
-    }): void => {
-      db.query(
-        `UPDATE agents
-         SET status = $status, needs_input = $needsInput, ended_at = $endedAt
-         WHERE id = $id`,
-      ).run({ ...args, $needsInput: args.$needsInput ? 1 : 0 });
+    run: (args: { $id: string; $status: string; $endedAt: number | null }): void => {
+      db.query(`UPDATE agents SET status = $status, ended_at = $endedAt WHERE id = $id`).run(args);
     },
   },
   updatePid: {
