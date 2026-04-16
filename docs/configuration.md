@@ -20,9 +20,9 @@ This overrides auto-detection and persists for the lifetime of that process.
 
 ## Environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3001` | Port the backend HTTP and WebSocket server listens on |
+| Variable    | Default         | Description                                                                         |
+| ----------- | --------------- | ----------------------------------------------------------------------------------- |
+| `PORT`      | `3001`          | Port the backend HTTP and WebSocket server listens on                               |
 | `REPO_PATH` | `process.cwd()` | Path to the git repository AgentForge manages. Overrides auto-detection on startup. |
 
 Set these in your shell or in a `.env` file before running `bun run dev` / `bun run start`.

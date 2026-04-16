@@ -69,14 +69,14 @@ Three separate `tsconfig.json` files (`src/common`, `src/frontend`, `src/backend
 
 ## WebSocket protocol
 
-| Channel | URL | Direction | Messages |
-|---|---|---|---|
-| Notifications | `/ws/notifications` | server→client | JSON events: `ticket-updated`, `agent-updated`, `kanban-sync`, `notification` |
+| Channel        | URL                   | Direction     | Messages                                                                                                |
+| -------------- | --------------------- | ------------- | ------------------------------------------------------------------------------------------------------- |
+| Notifications  | `/ws/notifications`   | server→client | JSON events: `ticket-updated`, `agent-updated`, `kanban-sync`, `notification`                           |
 | Agent terminal | `/ws/agent/<agentId>` | bidirectional | Raw PTY data (server→client); JSON `{type:'input',data}` or `{type:'resize',cols,rows}` (client→server) |
 
 ## Key env vars
 
-| Var | Default | Purpose |
-|---|---|---|
-| `PORT` | `3001` | Backend port |
+| Var         | Default         | Purpose                                     |
+| ----------- | --------------- | ------------------------------------------- |
+| `PORT`      | `3001`          | Backend port                                |
 | `REPO_PATH` | `process.cwd()` | Path to auto-detect the git repo on startup |

@@ -15,6 +15,7 @@
     "noFallthroughCasesInSwitch": true,
     "composite": true,
     "declaration": true,
+    "noEmit": true,
     "outDir": "../../out/frontend"
   },
   "references": [{ "path": "../common" }],

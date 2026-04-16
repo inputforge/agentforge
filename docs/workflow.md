@@ -8,12 +8,12 @@ BACKLOG → IN PROGRESS → REVIEW → DONE
 
 ## Columns
 
-| Column | Meaning |
-|---|---|
-| **Backlog** | Ticket created, no agent running |
-| **In Progress** | Agent is actively working in an isolated worktree |
-| **Review** | Agent finished; changes are ready to inspect and merge |
-| **Done** | Changes merged (or ticket closed); worktree cleaned up |
+| Column          | Meaning                                                |
+| --------------- | ------------------------------------------------------ |
+| **Backlog**     | Ticket created, no agent running                       |
+| **In Progress** | Agent is actively working in an isolated worktree      |
+| **Review**      | Agent finished; changes are ready to inspect and merge |
+| **Done**        | Changes merged (or ticket closed); worktree cleaned up |
 
 You can drag tickets between columns manually at any time.
 
@@ -43,13 +43,13 @@ Move a ticket to **In Progress** to open the agent launcher. Pick an agent type 
 
 ### Agent statuses
 
-| Status | Meaning |
-|---|---|
-| **Running** | Agent is executing normally |
-| **Waiting input** | Agent is blocked waiting for you to type something |
+| Status                 | Meaning                                                      |
+| ---------------------- | ------------------------------------------------------------ |
+| **Running**            | Agent is executing normally                                  |
+| **Waiting input**      | Agent is blocked waiting for you to type something           |
 | **Waiting permission** | Agent requested a tool permission (auto-approved for Claude) |
-| **Done** | Agent exited cleanly |
-| **Error** | Agent exited with a non-zero code or failed to start |
+| **Done**               | Agent exited cleanly                                         |
+| **Error**              | Agent exited with a non-zero code or failed to start         |
 
 ### Interacting
 
