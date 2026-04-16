@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"bun run dev:backend\" \"bun run dev:frontend\"",
     "dev:frontend": "vite",
-    "dev:backend": "bun --hot src/backend/index.ts",
+    "dev:backend": "bun --hot src/backend/main.ts",
     "build:frontend": "vite build",
-    "build:backend": "bun build src/backend/index.ts --target bun --outdir dist/server",
+    "build:backend": "bun build src/backend/main.ts --target bun --outdir dist/server",
     "build": "bun run build:frontend && bun run build:backend",
     "preview": "vite preview",
     "start": "bun dist/server/index.js",

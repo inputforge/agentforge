@@ -63,6 +63,10 @@ Single source of truth for `Ticket`, `Agent`, `RemoteConfig`, `DiffResult`, `Mer
 
 Three separate `tsconfig.json` files (`src/common`, `src/frontend`, `src/backend`) linked via project references from the root `tsconfig.json`. Run `bun run typecheck` to check all three.
 
+## Code conventions
+
+- `index.ts` files must only contain barrel exports (`export * from "./module"`). All actual implementation goes in a sibling file named after what it does (e.g. `store.ts`, `database.ts`, `registry.ts`).
+
 ## WebSocket protocol
 
 | Channel | URL | Direction | Messages |
