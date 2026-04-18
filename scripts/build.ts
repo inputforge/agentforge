@@ -1,8 +1,8 @@
 import { join, relative } from "path";
 import type { CompileBuildOptions } from "bun";
 
-const projectRoot = import.meta.dir;
-const clientDir = join(projectRoot, "../out/client");
+const projectRoot = join(import.meta.dir, "..");
+const clientDir = join(projectRoot, "out/client");
 
 const MIME_TYPES: Record<string, string> = {
   html: "text/html;charset=utf-8",
