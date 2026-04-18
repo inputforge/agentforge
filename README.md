@@ -30,11 +30,11 @@ Click **+ TICKET** in the header and describe the task. The first line becomes t
 
 Drag the ticket to **IN PROGRESS** (or click it). A launcher panel opens — pick an agent:
 
-| Agent | Command used |
-|---|---|
+| Agent      | Command used                            |
+| ---------- | --------------------------------------- |
 | **Claude** | `claude --dangerously-skip-permissions` |
-| **Codex** | `codex` |
-| **Custom** | Any CLI you type in |
+| **Codex**  | `codex`                                 |
+| **Custom** | Any CLI you type in                     |
 
 AgentForge creates an isolated git worktree and branch (`agent/<ticketId>`) and spawns the agent inside it.
 
@@ -61,18 +61,18 @@ bun run start         # run production build
 
 ## Configuration
 
-| Environment variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `3001` | Backend port |
-| `REPO_PATH` | `process.cwd()` | Git repo for agents to work in |
+| Environment variable | Default         | Purpose                        |
+| -------------------- | --------------- | ------------------------------ |
+| `PORT`               | `3001`          | Backend port                   |
+| `REPO_PATH`          | `process.cwd()` | Git repo for agents to work in |
 
 ## Stack
 
-| | |
-|---|---|
-| Runtime | Bun |
-| Backend | Hono + Bun WebSockets |
-| Database | SQLite (`bun:sqlite`) |
+|          |                                    |
+| -------- | ---------------------------------- |
+| Runtime  | Bun                                |
+| Backend  | Hono + Bun WebSockets              |
+| Database | SQLite (`bun:sqlite`)              |
 | Frontend | React 18, Zustand, Tailwind CSS v4 |
-| Terminal | xterm.js + node-pty |
-| Git | simple-git (worktrees) |
+| Terminal | xterm.js + node-pty                |
+| Git      | simple-git (worktrees)             |

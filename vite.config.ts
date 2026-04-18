@@ -1,29 +1,29 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   build: {
-    outDir: 'dist',
+    outDir: "out/client",
   },
   worker: {
-    format: 'es',
+    format: "es",
   },
   server: {
     port: 5173,
     watch: {
-      ignored: ['**/.agentforge/**', '**/out/**'],
+      ignored: ["**/.agentforge/**", "**/out/**"],
     },
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
+      "/api": {
+        target: "http://localhost:3001",
         changeOrigin: true,
       },
-      '/ws': {
-        target: 'ws://localhost:3001',
+      "/ws": {
+        target: "ws://localhost:3001",
         ws: true,
       },
     },
   },
-})
+});

@@ -2,7 +2,6 @@ import { FileDiff } from "lucide-react";
 import { useMemo } from "react";
 import { FileDiff as PierreDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { parsePatchFiles } from "@pierre/diffs";
-// Vite worker URL import — requires worker.format = 'es' in vite.config
 // eslint-disable-next-line import/default
 import WorkerUrl from "@pierre/diffs/worker/worker.js?worker&url";
 import type { DiffResult } from "../types";

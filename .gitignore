@@ -145,3 +145,4 @@ vite.config.ts.timestamp-*
 
 # Remove dotenv overrides — API keys come from the shell environment
 # (Claude Code, OpenAI CLI, etc. already set these in your shell profile)
+/pkg/

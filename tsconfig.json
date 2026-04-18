@@ -1,8 +1,4 @@
 {
   "files": [],
-  "references": [
-    { "path": "src/common" },
-    { "path": "src/frontend" },
-    { "path": "src/backend" }
-  ]
+  "references": [{ "path": "src/common" }, { "path": "src/frontend" }, { "path": "src/backend" }]
 }

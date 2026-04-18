@@ -1,5 +1,5 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 100,
-  "ignorePatterns": ["dist/", "node_modules/", "out/", "src/backend/db/generated/"]
+  "ignorePatterns": ["dist/", "node_modules/", "out/", ".agentforge/"]
 }

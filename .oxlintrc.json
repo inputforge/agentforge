@@ -33,5 +33,5 @@
     "unicorn/no-null": "off",
     "unicorn/no-array-for-each": "off"
   },
-  "ignorePatterns": ["dist/", "node_modules/", "*.config.*"]
+  "ignorePatterns": ["dist/", "node_modules/", "out/", ".agentforge/"]
 }

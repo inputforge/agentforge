@@ -12,13 +12,13 @@ The design avoids: rounded corners, purple gradients, Inter/system fonts, generi
 
 Defined in `src/app/globals.css` under `@theme inline`. Reference via Tailwind utilities (`bg-background`, `text-accent`, `border-border`) or CSS variables (`var(--color-accent)`).
 
-| Token              | Hex       | Use                                      |
-|--------------------|-----------|------------------------------------------|
-| `--color-background` | `#080706` | Page background — warm near-black        |
-| `--color-surface`    | `#0f0e0c` | Elevated surfaces (sections, cards)      |
-| `--color-foreground` | `#ede8df` | Primary text — warm off-white            |
-| `--color-muted`      | `#6e6860` | Secondary text, labels, inactive states  |
-| `--color-border`     | `#1f1e1c` | Borders, dividers, decorative elements   |
+| Token                | Hex       | Use                                                  |
+| -------------------- | --------- | ---------------------------------------------------- |
+| `--color-background` | `#080706` | Page background — warm near-black                    |
+| `--color-surface`    | `#0f0e0c` | Elevated surfaces (sections, cards)                  |
+| `--color-foreground` | `#ede8df` | Primary text — warm off-white                        |
+| `--color-muted`      | `#6e6860` | Secondary text, labels, inactive states              |
+| `--color-border`     | `#1f1e1c` | Borders, dividers, decorative elements               |
 | `--color-accent`     | `#67e8f9` | Ice blue — interactive elements, highlights, cursors |
 
 **Background vs Surface**: `background` is the page base; `surface` is used for alternating sections and card interiors to create subtle depth without contrast shifts.
@@ -29,10 +29,10 @@ Defined in `src/app/globals.css` under `@theme inline`. Reference via Tailwind u
 
 All type is monospace. No serif or sans-serif fonts.
 
-| Role | Font | Tailwind class | Use |
-|------|------|----------------|-----|
-| Display | Departure Mono | `font-display` | Section headings, hero headlines — **4xl and above only** |
-| Body / UI | JetBrains Mono | `font-mono` | All body copy, labels, nav, buttons, captions |
+| Role      | Font           | Tailwind class | Use                                                       |
+| --------- | -------------- | -------------- | --------------------------------------------------------- |
+| Display   | Departure Mono | `font-display` | Section headings, hero headlines — **4xl and above only** |
+| Body / UI | JetBrains Mono | `font-mono`    | All body copy, labels, nav, buttons, captions             |
 
 **Font loading**: Departure Mono is a local font (`public/fonts/DepartureMono-Regular.woff2`) loaded via `next/font/local`. JetBrains Mono is loaded from Google Fonts via `next/font/google`. Both inject CSS variables (`--font-departure-mono`, `--font-jetbrains-mono`) referenced in `@theme inline`.
 
@@ -91,12 +91,14 @@ The SVG logo asset lives at `public/logo.svg` (svgo-optimized). The source with 
 Two variants, both rectangular (no border-radius):
 
 **Primary** — accent fill, inverts on hover:
+
 ```
 border border-accent bg-accent text-background
 hover: bg-transparent text-accent
 ```
 
 **Secondary** — subtle border:
+
 ```
 border border-border text-muted
 hover: border-foreground/20 text-foreground
@@ -133,13 +135,13 @@ Bullet character: `→` in accent color. No checkmarks, no dots.
 
 All animations are CSS-only (no JS animation libraries). React Compiler is enabled — keep components free of manual memoization.
 
-| Class | Effect | Use |
-|-------|--------|-----|
-| `.hero-label` | fade-up, 0.5s, delay 0s | Section label above hero headline |
-| `.hero-line-1/2/3` | fade-up, 0.65s, delays 0.05/0.15/0.25s | Three staggered headline lines |
-| `.hero-sub` | fade-up, 0.65s, delay 0.4s | Divider + description paragraph |
-| `.hero-cta` | fade-up, 0.65s, delay 0.55s | CTA buttons |
-| `.cursor-blink` | step-end blink, 1.1s, infinite | Nav logo cursor `▍` |
+| Class              | Effect                                 | Use                               |
+| ------------------ | -------------------------------------- | --------------------------------- |
+| `.hero-label`      | fade-up, 0.5s, delay 0s                | Section label above hero headline |
+| `.hero-line-1/2/3` | fade-up, 0.65s, delays 0.05/0.15/0.25s | Three staggered headline lines    |
+| `.hero-sub`        | fade-up, 0.65s, delay 0.4s             | Divider + description paragraph   |
+| `.hero-cta`        | fade-up, 0.65s, delay 0.55s            | CTA buttons                       |
+| `.cursor-blink`    | step-end blink, 1.1s, infinite         | Nav logo cursor `▍`               |
 
 Hover transitions: `transition-colors` or `transition-all duration-300` — no spring animations.
 
@@ -150,12 +152,14 @@ Hover transitions: `transition-colors` or `transition-all duration-300` — no s
 A fixed SVG fractal noise grain overlay sits at `z-index: 9999`, `pointer-events: none`, `opacity: 0.04`. Applied via `body::after`.
 
 Hero sections also use a radial dot grid background:
+
 ```css
 background-image: radial-gradient(circle, #1f1e1c 1px, transparent 1px);
 background-size: 28px 28px;
 ```
 
 And a soft accent glow in the top-left corner:
+
 ```css
 radial-gradient(circle, rgba(103,232,249,0.06) 0%, transparent 70%)
 ```
@@ -169,6 +173,7 @@ radial-gradient(circle, rgba(103,232,249,0.06) 0%, transparent 70%)
 `src/app/favicon.ico` — multi-size ICO fallback (16×16, 32×32, 48×48), generated via Inkscape + ImageMagick from `../logo.svg` with `#080706` background.
 
 To regenerate after logo changes:
+
 ```bash
 inkscape --export-type=png --export-width=N --export-height=N --export-background='#080706' \
   --export-filename=/tmp/icon-N.png ../logo.svg   # repeat for 16, 32, 48
@@ -179,9 +184,9 @@ magick /tmp/icon-16.png /tmp/icon-32.png /tmp/icon-48.png src/app/favicon.ico
 
 Static image routes at `src/app/og/`, one per page:
 
-| Route | Page |
-|-------|------|
-| `/og/home` | Input Forge homepage |
+| Route            | Page                    |
+| ---------------- | ----------------------- |
+| `/og/home`       | Input Forge homepage    |
 | `/og/agentforge` | AgentForge product page |
 
 Built with `ImageResponse` from `next/og`. All routes export `dynamic = "force-static"` — images are pre-rendered at build time. Rendered at 2400×1260 (2x) for retina sharpness; `OG_SIZE` export declares the meta tag dimensions as 1200×630.
