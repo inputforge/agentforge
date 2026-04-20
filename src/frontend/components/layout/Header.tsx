@@ -1,8 +1,14 @@
-import { Plus, TerminalSquare } from "lucide-react";
+import { Plug, Plus, TerminalSquare } from "lucide-react";
 import { useStore } from "../../store";
 import { RemoteBar } from "../RemoteBar";
 
-export function Header({ onOpenShell }: { onOpenShell: () => void }) {
+export function Header({
+  onOpenShell,
+  onOpenIntegrations,
+}: {
+  onOpenShell: () => void;
+  onOpenIntegrations: () => void;
+}) {
   const { isConnected, openCreateModal } = useStore();
 
   return (
@@ -25,6 +31,15 @@ export function Header({ onOpenShell }: { onOpenShell: () => void }) {
         <RemoteBar />
 
         <div className="w-px h-4 bg-forge-border" />
+
+        <button
+          className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"
+          onClick={onOpenIntegrations}
+          title="Integrations"
+        >
+          <Plug size={13} />
+          <span className="text-xs">INTEGRATIONS</span>
+        </button>
 
         <button
           className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"

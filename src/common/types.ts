@@ -66,3 +66,41 @@ export interface MergeResult {
   conflicted: boolean;
   error?: string;
 }
+
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string;
+  state: "open" | "closed";
+  url: string;
+  labels: string[];
+  assignees: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinearTeam {
+  id: string;
+  name: string;
+  key: string;
+}
+
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string;
+  state: string;
+  url: string;
+  priority: number;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntegrationConfig {
+  hasPat: boolean;
+  owner?: string;
+  repo?: string;
+  teamId?: string;
+}

@@ -219,6 +219,35 @@ export const agentStmts = {
   },
 };
 
+export const integrationStmts = {
+  get: (provider: string, key: string): string | null => {
+    const row = db
+      .query<{ value: string }, [string, string]>(
+        "SELECT value FROM integration_configs WHERE provider = ? AND key = ?",
+      )
+      .get(provider, key);
+    return row?.value ?? null;
+  },
+  getAll: (provider: string): Record<string, string> => {
+    const rows = db
+      .query<{ key: string; value: string }, [string]>(
+        "SELECT key, value FROM integration_configs WHERE provider = ?",
+      )
+      .all(provider);
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  },
+  set: (provider: string, key: string, value: string): void => {
+    db.query(
+      `INSERT INTO integration_configs (provider, key, value)
+       VALUES (?, ?, ?)
+       ON CONFLICT (provider, key) DO UPDATE SET value = excluded.value`,
+    ).run(provider, key, value);
+  },
+  deleteAll: (provider: string): void => {
+    db.query("DELETE FROM integration_configs WHERE provider = ?").run(provider);
+  },
+};
+
 export const remoteStmts = {
   get: {
     get: (): RemoteConfig | null =>

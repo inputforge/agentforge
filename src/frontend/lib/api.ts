@@ -1,4 +1,15 @@
-import type { Agent, DiffResult, MergeResult, RemoteConfig, Ticket, TicketStatus } from "../types";
+import type {
+  Agent,
+  DiffResult,
+  GitHubIssue,
+  IntegrationConfig,
+  LinearIssue,
+  LinearTeam,
+  MergeResult,
+  RemoteConfig,
+  Ticket,
+  TicketStatus,
+} from "../types";
 
 const BASE = "/api";
 
@@ -53,6 +64,30 @@ export const api = {
   shell: {
     create: () => request<{ id: string; cwd: string }>("/shell", { method: "POST" }),
     kill: (id: string) => request<void>(`/shell/${id}`, { method: "DELETE" }),
+  },
+
+  integrations: {
+    getConfig: (provider: "github" | "linear") =>
+      request<IntegrationConfig>(`/integrations/${provider}/config`),
+    saveConfig: (provider: "github" | "linear", data: Record<string, string>) =>
+      request<{ ok: boolean }>(`/integrations/${provider}/config`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    deleteConfig: (provider: "github" | "linear") =>
+      request<{ ok: boolean }>(`/integrations/${provider}/config`, { method: "DELETE" }),
+    github: {
+      listIssues: (state: "open" | "closed" | "all" = "open") =>
+        request<GitHubIssue[]>(`/integrations/github/issues?state=${state}`),
+      importIssue: (number: number) =>
+        request<Ticket>(`/integrations/github/issues/${number}/import`, { method: "POST" }),
+    },
+    linear: {
+      listTeams: () => request<LinearTeam[]>("/integrations/linear/teams"),
+      listIssues: () => request<LinearIssue[]>("/integrations/linear/issues"),
+      importIssue: (id: string) =>
+        request<Ticket>(`/integrations/linear/issues/${id}/import`, { method: "POST" }),
+    },
   },
 
   remote: {
