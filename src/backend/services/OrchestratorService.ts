@@ -231,6 +231,10 @@ export class OrchestratorService {
       });
 
       appendScrollback(agent.id, `\r\n\x1b[33m[resuming session ${agent.sessionId}]\x1b[0m\r\n`);
+
+      const updatedAgent = agentStmts.get.get(agent.id);
+      if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
+      this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
     } catch (err) {
       const msg = (err as Error).message;
       log.error("failed to resume agent process", { agentId: agent.id, ...errorMeta(err) });
