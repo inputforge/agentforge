@@ -24,7 +24,7 @@ export class GitHubService {
         Authorization: `Bearer ${this.pat}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        ...(init?.headers ?? {}),
+        ...init?.headers,
       },
     });
     if (!res.ok) {

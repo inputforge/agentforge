@@ -25,10 +25,7 @@ interface GraphQLResponse<T> {
 export class LinearService {
   constructor(private readonly pat: string) {}
 
-  private async graphql<T>(
-    query: string,
-    variables?: Record<string, unknown>,
-  ): Promise<T> {
+  private async graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
     const res = await fetch("https://api.linear.app/graphql", {
       method: "POST",
       headers: {
@@ -83,7 +80,7 @@ export class LinearService {
       state: (issue.state as { name: string }).name,
       url: issue.url as string,
       priority: issue.priority as number,
-      labels: ((issue.labels as { nodes: { name: string }[] }).nodes).map((l) => l.name),
+      labels: (issue.labels as { nodes: { name: string }[] }).nodes.map((l) => l.name),
       createdAt: issue.createdAt as string,
       updatedAt: issue.updatedAt as string,
     }));
@@ -110,7 +107,7 @@ export class LinearService {
         state: (issue.state as { name: string }).name,
         url: issue.url as string,
         priority: issue.priority as number,
-        labels: ((issue.labels as { nodes: { name: string }[] }).nodes).map((l) => l.name),
+        labels: (issue.labels as { nodes: { name: string }[] }).nodes.map((l) => l.name),
         createdAt: issue.createdAt as string,
         updatedAt: issue.updatedAt as string,
       };

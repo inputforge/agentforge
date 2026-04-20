@@ -74,6 +74,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    disconnectAccount: (provider: "github" | "linear") =>
+      request<{ ok: boolean }>(`/integrations/${provider}/account`, { method: "DELETE" }),
     deleteConfig: (provider: "github" | "linear") =>
       request<{ ok: boolean }>(`/integrations/${provider}/config`, { method: "DELETE" }),
     github: {
