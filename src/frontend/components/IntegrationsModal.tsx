@@ -1,5 +1,5 @@
 import { SiGithub, SiLinear } from "@icons-pack/react-simple-icons";
-import { CheckCircle, ExternalLink, Import, XCircle, X } from "lucide-react";
+import { CheckCircle, XCircle, X } from "lucide-react";
 import {
   type ChangeEvent,
   type KeyboardEvent,
@@ -10,16 +10,10 @@ import {
   useState,
 } from "react";
 import { api } from "../lib/api";
-import type { GitHubIssue, LinearIssue, LinearTeam } from "../types";
+import type { LinearTeam } from "../types";
 import { useStore } from "../store";
 
 type Tab = "github" | "linear";
-
-// Moved outside components so it's never recreated
-const PRIORITY_LABELS = ["No priority", "Urgent", "High", "Medium", "Low"] as const;
-function priorityLabel(p: number): string {
-  return PRIORITY_LABELS[p] ?? "Unknown";
-}
 
 // ─── Section heading ───────────────────────────────────────────────────────
 
@@ -48,77 +42,10 @@ function AccountBadge({ connected }: { connected: boolean }) {
   );
 }
 
-// ─── Shared IssueRow ───────────────────────────────────────────────────────
-// onImport receives the row's importId so the parent can pass a stable handler
-
-function IssueRow({
-  importId,
-  label,
-  title,
-  state,
-  url,
-  labels,
-  importing,
-  onImport,
-}: {
-  importId: string | number;
-  label: string;
-  title: string;
-  state: string;
-  url: string;
-  labels: string[];
-  importing: boolean;
-  onImport: (id: string | number) => void;
-}) {
-  const handleImport = useCallback(() => onImport(importId), [onImport, importId]);
-
-  return (
-    <div className="flex items-start gap-2 p-2 bg-forge-surface border border-forge-border hover:border-forge-border-bright transition-colors">
-      <span className="text-forge-accent text-[10px] font-mono shrink-0 mt-0.5 w-14 truncate">
-        {label}
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-forge-text text-xs truncate">{title}</p>
-        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-          <span className="text-forge-text-muted text-[10px]">{state}</span>
-          {labels.slice(0, 3).map((l) => (
-            <span
-              key={l}
-              className="text-[10px] text-forge-text-dim border border-forge-border px-1"
-            >
-              {l}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="text-forge-text-muted hover:text-forge-accent p-1"
-          title="Open in browser"
-        >
-          <ExternalLink size={11} />
-        </a>
-        <button
-          className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1"
-          onClick={handleImport}
-          disabled={importing}
-          title="Import as ticket"
-        >
-          <Import size={10} />
-          <span className="text-[10px]">{importing ? "…" : "IMPORT"}</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── GitHub Tab ────────────────────────────────────────────────────────────
 
 function GitHubTab() {
-  const { addNotification, addTicket } = useStore();
+  const { addNotification } = useStore();
 
   const [pat, setPat] = useState("");
   const [hasPat, setHasPat] = useState(false);
@@ -127,14 +54,6 @@ function GitHubTab() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [savingRepo, setSavingRepo] = useState(false);
-
-  const [issues, setIssues] = useState<GitHubIssue[]>([]);
-  const [loadingIssues, setLoadingIssues] = useState(false);
-  const [importingId, setImportingId] = useState<number | null>(null);
-  const [issueState, setIssueState] = useState<"open" | "closed" | "all">("open");
-
-  // Map from issue number → labels array, computed once per fetch
-  const [issueLabelsMap, setIssueLabelsMap] = useState<Map<number, string[]>>(new Map());
 
   useEffect(() => {
     api.integrations
@@ -157,11 +76,6 @@ function GitHubTab() {
   );
   const handleRepoChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => setRepo(e.target.value),
-    [],
-  );
-  const handleIssueStateChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) =>
-      setIssueState(e.target.value as "open" | "closed" | "all"),
     [],
   );
   const handlePatKeyDown = useCallback(
@@ -191,7 +105,6 @@ function GitHubTab() {
     await api.integrations.disconnectAccount("github").catch(() => {});
     setHasPat(false);
     setPat("");
-    setIssues([]);
     addNotification({ type: "info", message: "GitHub account disconnected" });
   }, [addNotification]);
 
@@ -206,38 +119,6 @@ function GitHubTab() {
       setSavingRepo(false);
     }
   }, [owner, repo, addNotification]);
-
-  const handleFetchIssues = useCallback(async () => {
-    setLoadingIssues(true);
-    try {
-      const data = await api.integrations.github.listIssues(issueState);
-      setIssues(data);
-      setIssueLabelsMap(new Map(data.map((i) => [i.number, i.labels])));
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
-    } finally {
-      setLoadingIssues(false);
-    }
-  }, [issueState, addNotification]);
-
-  const handleImport = useCallback(
-    async (id: string | number) => {
-      const num = id as number;
-      setImportingId(num);
-      const issue = issues.find((i) => i.number === num);
-      if (!issue) return;
-      try {
-        const ticket = await api.integrations.github.importIssue(num);
-        addTicket(ticket);
-        addNotification({ type: "info", message: `Imported #${num} → backlog` });
-      } catch (err) {
-        addNotification({ type: "error", message: (err as Error).message });
-      } finally {
-        setImportingId(null);
-      }
-    },
-    [issues, addTicket, addNotification],
-  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -320,56 +201,6 @@ function GitHubTab() {
           </div>
         </>
       )}
-
-      {/* ── Issues ── */}
-      {hasPat && owner && repo && (
-        <>
-          <div className="h-px bg-forge-border" />
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <span className="forge-label">ISSUES</span>
-              <select
-                className="forge-input w-auto py-0.5 px-2 text-xs"
-                value={issueState}
-                onChange={handleIssueStateChange}
-              >
-                <option value="open">Open</option>
-                <option value="closed">Closed</option>
-                <option value="all">All</option>
-              </select>
-              <button
-                className="forge-btn-ghost py-0.5 px-3"
-                onClick={handleFetchIssues}
-                disabled={loadingIssues}
-              >
-                {loadingIssues ? "LOADING…" : "FETCH"}
-              </button>
-            </div>
-            {issues.length > 0 ? (
-              <div className="flex flex-col gap-1 max-h-56 overflow-y-auto">
-                {issues.map((issue: GitHubIssue) => (
-                  <div key={issue.number}>
-                    <IssueRow
-                      importId={issue.number}
-                      label={`#${issue.number}`}
-                      title={issue.title}
-                      state={issue.state}
-                      url={issue.url}
-                      labels={issueLabelsMap.get(issue.number) ?? issue.labels}
-                      importing={importingId === issue.number}
-                      onImport={handleImport}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              !loadingIssues && (
-                <p className="text-forge-text-muted text-xs">Click FETCH to load issues.</p>
-              )
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -377,7 +208,7 @@ function GitHubTab() {
 // ─── Linear Tab ────────────────────────────────────────────────────────────
 
 function LinearTab() {
-  const { addNotification, addTicket } = useStore();
+  const { addNotification } = useStore();
 
   const [pat, setPat] = useState("");
   const [hasPat, setHasPat] = useState(false);
@@ -388,13 +219,6 @@ function LinearTab() {
   const [savedTeamId, setSavedTeamId] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
-
-  const [issues, setIssues] = useState<LinearIssue[]>([]);
-  const [loadingIssues, setLoadingIssues] = useState(false);
-  const [importingId, setImportingId] = useState<string | null>(null);
-
-  // Precomputed label arrays per issue id
-  const [issueLabelsMap, setIssueLabelsMap] = useState<Map<string, string[]>>(new Map());
 
   useEffect(() => {
     api.integrations
@@ -445,7 +269,6 @@ function LinearTab() {
     setHasPat(false);
     setPat("");
     setTeams([]);
-    setIssues([]);
     addNotification({ type: "info", message: "Linear account disconnected" });
   }, [addNotification]);
 
@@ -473,40 +296,6 @@ function LinearTab() {
       setSavingProject(false);
     }
   }, [selectedTeamId, addNotification]);
-
-  const handleFetchIssues = useCallback(async () => {
-    setLoadingIssues(true);
-    try {
-      const data = await api.integrations.linear.listIssues();
-      setIssues(data);
-      setIssueLabelsMap(
-        new Map(data.map((i) => [i.id, [priorityLabel(i.priority), ...i.labels].filter(Boolean)])),
-      );
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
-    } finally {
-      setLoadingIssues(false);
-    }
-  }, [addNotification]);
-
-  const handleImport = useCallback(
-    async (id: string | number) => {
-      const issueId = id as string;
-      setImportingId(issueId);
-      const issue = issues.find((i) => i.id === issueId);
-      if (!issue) return;
-      try {
-        const ticket = await api.integrations.linear.importIssue(issueId);
-        addTicket(ticket);
-        addNotification({ type: "info", message: `Imported ${issue.identifier} → backlog` });
-      } catch (err) {
-        addNotification({ type: "error", message: (err as Error).message });
-      } finally {
-        setImportingId(null);
-      }
-    },
-    [issues, addTicket, addNotification],
-  );
 
   const teamLabel = savedTeamId
     ? (teams.find((t) => t.id === savedTeamId)?.name ?? savedTeamId)
@@ -590,47 +379,6 @@ function LinearTab() {
                 {savingProject ? "SAVING…" : "SAVE"}
               </button>
             </div>
-          </div>
-        </>
-      )}
-
-      {/* ── Issues ── */}
-      {hasPat && (
-        <>
-          <div className="h-px bg-forge-border" />
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <span className="forge-label">ISSUES</span>
-              <button
-                className="forge-btn-ghost py-0.5 px-3"
-                onClick={handleFetchIssues}
-                disabled={loadingIssues}
-              >
-                {loadingIssues ? "LOADING…" : "FETCH"}
-              </button>
-            </div>
-            {issues.length > 0 ? (
-              <div className="flex flex-col gap-1 max-h-56 overflow-y-auto">
-                {issues.map((issue: LinearIssue) => (
-                  <div key={issue.id}>
-                    <IssueRow
-                      importId={issue.id}
-                      label={issue.identifier}
-                      title={issue.title}
-                      state={issue.state}
-                      url={issue.url}
-                      labels={issueLabelsMap.get(issue.id) ?? issue.labels}
-                      importing={importingId === issue.id}
-                      onImport={handleImport}
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              !loadingIssues && (
-                <p className="text-forge-text-muted text-xs">Click FETCH to load issues.</p>
-              )
-            )}
           </div>
         </>
       )}

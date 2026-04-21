@@ -81,14 +81,10 @@ export const api = {
     github: {
       listIssues: (state: "open" | "closed" | "all" = "open") =>
         request<GitHubIssue[]>(`/integrations/github/issues?state=${state}`),
-      importIssue: (number: number) =>
-        request<Ticket>(`/integrations/github/issues/${number}/import`, { method: "POST" }),
     },
     linear: {
       listTeams: () => request<LinearTeam[]>("/integrations/linear/teams"),
       listIssues: () => request<LinearIssue[]>("/integrations/linear/issues"),
-      importIssue: (id: string) =>
-        request<Ticket>(`/integrations/linear/issues/${id}/import`, { method: "POST" }),
     },
   },
 

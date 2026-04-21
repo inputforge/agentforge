@@ -1,6 +1,5 @@
 import { Hono } from "hono";
-import { randomUUID } from "crypto";
-import { integrationStmts, remoteStmts, ticketStmts } from "../db/index.ts";
+import { integrationStmts, remoteStmts } from "../db/index.ts";
 import { logger } from "../lib/logger.ts";
 import { GitHubService } from "../services/GitHubService.ts";
 import { globalConfig } from "../services/GlobalConfigService.ts";
@@ -97,38 +96,6 @@ integrationsRouter.get("/github/issues", async (c) => {
   }
 });
 
-integrationsRouter.post("/github/issues/:number/import", async (c) => {
-  const pat = globalConfig.getPat("github");
-  if (!pat) return c.json({ error: "GitHub not configured" }, 400);
-  const config = integrationStmts.getAll("github");
-  if (!config.owner || !config.repo) return c.json({ error: "GitHub owner/repo not set" }, 400);
-
-  const issueNumber = parseInt(c.req.param("number"), 10);
-  if (isNaN(issueNumber)) return c.json({ error: "Invalid issue number" }, 400);
-
-  const svc = new GitHubService(pat, config.owner, config.repo);
-  try {
-    const issue = await svc.getIssue(issueNumber);
-    if (!issue) return c.json({ error: "Issue not found" }, 404);
-
-    const now = Date.now();
-    const id = randomUUID();
-    ticketStmts.insert.run({
-      $id: id,
-      $title: `#${issue.number}: ${issue.title}`,
-      $description: issue.body || issue.title,
-      $status: "backlog",
-      $createdAt: now,
-      $updatedAt: now,
-    });
-
-    return c.json(ticketStmts.get.get(id));
-  } catch (err) {
-    log.error("github import issue failed", { issueNumber, error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
-  }
-});
-
 // ─── Linear ────────────────────────────────────────────────────────────────
 
 integrationsRouter.get("/linear/teams", async (c) => {
@@ -156,34 +123,6 @@ integrationsRouter.get("/linear/issues", async (c) => {
     return c.json(issues);
   } catch (err) {
     log.error("linear list issues failed", { error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
-  }
-});
-
-integrationsRouter.post("/linear/issues/:id/import", async (c) => {
-  const pat = globalConfig.getPat("linear");
-  if (!pat) return c.json({ error: "Linear not configured" }, 400);
-
-  const issueId = c.req.param("id");
-  const svc = new LinearService(pat);
-  try {
-    const issue = await svc.getIssue(issueId);
-    if (!issue) return c.json({ error: "Issue not found" }, 404);
-
-    const now = Date.now();
-    const id = randomUUID();
-    ticketStmts.insert.run({
-      $id: id,
-      $title: `${issue.identifier}: ${issue.title}`,
-      $description: issue.description || issue.title,
-      $status: "backlog",
-      $createdAt: now,
-      $updatedAt: now,
-    });
-
-    return c.json(ticketStmts.get.get(id));
-  } catch (err) {
-    log.error("linear import issue failed", { issueId, error: (err as Error).message });
     return c.json({ error: (err as Error).message }, 502);
   }
 });
