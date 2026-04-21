@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import { agentStmts } from "../db/index.ts";
+import { agentOutputStmts, agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -26,6 +26,12 @@ export function appendScrollback(agentId: string, data: string): void {
   const buf = agentScrollback.get(agentId)!;
   buf.push(data);
   if (buf.length > SCROLLBACK_LIMIT) buf.splice(0, buf.length - SCROLLBACK_LIMIT);
+
+  try {
+    agentOutputStmts.append.run({ $agentId: agentId, $data: data, $createdAt: Date.now() });
+  } catch (err) {
+    log.error("failed to persist agent output", { agentId, ...errorMeta(err) });
+  }
 }
 
 export function appendShellScrollback(sessionId: string, data: string): void {
@@ -86,7 +92,7 @@ export const wsHandlers = {
     agentClients.get(agentId)!.add(ws);
 
     // Replay buffered output — covers both "still running" and "already exited" cases
-    const scrollback = agentScrollback.get(agentId) ?? [];
+    const scrollback = agentScrollback.get(agentId) ?? agentOutputStmts.list.all(agentId);
     for (const chunk of scrollback) {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
     }
