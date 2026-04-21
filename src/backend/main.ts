@@ -4,6 +4,7 @@ import { agentStmts, initDb, remoteStmts } from "./db/index.ts";
 import { errorMeta, logger, requestLogger, wasErrorLogged } from "./lib/logger.ts";
 import { agentsRouter } from "./routes/agents.ts";
 import { hooksRouter } from "./routes/hooks.ts";
+import { integrationsRouter } from "./routes/integrations.ts";
 import { remoteRouter } from "./routes/remote.ts";
 import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
@@ -69,6 +70,7 @@ app.route("/api/agents", agentsRouter);
 app.route("/api/hooks", hooksRouter);
 app.route("/api/remote", remoteRouter);
 app.route("/api/shell", shellRouter);
+app.route("/api/integrations", integrationsRouter);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", ts: Date.now() }));
