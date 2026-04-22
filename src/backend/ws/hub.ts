@@ -1,8 +1,16 @@
 import type { ServerWebSocket } from "bun";
-import { agentOutputStmts, agentStmts } from "../db/index.ts";
+import type { Agent } from "../../common/types.ts";
+import { agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+
+// Registered by main.ts after the orchestrator is created to avoid a circular import.
+type ReplayFn = (agent: Agent) => void;
+let replayFn: ReplayFn | null = null;
+export function registerReplayFn(fn: ReplayFn): void {
+  replayFn = fn;
+}
 
 const log = logger.child("ws");
 
@@ -26,12 +34,6 @@ export function appendScrollback(agentId: string, data: string): void {
   const buf = agentScrollback.get(agentId)!;
   buf.push(data);
   if (buf.length > SCROLLBACK_LIMIT) buf.splice(0, buf.length - SCROLLBACK_LIMIT);
-
-  try {
-    agentOutputStmts.append.run({ $agentId: agentId, $data: data, $createdAt: Date.now() });
-  } catch (err) {
-    log.error("failed to persist agent output", { agentId, ...errorMeta(err) });
-  }
 }
 
 export function appendShellScrollback(sessionId: string, data: string): void {
@@ -91,8 +93,8 @@ export const wsHandlers = {
     if (!agentClients.has(agentId)) agentClients.set(agentId, new Set());
     agentClients.get(agentId)!.add(ws);
 
-    // Replay buffered output — covers both "still running" and "already exited" cases
-    const scrollback = agentScrollback.get(agentId) ?? agentOutputStmts.list.all(agentId);
+    // Replay buffered output for agents still in memory
+    const scrollback = agentScrollback.get(agentId) ?? [];
     for (const chunk of scrollback) {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
     }
@@ -109,8 +111,23 @@ export const wsHandlers = {
     } else if (scrollback.length === 0) {
       const agent = agentStmts.get.get(agentId);
       const status = agent?.status;
-      if (status === "done" || status === "error") {
-        // Agent ran and finished; scrollback lost after server restart
+      if ((status === "done" || status === "error") && agent?.sessionId && replayFn) {
+        // Replay via `claude --resume` — replayFn spawns synchronously so the
+        // emitter is available immediately after the call.
+        replayFn(agent);
+        const replayEmitter = agentProcessManager.subscribe(agentId);
+        if (replayEmitter) {
+          const handler = (data: string) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(data);
+          };
+          replayEmitter.on("data", handler);
+          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
+          (ws as unknown as Record<string, unknown>)["_emitter"] = replayEmitter;
+        } else {
+          ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
+        }
+      } else if (status === "done" || status === "error") {
+        // No sessionId to resume from
         ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
       } else if (status === "running") {
         // Process should be running but isn't in the process map — spawn failed

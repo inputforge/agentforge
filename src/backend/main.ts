@@ -10,12 +10,13 @@ import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
 import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
 import { OrchestratorService } from "./services/OrchestratorService.ts";
-import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
+import { broadcastNotification, registerReplayFn, wsHandlers } from "./ws/hub.ts";
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
 const log = logger.child("server");
 const orchestrator = new OrchestratorService(broadcastNotification);
+registerReplayFn((agent) => orchestrator.replayAgent(agent));
 
 initDb();
 

@@ -31,6 +31,7 @@ const FORGE_THEME = {
 /**
  * Mounts an xterm terminal into `containerRef`, opens a WebSocket at `wsUrl`,
  * and wires up bidirectional I/O (keyboard input, resize) automatically.
+ * Reconnects automatically when the server drops the connection.
  *
  * Pass `wsUrl = null` to defer connection (e.g. while creating a session).
  *
@@ -46,11 +47,45 @@ export function useXTerm(wsUrl: string | null) {
     if (!wsUrl || !containerRef.current) return;
 
     let terminal: Terminal | null = null;
-    let ws: WebSocket | null = null;
+    let fitAddon: FitAddon | null = null;
     let liveObserver: ResizeObserver | null = null;
     let disposed = false;
 
     const container = containerRef.current;
+
+    const safeFit = () => {
+      try {
+        fitAddon?.fit();
+      } catch {
+        // renderer not ready — next ResizeObserver tick will retry
+      }
+    };
+
+    const connectWS = () => {
+      if (disposed || !terminal) return;
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
+      wsRef.current = ws;
+
+      ws.addEventListener("open", () => {
+        // Clear stale content so the server's scrollback replay is clean
+        terminal!.clear();
+        terminal!.focus();
+        ws.send(JSON.stringify({ type: "resize", cols: terminal!.cols, rows: terminal!.rows }));
+      });
+      ws.addEventListener("message", (e) => {
+        if (typeof e.data !== "string") return;
+        terminal!.write(e.data);
+      });
+      ws.addEventListener("close", () => {
+        terminal!.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n");
+        if (!disposed) setTimeout(connectWS, 3000);
+      });
+      ws.addEventListener("error", () =>
+        terminal!.write("\r\n\x1b[31m[connection error]\x1b[0m\r\n"),
+      );
+    };
 
     const initTerminal = () => {
       if (disposed || terminal) return; // already inited or cleaned up
@@ -64,39 +99,17 @@ export function useXTerm(wsUrl: string | null) {
         convertEol: true,
         scrollback: 5000,
       });
-      const fitAddon = new FitAddon();
+      fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
       terminal.open(container);
 
-      const safeFit = () => {
-        try {
-          fitAddon.fit();
-        } catch {
-          // renderer not ready — next ResizeObserver tick will retry
-        }
-      };
       requestAnimationFrame(safeFit);
 
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
-      wsRef.current = ws;
-
-      ws.addEventListener("open", () => {
-        terminal!.focus();
-        ws!.send(JSON.stringify({ type: "resize", cols: terminal!.cols, rows: terminal!.rows }));
-      });
-      ws.addEventListener("message", (e) => {
-        if (typeof e.data !== "string") return;
-        terminal!.write(e.data);
-      });
-      ws.addEventListener("close", () => terminal!.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n"));
-      ws.addEventListener("error", () =>
-        terminal!.write("\r\n\x1b[31m[connection error]\x1b[0m\r\n"),
-      );
+      connectWS();
 
       terminal.onData((data) => {
-        if (ws!.readyState === WebSocket.OPEN) {
-          ws!.send(JSON.stringify({ type: "input", data }));
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: "input", data }));
         }
       });
 
@@ -104,8 +117,10 @@ export function useXTerm(wsUrl: string | null) {
       liveObserver?.disconnect();
       liveObserver = new ResizeObserver(() => {
         safeFit();
-        if (ws!.readyState === WebSocket.OPEN) {
-          ws!.send(JSON.stringify({ type: "resize", cols: terminal!.cols, rows: terminal!.rows }));
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({ type: "resize", cols: terminal!.cols, rows: terminal!.rows }),
+          );
         }
       });
       liveObserver.observe(container);
@@ -122,7 +137,7 @@ export function useXTerm(wsUrl: string | null) {
         disposed = true;
         cancelAnimationFrame(rafId);
         liveObserver?.disconnect();
-        ws?.close();
+        wsRef.current?.close();
         terminal?.dispose();
         wsRef.current = null;
       };
@@ -141,7 +156,7 @@ export function useXTerm(wsUrl: string | null) {
       disposed = true;
       sizeWatcher.disconnect();
       liveObserver?.disconnect();
-      ws?.close();
+      wsRef.current?.close();
       terminal?.dispose();
       wsRef.current = null;
     };

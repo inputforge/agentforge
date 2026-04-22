@@ -248,28 +248,6 @@ export const integrationStmts = {
   },
 };
 
-export const agentOutputStmts = {
-  append: {
-    run: (args: { $agentId: string; $data: string; $createdAt: number }): void => {
-      db.query(
-        `INSERT INTO agent_output (agent_id, data, created_at)
-         VALUES ($agentId, $data, $createdAt)`,
-      ).run(args);
-    },
-  },
-  list: {
-    all: (agentId: string): string[] =>
-      db
-        .query<{ data: string }, [string]>(
-          `SELECT data FROM agent_output
-           WHERE agent_id = ?
-           ORDER BY id`,
-        )
-        .all(agentId)
-        .map((row) => row.data),
-  },
-};
-
 export const remoteStmts = {
   get: {
     get: (): RemoteConfig | null =>

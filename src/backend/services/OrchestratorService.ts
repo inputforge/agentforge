@@ -199,6 +199,25 @@ export class OrchestratorService {
     }
   }
 
+  /** Spawn `claude --resume` to replay a completed session in the terminal.
+   *  Does not change agent or ticket status — purely for display. */
+  replayAgent(agent: Agent): void {
+    if (!agent.sessionId || agentProcessManager.isRunning(agent.id)) return;
+
+    const command = buildCommand(agent.type, undefined, "", agent.sessionId);
+
+    try {
+      writeHookSettings(agent.worktreePath, agent.id);
+      agentProcessManager.spawn(agent.id, command, agent.worktreePath, (id) => {
+        const updated = agentStmts.get.get(id);
+        if (updated) this.broadcast({ type: "agent-updated", agent: updated });
+      });
+      appendScrollback(agent.id, `\r\n\x1b[33m[replaying session ${agent.sessionId}]\x1b[0m\r\n`);
+    } catch (err) {
+      log.error("failed to replay agent", { agentId: agent.id, ...errorMeta(err) });
+    }
+  }
+
   /** Re-attach to a previously running agent after a server restart. */
   async resumeAgent(agent: Agent): Promise<void> {
     const ticket = ticketStmts.get.get(agent.ticketId);
