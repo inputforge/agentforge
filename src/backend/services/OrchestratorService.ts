@@ -61,6 +61,7 @@ function writeHookSettings(worktreePath: string, agentId: string): void {
 
   const settings = {
     hooks: {
+      SessionStart: [hookEntry("SessionStart")],
       Stop: [hookEntry("Stop")],
       Notification: [hookEntry("Notification")],
       TaskCreated: [hookEntry("TaskCreated")],

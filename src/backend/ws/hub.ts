@@ -85,7 +85,7 @@ export const wsHandlers = {
     if (!agentClients.has(agentId)) agentClients.set(agentId, new Set());
     agentClients.get(agentId)!.add(ws);
 
-    // Replay buffered output — covers both "still running" and "already exited" cases
+    // Replay buffered output for agents still in memory
     const scrollback = agentScrollback.get(agentId) ?? [];
     for (const chunk of scrollback) {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
@@ -103,9 +103,36 @@ export const wsHandlers = {
     } else if (scrollback.length === 0) {
       const agent = agentStmts.get.get(agentId);
       const status = agent?.status;
-      if (status === "done" || status === "error") {
-        // Agent ran and finished; scrollback lost after server restart
-        ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
+      if (agent && (status === "done" || status === "error")) {
+        if (agent.sessionId) {
+          const command = `claude --resume ${agent.sessionId} --dangerously-skip-permissions`;
+          const { emitter: replayEmitter } = agentProcessManager.spawn(
+            agentId,
+            command,
+            agent.worktreePath,
+            () => {},
+          );
+          const handler = (data: string) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(data);
+          };
+          replayEmitter.on("data", handler);
+          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
+          (ws as unknown as Record<string, unknown>)["_emitter"] = replayEmitter;
+        } else {
+          const { emitter: fallbackEmitter } = agentProcessManager.spawn(
+            agentId,
+            agent.command,
+            agent.worktreePath,
+            () => {},
+          );
+          ws.send("\x1b[33m[could not restore previous session — starting a new agent]\x1b[0m\r\n");
+          const handler = (data: string) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(data);
+          };
+          fallbackEmitter.on("data", handler);
+          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
+          (ws as unknown as Record<string, unknown>)["_emitter"] = fallbackEmitter;
+        }
       } else if (status === "running") {
         // Process should be running but isn't in the process map — spawn failed
         ws.send(
