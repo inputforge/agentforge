@@ -1,16 +1,8 @@
 import type { ServerWebSocket } from "bun";
-import type { Agent } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-
-// Registered by main.ts after the orchestrator is created to avoid a circular import.
-type ReplayFn = (agent: Agent) => void;
-let replayFn: ReplayFn | null = null;
-export function registerReplayFn(fn: ReplayFn): void {
-  replayFn = fn;
-}
 
 const log = logger.child("ws");
 
@@ -111,12 +103,15 @@ export const wsHandlers = {
     } else if (scrollback.length === 0) {
       const agent = agentStmts.get.get(agentId);
       const status = agent?.status;
-      if ((status === "done" || status === "error") && agent?.sessionId && replayFn) {
-        // Replay via `claude --resume` — replayFn spawns synchronously so the
-        // emitter is available immediately after the call.
-        replayFn(agent);
-        const replayEmitter = agentProcessManager.subscribe(agentId);
-        if (replayEmitter) {
+      if (agent && (status === "done" || status === "error")) {
+        if (agent.sessionId) {
+          const command = `claude --resume ${agent.sessionId} --dangerously-skip-permissions`;
+          const { emitter: replayEmitter } = agentProcessManager.spawn(
+            agentId,
+            command,
+            agent.worktreePath,
+            () => {},
+          );
           const handler = (data: string) => {
             if (ws.readyState === WebSocket.OPEN) ws.send(data);
           };
@@ -124,11 +119,20 @@ export const wsHandlers = {
           (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
           (ws as unknown as Record<string, unknown>)["_emitter"] = replayEmitter;
         } else {
-          ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
+          const { emitter: fallbackEmitter } = agentProcessManager.spawn(
+            agentId,
+            agent.command,
+            agent.worktreePath,
+            () => {},
+          );
+          ws.send("\x1b[33m[could not restore previous session — starting a new agent]\x1b[0m\r\n");
+          const handler = (data: string) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(data);
+          };
+          fallbackEmitter.on("data", handler);
+          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
+          (ws as unknown as Record<string, unknown>)["_emitter"] = fallbackEmitter;
         }
-      } else if (status === "done" || status === "error") {
-        // No sessionId to resume from
-        ws.send("\x1b[33m[session output unavailable — server was restarted]\x1b[0m\r\n");
       } else if (status === "running") {
         // Process should be running but isn't in the process map — spawn failed
         ws.send(
