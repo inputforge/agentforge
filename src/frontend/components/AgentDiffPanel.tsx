@@ -1,5 +1,5 @@
 import { FileDiff } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FileDiff as PierreDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { parsePatchFiles } from "@pierre/diffs";
 // eslint-disable-next-line import/default
@@ -22,6 +22,7 @@ interface AgentDiffPanelProps {
 
 export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
   const [showGenerated, setShowGenerated] = useState(false);
+  const toggleGenerated = useCallback(() => setShowGenerated((v) => !v), []);
 
   const fileDiffs = useMemo(
     () => (diff?.raw ? parsePatchFiles(diff.raw).flatMap((p) => p.files) : []),
@@ -85,7 +86,7 @@ export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
           {!isLoading && generatedCount > 0 && (
             <button
               className="w-full text-xs text-forge-text-muted py-2 px-3 text-left hover:text-forge-text-dim transition-colors border-t border-forge-border"
-              onClick={() => setShowGenerated((v) => !v)}
+              onClick={toggleGenerated}
             >
               {showGenerated
                 ? "▲ hide generated files"
