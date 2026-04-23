@@ -2,7 +2,7 @@ import { simpleGit, type SimpleGit } from "simple-git";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import type { DiffResult, RemoteConfig } from "../../common/types.ts";
-import { isGeneratedFile } from "../lib/generatedFiles.ts";
+import { isGeneratedFile } from "../../common/generatedFiles.ts";
 
 /**
  * Detect the git repo at `searchPath` (walks up to find .git).

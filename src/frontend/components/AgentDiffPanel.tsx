@@ -15,32 +15,62 @@ const POOL_OPTIONS = {
 
 const HIGHLIGHTER_OPTIONS = { theme: "pierre-dark" as const };
 
+interface GeneratedSection {
+  path: string;
+  raw: string;
+}
+
+function parseGeneratedSections(raw: string): GeneratedSection[] {
+  const sections: GeneratedSection[] = [];
+  let currentLines: string[] = [];
+  let currentPath = "";
+
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      if (currentPath && currentLines.length > 0) {
+        sections.push({ path: currentPath, raw: currentLines.join("\n") });
+      }
+      currentLines = [line];
+      const match = line.match(/^diff --git (?:"a\/([^"]+)"|a\/(\S+)) /);
+      currentPath = match?.[1] ?? match?.[2] ?? "";
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  if (currentPath && currentLines.length > 0) {
+    sections.push({ path: currentPath, raw: currentLines.join("\n") });
+  }
+
+  return sections;
+}
+
 interface AgentDiffPanelProps {
   diff: DiffResult | null;
   isLoading: boolean;
 }
 
 export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
-  const [showGenerated, setShowGenerated] = useState(false);
-  const toggleGenerated = useCallback(() => setShowGenerated((v) => !v), []);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   const fileDiffs = useMemo(
     () => (diff?.raw ? parsePatchFiles(diff.raw).flatMap((p) => p.files) : []),
     [diff],
   );
 
-  const generatedFileDiffs = useMemo(
-    () =>
-      showGenerated && diff?.generatedRaw
-        ? parsePatchFiles(diff.generatedRaw).flatMap((p) => p.files)
-        : [],
-    [diff, showGenerated],
-  );
-
-  const generatedCount = useMemo(
-    () => (diff?.generatedRaw ? (diff.generatedRaw.match(/^diff --git/gm) ?? []).length : 0),
+  const generatedSections = useMemo(
+    () => (diff?.generatedRaw ? parseGeneratedSections(diff.generatedRaw) : []),
     [diff],
   );
+
+  const toggleFile = useCallback((path: string) => {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   return (
     <WorkerPoolContextProvider poolOptions={POOL_OPTIONS} highlighterOptions={HIGHLIGHTER_OPTIONS}>
@@ -76,25 +106,48 @@ export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
               options={PATCH_DIFF_OPTIONS}
             />
           ))}
-          {generatedFileDiffs.map((fileDiff, i) => (
-            <PierreDiff
-              key={`generated-${fileDiff.cacheKey ?? i}`}
-              fileDiff={fileDiff}
-              options={PATCH_DIFF_OPTIONS}
+          {generatedSections.map((section) => (
+            <GeneratedFileEntry
+              key={section.path}
+              section={section}
+              expanded={expandedFiles.has(section.path)}
+              onToggle={toggleFile}
             />
           ))}
-          {!isLoading && generatedCount > 0 && (
-            <button
-              className="w-full text-xs text-forge-text-muted py-2 px-3 text-left hover:text-forge-text-dim transition-colors border-t border-forge-border"
-              onClick={toggleGenerated}
-            >
-              {showGenerated
-                ? "▲ hide generated files"
-                : `▼ ${generatedCount} generated file${generatedCount !== 1 ? "s" : ""} hidden`}
-            </button>
-          )}
         </div>
       </div>
     </WorkerPoolContextProvider>
+  );
+}
+
+interface GeneratedFileEntryProps {
+  section: GeneratedSection;
+  expanded: boolean;
+  onToggle: (path: string) => void;
+}
+
+function GeneratedFileEntry({ section, expanded, onToggle }: GeneratedFileEntryProps) {
+  const fileDiffs = useMemo(
+    () => (expanded ? parsePatchFiles(section.raw).flatMap((p) => p.files) : []),
+    [section.raw, expanded],
+  );
+
+  const handleToggle = useCallback(() => onToggle(section.path), [onToggle, section.path]);
+
+  return (
+    <div className="border-t border-forge-border">
+      <button
+        className="w-full py-1.5 px-3 flex items-center justify-between hover:bg-forge-panel transition-colors"
+        onClick={handleToggle}
+      >
+        <span className="text-xs font-mono text-forge-text-muted truncate">{section.path}</span>
+        <span className="text-xs text-forge-text-dim flex-shrink-0 ml-2">
+          {expanded ? "▲ hide" : "▼ load diff"}
+        </span>
+      </button>
+      {fileDiffs.map((fileDiff, i) => (
+        <PierreDiff key={fileDiff.cacheKey ?? i} fileDiff={fileDiff} options={PATCH_DIFF_OPTIONS} />
+      ))}
+    </div>
   );
 }
