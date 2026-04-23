@@ -1,5 +1,5 @@
 import { FileDiff } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FileDiff as PierreDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { parsePatchFiles } from "@pierre/diffs";
 // eslint-disable-next-line import/default
@@ -21,8 +21,23 @@ interface AgentDiffPanelProps {
 }
 
 export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
+  const [showGenerated, setShowGenerated] = useState(false);
+
   const fileDiffs = useMemo(
     () => (diff?.raw ? parsePatchFiles(diff.raw).flatMap((p) => p.files) : []),
+    [diff],
+  );
+
+  const generatedFileDiffs = useMemo(
+    () =>
+      showGenerated && diff?.generatedRaw
+        ? parsePatchFiles(diff.generatedRaw).flatMap((p) => p.files)
+        : [],
+    [diff, showGenerated],
+  );
+
+  const generatedCount = useMemo(
+    () => (diff?.generatedRaw ? (diff.generatedRaw.match(/^diff --git/gm) ?? []).length : 0),
     [diff],
   );
 
@@ -60,6 +75,23 @@ export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
               options={PATCH_DIFF_OPTIONS}
             />
           ))}
+          {generatedFileDiffs.map((fileDiff, i) => (
+            <PierreDiff
+              key={`generated-${fileDiff.cacheKey ?? i}`}
+              fileDiff={fileDiff}
+              options={PATCH_DIFF_OPTIONS}
+            />
+          ))}
+          {!isLoading && generatedCount > 0 && (
+            <button
+              className="w-full text-xs text-forge-text-muted py-2 px-3 text-left hover:text-forge-text-dim transition-colors border-t border-forge-border"
+              onClick={() => setShowGenerated((v) => !v)}
+            >
+              {showGenerated
+                ? "▲ hide generated files"
+                : `▼ ${generatedCount} generated file${generatedCount !== 1 ? "s" : ""} hidden`}
+            </button>
+          )}
         </div>
       </div>
     </WorkerPoolContextProvider>

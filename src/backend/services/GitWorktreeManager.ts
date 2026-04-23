@@ -100,11 +100,13 @@ export class GitWorktreeManager {
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
     const rawFull = await worktreeGit.diff([mergeBase]);
-    const diffWithoutGeneratedFiles = filterGeneratedDiff(rawFull, (path) =>
+    const { filtered, generated } = partitionGeneratedDiff(rawFull, (path) =>
       readWorktreeFile(worktreePath, path),
     );
 
-    return parseDiff(diffWithoutGeneratedFiles);
+    const result = parseDiff(filtered);
+    if (generated.trim()) result.generatedRaw = generated;
+    return result;
   }
 
   async commitWorktree(worktreePath: string, message: string): Promise<void> {
@@ -167,15 +169,30 @@ export function filterGeneratedDiff(
   raw: string,
   contentForPath?: (path: string) => string | null,
 ): string {
+  return partitionGeneratedDiff(raw, contentForPath).filtered;
+}
+
+function partitionGeneratedDiff(
+  raw: string,
+  contentForPath?: (path: string) => string | null,
+): { filtered: string; generated: string } {
   const sections = splitDiffSections(raw);
-  const visibleSections = sections.filter((section) => {
+  const filteredSections: string[][] = [];
+  const generatedSections: string[][] = [];
+
+  for (const section of sections) {
     const path = diffSectionPath(section);
-    if (!path) return true;
+    if (!path || !isGeneratedFile(path, contentForPath?.(path) ?? diffSectionContent(section))) {
+      filteredSections.push(section);
+    } else {
+      generatedSections.push(section);
+    }
+  }
 
-    return !isGeneratedFile(path, contentForPath?.(path) ?? diffSectionContent(section));
-  });
-
-  return visibleSections.map((section) => section.join("\n")).join("\n");
+  return {
+    filtered: filteredSections.map((s) => s.join("\n")).join("\n"),
+    generated: generatedSections.map((s) => s.join("\n")).join("\n"),
+  };
 }
 
 function splitDiffSections(raw: string): string[][] {

@@ -59,6 +59,7 @@ export interface DiffResult {
   totalAdditions: number;
   totalDeletions: number;
   raw: string;
+  generatedRaw?: string;
 }
 
 export interface MergeResult {
