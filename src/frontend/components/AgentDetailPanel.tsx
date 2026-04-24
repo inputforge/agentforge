@@ -3,6 +3,7 @@ import {
   GitBranch,
   GitCommit,
   GitMerge,
+  MessageSquarePlus,
   RefreshCw,
   RotateCcw,
   Terminal,
@@ -12,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType } from "../types";
+import type { AgentType, DiffComment } from "../types";
 
 import { AgentAcpPanel } from "./AgentAcpPanel";
 import { AgentDiffPanel } from "./AgentDiffPanel";
@@ -44,6 +45,8 @@ export function AgentDetailPanel() {
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [comments, setComments] = useState<DiffComment[]>([]);
 
   const agentId = agent?.id;
   const diff = agentId ? (agentDiffs[agentId] ?? null) : null;
@@ -83,6 +86,58 @@ export function AgentDetailPanel() {
     setIsDiffLoading(true);
     fetchDiff().finally(() => setIsDiffLoading(false));
   }, [agentId, fetchDiff]);
+
+  // ── Comments ──────────────────────────────────────────────────────────────
+
+  const fetchComments = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const result = await api.agents.listComments(agentId);
+      setComments(result);
+    } catch {
+      // ignore transient errors
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    setComments([]);
+    fetchComments();
+  }, [agentId, fetchComments]);
+
+  const handleAddComment = useCallback(
+    async (filePath: string, lineNumber: number, content: string) => {
+      if (!agentId) return;
+      const comment = await api.agents.addComment(agentId, filePath, lineNumber, content);
+      setComments((prev) => [...prev, comment]);
+    },
+    [agentId],
+  );
+
+  const handleDeleteComment = useCallback(
+    async (commentId: string) => {
+      if (!agentId) return;
+      await api.agents.deleteComment(agentId, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    },
+    [agentId],
+  );
+
+  const handleSubmitReview = useCallback(async () => {
+    if (!agentId) return;
+    setIsSubmittingReview(true);
+    try {
+      await api.agents.submitReview(agentId);
+      setComments([]);
+      addNotification({ type: "info", message: "Review submitted to agent." });
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }, [agentId, addNotification]);
+
+  // ── Other actions ─────────────────────────────────────────────────────────
 
   const handleMerge = useCallback(async () => {
     if (!agentId || !ticket || !agent) return;
@@ -257,7 +312,30 @@ export function AgentDetailPanel() {
               </select>
             </div>
           )}
+          {comments.length > 0 && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleSubmitReview}
+              disabled={isSubmittingReview}
+              title="Send all diff comments to the agent"
+            >
+              <MessageSquarePlus size={12} />
+              {isSubmittingReview ? "SENDING..." : `SUBMIT REVIEW (${comments.length})`}
+            </button>
+          )}
           {(diff?.aheadCount ?? 0) > 0 && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleMerge}
+              disabled={isMerging}
+            >
+              <GitMerge size={12} />
+              {isMerging
+                ? "MERGING..."
+                : `MERGE TO ${(agent.baseBranch ?? remoteConfig?.baseBranch ?? "BASE").toUpperCase()}`}
+            </button>
+          )}
+          {ticket.status === "review" && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
               onClick={handleMerge}
@@ -357,7 +435,14 @@ export function AgentDetailPanel() {
         </Panel>
         <PanelResizeHandle className="w-1 bg-forge-border hover:bg-forge-accent transition-colors duration-150 cursor-col-resize flex-shrink-0" />
         <Panel defaultSize={40} minSize={15}>
-          <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
+          <AgentDiffPanel
+            diff={diff}
+            isLoading={isDiffLoading}
+            agentId={agentId!}
+            comments={comments}
+            onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+          />
         </Panel>
       </PanelGroup>
     </div>

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
-import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
+import { agentStmts, diffCommentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { acpClientManager } from "../services/AcpClientManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
@@ -175,6 +175,77 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       clearShellScrollback(id);
     });
     return c.json({ id: sessionId, cwd: agent.worktreePath });
+  });
+
+  // ── Diff comments ─────────────────────────────────────────────────────────────
+
+  app.get("/:id/comments", (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+    return c.json(diffCommentStmts.listByAgent.all(agent.id));
+  });
+
+  app.post("/:id/comments", async (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+
+    const body = await c.req.json<{ filePath?: string; lineNumber?: number; content?: string }>();
+    if (!body.filePath || body.lineNumber == null || !body.content?.trim()) {
+      return c.json({ error: "filePath, lineNumber, and content are required" }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    diffCommentStmts.insert.run({
+      $id: id,
+      $agentId: agent.id,
+      $filePath: body.filePath,
+      $lineNumber: body.lineNumber,
+      $content: body.content.trim(),
+      $createdAt: Date.now(),
+    });
+
+    return c.json(diffCommentStmts.listByAgent.all(agent.id).find((c) => c.id === id)!, 201);
+  });
+
+  app.delete("/:id/comments/:commentId", (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+    diffCommentStmts.delete.run(c.req.param("commentId"), agent.id);
+    return c.body(null, 204);
+  });
+
+  app.post("/:id/review", async (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+
+    const comments = diffCommentStmts.listByAgent.all(agent.id);
+    if (comments.length === 0) return c.json({ error: "no comments to submit" }, 400);
+
+    const grouped = new Map<string, typeof comments>();
+    for (const comment of comments) {
+      const list = grouped.get(comment.filePath) ?? [];
+      list.push(comment);
+      grouped.set(comment.filePath, list);
+    }
+
+    const lines: string[] = ["Please address the following review comments:\n"];
+    for (const [file, fileComments] of grouped) {
+      lines.push(`File: ${file}`);
+      for (const comment of fileComments) {
+        const lineRef = comment.lineNumber > 0 ? `Line ${comment.lineNumber}: ` : "";
+        lines.push(`  ${lineRef}${comment.content}`);
+      }
+      lines.push("");
+    }
+    const message = lines.join("\n") + "\n";
+
+    try {
+      await acpClientManager.writeToAgent(agent, message);
+      diffCommentStmts.deleteByAgent.run(agent.id);
+      return c.json({ ok: true, message });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 500);
+    }
   });
 
   return app;
