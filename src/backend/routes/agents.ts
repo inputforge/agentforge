@@ -167,9 +167,7 @@ agentsRouter.post("/:id/review", async (c) => {
     grouped.set(comment.filePath, list);
   }
 
-  const lines: string[] = [
-    "Please address the following review comments:\n",
-  ];
+  const lines: string[] = ["Please address the following review comments:\n"];
   for (const [file, fileComments] of grouped) {
     lines.push(`File: ${file}`);
     for (const comment of fileComments) {

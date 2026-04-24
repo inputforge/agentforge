@@ -59,7 +59,12 @@ export function AgentDiffPanel({
     }
   }
 
-  function handleKeyDown(e: { key: string; metaKey: boolean; ctrlKey: boolean; preventDefault(): void }) {
+  function handleKeyDown(e: {
+    key: string;
+    metaKey: boolean;
+    ctrlKey: boolean;
+    preventDefault(): void;
+  }) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       submitComment();
@@ -144,9 +149,7 @@ export function AgentDiffPanel({
                               : "bg-forge-black"
                         } ${isCommentable ? "cursor-pointer hover:brightness-110" : ""}`}
                         onClick={
-                          isCommentable
-                            ? () => openCommentBox(file.path, line.lineNo!)
-                            : undefined
+                          isCommentable ? () => openCommentBox(file.path, line.lineNo!) : undefined
                         }
                       >
                         {/* Line number gutter */}
@@ -194,7 +197,10 @@ export function AgentDiffPanel({
                           key={comment.id}
                           className="flex items-start gap-2 px-3 py-2 bg-[#1a1a2e] border-l-2 border-forge-accent ml-14"
                         >
-                          <MessageSquare size={10} className="text-forge-accent mt-0.5 flex-shrink-0" />
+                          <MessageSquare
+                            size={10}
+                            className="text-forge-accent mt-0.5 flex-shrink-0"
+                          />
                           <span className="flex-1 text-forge-text-dim whitespace-pre-wrap break-words">
                             {comment.content}
                           </span>
@@ -217,7 +223,9 @@ export function AgentDiffPanel({
                             rows={3}
                             placeholder="Leave a comment… (Ctrl+Enter to save, Esc to cancel)"
                             value={commentText}
-                            onChange={(e: { target: { value: string } }) => setCommentText(e.target.value)}
+                            onChange={(e: { target: { value: string } }) =>
+                              setCommentText(e.target.value)
+                            }
                             onKeyDown={handleKeyDown}
                           />
                           <div className="flex gap-2 mt-1 justify-end">

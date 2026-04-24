@@ -1,4 +1,12 @@
-import { GitBranch, GitCommit, GitMerge, MessageSquarePlus, RefreshCw, Square, X } from "lucide-react";
+import {
+  GitBranch,
+  GitCommit,
+  GitMerge,
+  MessageSquarePlus,
+  RefreshCw,
+  Square,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
@@ -265,9 +273,7 @@ export function AgentDetailPanel() {
               title="Send all diff comments to the agent"
             >
               <MessageSquarePlus size={12} />
-              {isSubmittingReview
-                ? "SENDING..."
-                : `SUBMIT REVIEW (${comments.length})`}
+              {isSubmittingReview ? "SENDING..." : `SUBMIT REVIEW (${comments.length})`}
             </button>
           )}
           {ticket.status === "review" && (
