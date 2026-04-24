@@ -77,6 +77,22 @@ agentsRouter.post("/:id/commit", async (c) => {
   }
 });
 
+agentsRouter.post("/:id/rebase", async (c) => {
+  const agent = agentStmts.get.get(c.req.param("id"));
+  if (!agent) return c.json({ error: "agent not found" }, 404);
+
+  const remoteConfig = remoteStmts.get.get();
+  if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+
+  try {
+    const git = new GitWorktreeManager(remoteConfig.localPath);
+    const result = await git.rebase(agent.worktreePath, remoteConfig.baseBranch);
+    return c.json(result);
+  } catch (err) {
+    return c.json({ success: false, conflicted: false, error: (err as Error).message }, 500);
+  }
+});
+
 agentsRouter.post("/:id/kill", (c) => {
   const id = c.req.param("id");
   const agent = agentStmts.get.get(id);
