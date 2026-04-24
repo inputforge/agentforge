@@ -164,6 +164,7 @@ function parseDiff(raw: string, _stat: string): DiffResult {
   const files: DiffResult["files"] = [];
   let currentFile: DiffResult["files"][0] | null = null;
   let currentChunk: DiffResult["files"][0]["chunks"][0] | null = null;
+  let newLineNo = 0;
 
   let totalAdditions = 0;
   let totalDeletions = 0;
@@ -173,14 +174,18 @@ function parseDiff(raw: string, _stat: string): DiffResult {
       if (currentFile) files.push(currentFile);
       currentFile = { path: "", additions: 0, deletions: 0, chunks: [] };
       currentChunk = null;
+      newLineNo = 0;
     } else if (line.startsWith("+++ b/") && currentFile) {
       currentFile.path = line.slice(6);
     } else if (line.startsWith("@@ ") && currentFile) {
+      // Parse "+new_start" from "@@ -old,count +new_start,count @@"
+      const match = line.match(/\+(\d+)/);
+      newLineNo = match ? parseInt(match[1], 10) : 1;
       currentChunk = { header: line, lines: [] };
       currentFile.chunks.push(currentChunk);
     } else if (currentChunk && currentFile) {
       if (line.startsWith("+") && !line.startsWith("+++")) {
-        currentChunk.lines.push({ type: "add", content: line.slice(1) });
+        currentChunk.lines.push({ type: "add", content: line.slice(1), lineNo: newLineNo++ });
         currentFile.additions++;
         totalAdditions++;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
@@ -188,7 +193,7 @@ function parseDiff(raw: string, _stat: string): DiffResult {
         currentFile.deletions++;
         totalDeletions++;
       } else if (!line.startsWith("\\")) {
-        currentChunk.lines.push({ type: "context", content: line.slice(1) });
+        currentChunk.lines.push({ type: "context", content: line.slice(1), lineNo: newLineNo++ });
       }
     }
   }

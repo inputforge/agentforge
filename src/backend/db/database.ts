@@ -3,7 +3,7 @@ import { mkdirSync } from "fs";
 import { join } from "path";
 import { MigrationRunner, SqliteAdapter } from "./migrator.ts";
 import { migrations } from "./migrations/index.ts";
-import type { Agent, RemoteConfig, Ticket } from "../../common/types.ts";
+import type { Agent, DiffComment, RemoteConfig, Ticket } from "../../common/types.ts";
 
 const DB_PATH = join(process.cwd(), ".agentforge/data/agentforge.db");
 mkdirSync(join(process.cwd(), ".agentforge/data"), { recursive: true });
@@ -245,6 +245,46 @@ export const integrationStmts = {
   },
   deleteAll: (provider: string): void => {
     db.query("DELETE FROM integration_configs WHERE provider = ?").run(provider);
+  },
+};
+
+export const diffCommentStmts = {
+  listByAgent: {
+    all: (agentId: string): DiffComment[] =>
+      db
+        .query<DiffComment, [string]>(
+          `SELECT id, agent_id AS agentId, file_path AS filePath, line_number AS lineNumber,
+                  content, created_at AS createdAt
+           FROM diff_comments WHERE agent_id = ? ORDER BY created_at ASC`,
+        )
+        .all(agentId),
+  },
+  insert: {
+    run: (args: {
+      $id: string;
+      $agentId: string;
+      $filePath: string;
+      $lineNumber: number;
+      $content: string;
+      $createdAt: number;
+    }): void => {
+      db.query(
+        `INSERT INTO diff_comments (id, agent_id, file_path, line_number, content, created_at)
+         VALUES ($id, $agentId, $filePath, $lineNumber, $content, $createdAt)`,
+      ).run(args);
+    },
+  },
+  delete: {
+    run: (id: string, agentId: string): void => {
+      db.query<void, [string, string]>(
+        "DELETE FROM diff_comments WHERE id = ? AND agent_id = ?",
+      ).run(id, agentId);
+    },
+  },
+  deleteByAgent: {
+    run: (agentId: string): void => {
+      db.query<void, [string]>("DELETE FROM diff_comments WHERE agent_id = ?").run(agentId);
+    },
   },
 };
 

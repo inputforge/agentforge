@@ -1,5 +1,6 @@
 import type {
   Agent,
+  DiffComment,
   DiffResult,
   GitHubIssue,
   IntegrationConfig,
@@ -63,6 +64,16 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ input }),
       }),
+    listComments: (id: string) => request<DiffComment[]>(`/agents/${id}/comments`),
+    addComment: (id: string, filePath: string, lineNumber: number, content: string) =>
+      request<DiffComment>(`/agents/${id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ filePath, lineNumber, content }),
+      }),
+    deleteComment: (id: string, commentId: string) =>
+      request<void>(`/agents/${id}/comments/${commentId}`, { method: "DELETE" }),
+    submitReview: (id: string) =>
+      request<{ ok: boolean; message: string }>(`/agents/${id}/review`, { method: "POST" }),
   },
 
   shell: {
