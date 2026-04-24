@@ -106,15 +106,23 @@ export function AgentDetailPanel() {
     if (!agentId) return;
     setIsCommitting(true);
     try {
-      await api.agents.commit(agentId);
-      addNotification({ type: "info", message: "Changes committed." });
-      fetchDiff();
+      if (agent?.status === "running") {
+        await api.agents.sendInput(
+          agentId,
+          "Please commit all current changes with a descriptive commit message.\n",
+        );
+        addNotification({ type: "info", message: "Asked agent to commit changes." });
+      } else {
+        await api.agents.commit(agentId);
+        addNotification({ type: "info", message: "Changes committed." });
+        fetchDiff();
+      }
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCommitting(false);
     }
-  }, [agentId, addNotification, fetchDiff]);
+  }, [agentId, agent?.status, addNotification, fetchDiff]);
 
   const handleRebase = useCallback(async () => {
     if (!agentId) return;
@@ -125,19 +133,27 @@ export function AgentDetailPanel() {
         addNotification({ type: "info", message: "Rebase completed successfully." });
         fetchDiff();
       } else if (result.conflicted) {
-        addNotification({
-          type: "merge-conflict",
-          message: "Rebase conflict detected — aborted.",
-          ticketId: ticket?.id,
-          agentId,
-        });
+        if (agent?.status === "running") {
+          await api.agents.sendInput(
+            agentId,
+            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\n",
+          );
+          addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
+        } else {
+          addNotification({
+            type: "merge-conflict",
+            message: "Rebase conflict detected — aborted. Relaunch agent to resolve.",
+            ticketId: ticket?.id,
+            agentId,
+          });
+        }
       }
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsRebasing(false);
     }
-  }, [agentId, ticket?.id, addNotification, fetchDiff]);
+  }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
 
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;
