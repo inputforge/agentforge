@@ -1,4 +1,4 @@
-import { GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
+import { GitBranch, GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
@@ -16,6 +16,7 @@ export function AgentDetailPanel() {
 
   const [isMerging, setIsMerging] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
+  const [isRebasing, setIsRebasing] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
@@ -105,15 +106,54 @@ export function AgentDetailPanel() {
     if (!agentId) return;
     setIsCommitting(true);
     try {
-      await api.agents.commit(agentId);
-      addNotification({ type: "info", message: "Changes committed." });
-      fetchDiff();
+      if (agent?.status === "running") {
+        await api.agents.sendInput(
+          agentId,
+          "Please commit all current changes with a descriptive commit message.\n",
+        );
+        addNotification({ type: "info", message: "Asked agent to commit changes." });
+      } else {
+        await api.agents.commit(agentId);
+        addNotification({ type: "info", message: "Changes committed." });
+        fetchDiff();
+      }
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCommitting(false);
     }
-  }, [agentId, addNotification, fetchDiff]);
+  }, [agentId, agent?.status, addNotification, fetchDiff]);
+
+  const handleRebase = useCallback(async () => {
+    if (!agentId) return;
+    setIsRebasing(true);
+    try {
+      const result = await api.agents.rebase(agentId);
+      if (result.success) {
+        addNotification({ type: "info", message: "Rebase completed successfully." });
+        fetchDiff();
+      } else if (result.conflicted) {
+        if (agent?.status === "running") {
+          await api.agents.sendInput(
+            agentId,
+            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\n",
+          );
+          addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
+        } else {
+          addNotification({
+            type: "merge-conflict",
+            message: "Rebase conflict detected — aborted. Relaunch agent to resolve.",
+            ticketId: ticket?.id,
+            agentId,
+          });
+        }
+      }
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsRebasing(false);
+    }
+  }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
 
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;
@@ -183,12 +223,21 @@ export function AgentDetailPanel() {
               {isRelaunching ? "LAUNCHING..." : "RELAUNCH"}
             </button>
           )}
-          {ticket.status === "review" && diff && diff.files.length > 0 && (
+          <button
+            className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+            onClick={handleRebase}
+            disabled={isRebasing}
+            title="Rebase agent branch onto base branch"
+          >
+            <GitBranch size={12} />
+            {isRebasing ? "REBASING..." : "REBASE"}
+          </button>
+          {diff && diff.files.length > 0 && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
               onClick={handleCommit}
               disabled={isCommitting}
-              title="Ask agent to commit current changes"
+              title="Commit current changes"
             >
               <GitCommit size={12} />
               {isCommitting ? "COMMITTING..." : "COMMIT"}
