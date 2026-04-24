@@ -1,8 +1,8 @@
-import { GitBranch, GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
+import { GitBranch, GitCommit, GitMerge, MessageSquarePlus, RefreshCw, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, DiffResult } from "../types";
+import type { AgentType, DiffComment, DiffResult } from "../types";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
@@ -18,8 +18,10 @@ export function AgentDetailPanel() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
+  const [comments, setComments] = useState<DiffComment[]>([]);
   const diffIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const agentId = agent?.id;
@@ -71,6 +73,58 @@ export function AgentDetailPanel() {
       }
     };
   }, [agentId, agent?.status, fetchDiff]);
+
+  // ── Comments ──────────────────────────────────────────────────────────────
+
+  const fetchComments = useCallback(async () => {
+    if (!agentId) return;
+    try {
+      const result = await api.agents.listComments(agentId);
+      setComments(result);
+    } catch {
+      // ignore transient errors
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    fetchComments();
+    setComments([]);
+  }, [agentId, fetchComments]);
+
+  const handleAddComment = useCallback(
+    async (filePath: string, lineNumber: number, content: string) => {
+      if (!agentId) return;
+      const comment = await api.agents.addComment(agentId, filePath, lineNumber, content);
+      setComments((prev: DiffComment[]) => [...prev, comment]);
+    },
+    [agentId],
+  );
+
+  const handleDeleteComment = useCallback(
+    async (commentId: string) => {
+      if (!agentId) return;
+      await api.agents.deleteComment(agentId, commentId);
+      setComments((prev: DiffComment[]) => prev.filter((c: DiffComment) => c.id !== commentId));
+    },
+    [agentId],
+  );
+
+  const handleSubmitReview = useCallback(async () => {
+    if (!agentId) return;
+    setIsSubmittingReview(true);
+    try {
+      await api.agents.submitReview(agentId);
+      setComments([]);
+      addNotification({ type: "info", message: "Review submitted to agent." });
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }, [agentId, addNotification]);
+
+  // ── Other actions ─────────────────────────────────────────────────────────
 
   const handleMerge = useCallback(async () => {
     if (!agentId || !ticket) return;
@@ -203,6 +257,19 @@ export function AgentDetailPanel() {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {comments.length > 0 && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleSubmitReview}
+              disabled={isSubmittingReview}
+              title="Send all diff comments to the agent"
+            >
+              <MessageSquarePlus size={12} />
+              {isSubmittingReview
+                ? "SENDING..."
+                : `SUBMIT REVIEW (${comments.length})`}
+            </button>
+          )}
           {ticket.status === "review" && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
@@ -261,7 +328,14 @@ export function AgentDetailPanel() {
       <div className="flex-1 flex overflow-hidden">
         <AgentTerminalPanel agentId={agentId!} />
         <div className="w-px bg-forge-border flex-shrink-0" />
-        <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
+        <AgentDiffPanel
+          diff={diff}
+          isLoading={isDiffLoading}
+          agentId={agentId!}
+          comments={comments}
+          onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
+        />
       </div>
     </div>
   );

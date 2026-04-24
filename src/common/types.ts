@@ -39,7 +39,16 @@ export interface RemoteConfig {
 export interface DiffLine {
   type: "add" | "remove" | "context";
   content: string;
-  lineNo?: number;
+  lineNo?: number; // new-file line number for add/context lines
+}
+
+export interface DiffComment {
+  id: string;
+  agentId: string;
+  filePath: string;
+  lineNumber: number;
+  content: string;
+  createdAt: number;
 }
 
 export interface DiffChunk {
