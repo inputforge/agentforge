@@ -1,7 +1,8 @@
 import { simpleGit, type SimpleGit } from "simple-git";
 import { join } from "path";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync } from "fs";
 import type { DiffResult, RemoteConfig } from "../../common/types.ts";
+import { isGeneratedFile } from "../../common/generatedFiles.ts";
 
 /**
  * Detect the git repo at `searchPath` (walks up to find .git).
@@ -98,10 +99,14 @@ export class GitWorktreeManager {
 
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
-    const raw = await worktreeGit.diff([mergeBase, "--stat=9999"]);
     const rawFull = await worktreeGit.diff([mergeBase]);
+    const { filtered, generated } = partitionGeneratedDiff(rawFull, (path) =>
+      readWorktreeFile(worktreePath, path),
+    );
 
-    return parseDiff(rawFull, raw);
+    const result = parseDiff(filtered);
+    if (generated.trim()) result.generatedRaw = generated;
+    return result;
   }
 
   async commitWorktree(worktreePath: string, message: string): Promise<void> {
@@ -160,7 +165,106 @@ export class GitWorktreeManager {
   }
 }
 
-function parseDiff(raw: string, _stat: string): DiffResult {
+export function filterGeneratedDiff(
+  raw: string,
+  contentForPath?: (path: string) => string | null,
+): string {
+  return partitionGeneratedDiff(raw, contentForPath).filtered;
+}
+
+function partitionGeneratedDiff(
+  raw: string,
+  contentForPath?: (path: string) => string | null,
+): { filtered: string; generated: string } {
+  const sections = splitDiffSections(raw);
+  const filteredSections: string[][] = [];
+  const generatedSections: string[][] = [];
+
+  for (const section of sections) {
+    const path = diffSectionPath(section);
+    if (!path || !isGeneratedFile(path, contentForPath?.(path) ?? diffSectionContent(section))) {
+      filteredSections.push(section);
+    } else {
+      generatedSections.push(section);
+    }
+  }
+
+  return {
+    filtered: filteredSections.map((s) => s.join("\n")).join("\n"),
+    generated: generatedSections.map((s) => s.join("\n")).join("\n"),
+  };
+}
+
+function splitDiffSections(raw: string): string[][] {
+  const sections: string[][] = [];
+  let currentSection: string[] = [];
+
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("diff --git") && currentSection.length > 0) {
+      sections.push(currentSection);
+      currentSection = [];
+    }
+
+    currentSection.push(line);
+  }
+
+  if (currentSection.some((line) => line.length > 0)) {
+    sections.push(currentSection);
+  }
+
+  return sections;
+}
+
+function diffSectionPath(section: string[]): string | null {
+  const oldPath = section.map((line) => parseDiffPathLine(line, "--- ", "a/")).find(Boolean);
+  const newPath = section.map((line) => parseDiffPathLine(line, "+++ ", "b/")).find(Boolean);
+
+  return newPath ?? oldPath ?? parseDiffGitPath(section[0] ?? "");
+}
+
+function parseDiffPathLine(line: string, marker: string, prefix: string): string | null {
+  if (!line.startsWith(marker)) return null;
+
+  const path = line.slice(marker.length).split("\t")[0];
+  if (path === "/dev/null") return null;
+
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+}
+
+function parseDiffGitPath(line: string): string | null {
+  const match = line.match(/^diff --git (?:"a\/([^"]+)"|a\/(\S+)) (?:"b\/([^"]+)"|b\/(\S+))/);
+  return match?.[3] ?? match?.[4] ?? match?.[1] ?? match?.[2] ?? null;
+}
+
+function diffSectionContent(section: string[]): string {
+  const content: string[] = [];
+  let inChunk = false;
+
+  for (const line of section) {
+    if (line.startsWith("@@ ")) {
+      inChunk = true;
+      continue;
+    }
+
+    if (!inChunk) continue;
+
+    if ((line.startsWith("+") && !line.startsWith("+++")) || line.startsWith(" ")) {
+      content.push(line.slice(1));
+    }
+  }
+
+  return content.join("\n");
+}
+
+function readWorktreeFile(worktreePath: string, path: string): string | null {
+  try {
+    return readFileSync(join(worktreePath, path), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function parseDiff(raw: string): DiffResult {
   const files: DiffResult["files"] = [];
   let currentFile: DiffResult["files"][0] | null = null;
   let currentChunk: DiffResult["files"][0]["chunks"][0] | null = null;
