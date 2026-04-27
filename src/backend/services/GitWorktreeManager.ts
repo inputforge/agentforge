@@ -118,6 +118,7 @@ export class GitWorktreeManager {
   async rebase(
     worktreePath: string,
     baseBranch: string,
+    abortOnConflict = true,
   ): Promise<{ success: boolean; conflicted: boolean }> {
     const worktreeGit = simpleGit(worktreePath);
 
@@ -127,7 +128,9 @@ export class GitWorktreeManager {
     } catch (err) {
       const msg = String(err);
       if (msg.includes("CONFLICT") || msg.includes("conflict")) {
-        await worktreeGit.rebase(["--abort"]).catch(() => {});
+        if (abortOnConflict) {
+          await worktreeGit.rebase(["--abort"]).catch(() => {});
+        }
         return { success: false, conflicted: true };
       }
       throw err;

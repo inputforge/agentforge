@@ -86,7 +86,10 @@ agentsRouter.post("/:id/rebase", async (c) => {
 
   try {
     const git = new GitWorktreeManager(remoteConfig.localPath);
-    const result = await git.rebase(agent.worktreePath, remoteConfig.baseBranch);
+    // Only abort on conflict when the agent isn't running — if it is running,
+    // leave the worktree in the conflicted state so the agent can resolve it.
+    const abortOnConflict = agent.status !== "running";
+    const result = await git.rebase(agent.worktreePath, agent.baseBranch, abortOnConflict);
     return c.json(result);
   } catch (err) {
     return c.json({ success: false, conflicted: false, error: (err as Error).message }, 500);
