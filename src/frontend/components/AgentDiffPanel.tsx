@@ -11,7 +11,6 @@ const PATCH_DIFF_OPTIONS = {
   diffStyle: "unified",
   disableFileHeader: true,
 } as const;
-const PANEL_STYLE = { width: "40%" };
 const LARGE_DIFF_THRESHOLD = 150;
 
 const POOL_OPTIONS = {
@@ -90,7 +89,7 @@ export function AgentDiffPanel({ diff, isLoading }: AgentDiffPanelProps) {
 
   return (
     <WorkerPoolContextProvider poolOptions={POOL_OPTIONS} highlighterOptions={HIGHLIGHTER_OPTIONS}>
-      <div className="flex flex-col" style={PANEL_STYLE}>
+      <div className="flex flex-col h-full">
         <div className="px-3 py-1.5 border-b border-forge-border flex items-center justify-between flex-shrink-0 bg-forge-panel">
           <div className="flex items-center gap-2">
             <FileDiff size={11} className="text-forge-text-muted" />
