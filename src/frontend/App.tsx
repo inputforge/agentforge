@@ -6,7 +6,7 @@ import { KanbanBoard } from "./components/kanban-board/KanbanBoard";
 import { ShellTerminal } from "./components/ShellTerminal";
 import { Header } from "./components/layout/Header";
 import { NotificationToast } from "./components/NotificationToast";
-import { useNotificationWebSocket } from "./hooks/useWebSocket";
+import { SessionSocketProvider } from "./hooks/useSessionSocket";
 import { AgentPage } from "./pages/AgentPage";
 import { registerNavigate, useStore } from "./store";
 
@@ -43,8 +43,6 @@ function KanbanPage() {
 export function App() {
   const { fetchTickets } = useStore();
 
-  useNotificationWebSocket();
-
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
@@ -53,12 +51,12 @@ export function App() {
   const agentElement = useMemo(() => <AgentPage />, []);
 
   return (
-    <>
+    <SessionSocketProvider>
       <NavigateFnRegistrar />
       <Routes>
         <Route path="/" element={kanbanElement} />
         <Route path="/agent/:ticketId" element={agentElement} />
       </Routes>
-    </>
+    </SessionSocketProvider>
   );
 }

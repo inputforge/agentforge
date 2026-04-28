@@ -1,8 +1,16 @@
 import type { ServerWebSocket } from "bun";
+import { z } from "zod";
 import { agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+
+const sessionResizeSchema = z.object({
+  type: z.literal("resize"),
+  agentId: z.string().min(1),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+});
 
 const log = logger.child("ws");
 
@@ -50,7 +58,7 @@ export const wsHandlers = {
   open(ws: ServerWebSocket<{ channel: string; agentId?: string }>) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "notifications" || channel === "kanban") {
+    if (channel === "notifications" || channel === "kanban" || channel === "session") {
       notificationClients.add(ws);
       return;
     }
@@ -146,48 +154,36 @@ export const wsHandlers = {
   message(ws: ServerWebSocket<{ channel: string; agentId?: string }>, raw: string | Buffer) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "shell" && agentId) {
-      try {
-        const msg = JSON.parse(String(raw)) as {
-          type: string;
-          data?: string;
-          cols?: number;
-          rows?: number;
-        };
-        if (msg.type === "input" && msg.data) {
-          shellSessionManager.write(agentId, msg.data);
-        } else if (msg.type === "resize" && msg.cols && msg.rows) {
-          shellSessionManager.resize(agentId, msg.cols, msg.rows);
-        }
-      } catch {
-        shellSessionManager.write(agentId, String(raw));
-      }
-      return;
-    }
-
-    if (channel !== "agent" || !agentId) return;
-
-    try {
-      const msg = JSON.parse(String(raw)) as {
-        type: string;
-        data?: string;
-        cols?: number;
-        rows?: number;
-      };
-      if (msg.type === "input" && msg.data) {
-        agentProcessManager.write(agentId, msg.data);
-      } else if (msg.type === "resize" && msg.cols && msg.rows) {
-        agentProcessManager.resize(agentId, msg.cols, msg.rows);
-      }
-    } catch {
+    if (channel === "agent" && agentId) {
       agentProcessManager.write(agentId, String(raw));
+    } else if (channel === "shell" && agentId) {
+      shellSessionManager.write(agentId, String(raw));
+    } else if (channel === "session") {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(String(raw));
+      } catch {
+        log.warn("session: invalid JSON in message", { raw: String(raw) });
+        return;
+      }
+      const result = sessionResizeSchema.safeParse(parsed);
+      if (!result.success) {
+        log.warn("session: invalid resize payload", {
+          raw: String(raw),
+          errors: result.error.issues,
+        });
+        return;
+      }
+      const { agentId: targetId, cols, rows } = result.data;
+      agentProcessManager.resize(targetId, cols, rows);
+      shellSessionManager.resize(targetId, cols, rows);
     }
   },
 
   close(ws: ServerWebSocket<{ channel: string; agentId?: string }>) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "notifications" || channel === "kanban") {
+    if (channel === "notifications" || channel === "kanban" || channel === "session") {
       notificationClients.delete(ws);
       return;
     }

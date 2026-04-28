@@ -31,7 +31,10 @@
     // Unicorn — disable noisy ones
     "unicorn/filename-case": "off",
     "unicorn/no-null": "off",
-    "unicorn/no-array-for-each": "off"
+    "unicorn/no-array-for-each": "off",
+
+    // Side-effect imports (CSS, polyfills) are intentional
+    "import/no-unassigned-import": "off"
   },
   "ignorePatterns": ["dist/", "node_modules/", "out/", ".agentforge/"]
 }

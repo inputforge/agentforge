@@ -1,12 +1,12 @@
 import { Terminal as TerminalIcon } from "lucide-react";
-import { useXTerm } from "../hooks/useXTerm";
+import { useForgeTerminal } from "../hooks/useForgeTerminal";
 
 interface AgentTerminalPanelProps {
   agentId: string;
 }
 
 export function AgentTerminalPanel({ agentId }: AgentTerminalPanelProps) {
-  const { containerRef } = useXTerm(`/ws/agent/${agentId}`);
+  const { containerRef } = useForgeTerminal(`/ws/agent/${agentId}`);
 
   return (
     <div className="flex flex-col flex-1">
@@ -14,7 +14,6 @@ export function AgentTerminalPanel({ agentId }: AgentTerminalPanelProps) {
         <TerminalIcon size={11} className="text-forge-text-muted" />
         <span className="text-forge-text-muted text-xs uppercase tracking-widest">TERMINAL</span>
       </div>
-
       <div className="flex-1 overflow-hidden border-r border-forge-border bg-forge-black p-1">
         <div ref={containerRef} className="w-full h-full" />
       </div>

@@ -1,14 +1,28 @@
-import { useEffect, useRef } from "react";
-import { useStore } from "../store";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import type { Agent, AppNotification, Ticket } from "../types";
+import { useStore } from "../store";
 
-type WSEvent =
+type IncomingEvent =
   | { type: "ticket-updated"; ticket: Ticket }
   | { type: "agent-updated"; agent: Agent }
   | { type: "notification"; notification: Omit<AppNotification, "id" | "timestamp"> }
   | { type: "kanban-sync"; tickets: Ticket[] };
 
-export function useNotificationWebSocket() {
+interface SessionSocketContextValue {
+  send: (msg: object) => void;
+}
+
+const SessionSocketContext = createContext<SessionSocketContextValue>({ send: () => {} });
+
+export function SessionSocketProvider({ children }: { children: ReactNode }) {
   const { setConnected, addNotification, updateTicket, setAgent } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -18,9 +32,8 @@ export function useNotificationWebSocket() {
 
     function connect() {
       if (unmounted) return;
-
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/notifications`);
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/session`);
       wsRef.current = ws;
 
       ws.addEventListener("open", () => {
@@ -30,7 +43,7 @@ export function useNotificationWebSocket() {
       ws.addEventListener("message", (e) => {
         if (unmounted) return;
         try {
-          const event = JSON.parse(e.data as string) as WSEvent;
+          const event = JSON.parse(e.data as string) as IncomingEvent;
           switch (event.type) {
             case "ticket-updated":
               updateTicket(event.ticket.id, event.ticket);
@@ -70,4 +83,17 @@ export function useNotificationWebSocket() {
       wsRef.current?.close();
     };
   }, [setConnected, addNotification, updateTicket, setAgent]);
+
+  const send = useCallback((msg: object) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const value = useMemo(() => ({ send }), [send]);
+  return <SessionSocketContext.Provider value={value}>{children}</SessionSocketContext.Provider>;
+}
+
+export function useSessionSocket() {
+  return useContext(SessionSocketContext);
 }
