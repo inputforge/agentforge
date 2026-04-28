@@ -1,8 +1,14 @@
 import type { ServerWebSocket } from "bun";
+import { z } from "zod";
 import { agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+
+const resizeSchema = z.object({
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+});
 
 const log = logger.child("ws");
 
@@ -152,12 +158,26 @@ export const wsHandlers = {
     } else if (channel === "shell") {
       shellSessionManager.write(agentId, String(raw));
     } else if (channel === "ctrl") {
+      let parsed: unknown;
       try {
-        const { cols, rows } = JSON.parse(String(raw)) as { cols: number; rows: number };
-        // agentId is either an agent id or shell session id — try both
-        agentProcessManager.resize(agentId, cols, rows);
-        shellSessionManager.resize(agentId, cols, rows);
-      } catch {}
+        parsed = JSON.parse(String(raw));
+      } catch {
+        log.warn("ctrl: invalid JSON in resize message", { agentId, raw: String(raw) });
+        return;
+      }
+      const result = resizeSchema.safeParse(parsed);
+      if (!result.success) {
+        log.warn("ctrl: invalid resize payload", {
+          agentId,
+          raw: String(raw),
+          errors: result.error.issues,
+        });
+        return;
+      }
+      const { cols, rows } = result.data;
+      // agentId is either an agent id or shell session id — try both
+      agentProcessManager.resize(agentId, cols, rows);
+      shellSessionManager.resize(agentId, cols, rows);
     }
   },
 

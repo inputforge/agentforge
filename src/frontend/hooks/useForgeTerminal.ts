@@ -50,9 +50,13 @@ export function useForgeTerminal(wsUrl: string | null): {
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+    let dataSocket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     const connect = () => {
       if (disposed) return;
       const ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
+      dataSocket = ws;
 
       ws.addEventListener("open", () => {
         instance.clear();
@@ -64,7 +68,7 @@ export function useForgeTerminal(wsUrl: string | null): {
         attachAddon?.dispose();
         attachAddon = null;
         instance.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n");
-        if (!disposed) setTimeout(connect, 3000);
+        if (!disposed) reconnectTimer = setTimeout(connect, 3000);
       });
       ws.addEventListener("error", () => {
         instance.write("\r\n\x1b[31m[connection error]\x1b[0m\r\n");
@@ -82,7 +86,9 @@ export function useForgeTerminal(wsUrl: string | null): {
 
     return () => {
       disposed = true;
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       attachAddon?.dispose();
+      dataSocket?.close();
       ctrlWs.close();
       ctrlWsRef.current = null;
     };
