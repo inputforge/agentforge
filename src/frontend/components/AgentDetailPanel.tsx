@@ -1,5 +1,6 @@
 import { GitBranch, GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type { AgentType, DiffResult } from "../types";
@@ -258,11 +259,15 @@ export function AgentDetailPanel() {
       </div>
 
       {/* Split body: terminal | diff */}
-      <div className="flex-1 flex overflow-hidden">
-        <AgentTerminalPanel agentId={agentId!} />
-        <div className="w-px bg-forge-border flex-shrink-0" />
-        <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
-      </div>
+      <PanelGroup orientation="horizontal" className="flex-1 overflow-hidden">
+        <Panel defaultSize={60} minSize={20}>
+          <AgentTerminalPanel agentId={agentId!} />
+        </Panel>
+        <PanelResizeHandle className="w-1 bg-forge-border hover:bg-forge-accent transition-colors duration-150 cursor-col-resize flex-shrink-0" />
+        <Panel defaultSize={40} minSize={15}>
+          <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }
