@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, TerminalSquare, FolderOpen } from "lucide-react";
 import { api } from "../lib/api";
-import { useXTerm } from "../hooks/useXTerm";
+import { useForgeTerminal } from "../hooks/useForgeTerminal";
 
 interface ShellTerminalProps {
   onClose: () => void;
@@ -10,7 +10,7 @@ interface ShellTerminalProps {
 export function ShellTerminal({ onClose }: ShellTerminalProps) {
   const [wsUrl, setWsUrl] = useState<string | null>(null);
   const [cwd, setCwd] = useState("");
-  const { containerRef } = useXTerm(wsUrl);
+  const { containerRef } = useForgeTerminal(wsUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,14 +35,12 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
     };
   }, []);
 
-  // Shorten the cwd for display — show last 2 path segments
   const displayCwd = cwd
     ? cwd.replace(/^.*?\/([^/]+\/[^/]+)\/?$/, "$1").replace(/^.*\/([^/]+)\/?$/, "$1") || cwd
     : "";
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[42vh] min-h-[200px] bg-forge-black border-t-2 border-forge-accent z-50 flex flex-col animate-slide-in-bottom shadow-[0_-8px_32px_rgba(0,0,0,0.8)]">
-      {/* Drag handle / header */}
       <div className="flex items-center justify-between px-4 h-8 flex-shrink-0 bg-forge-panel border-b border-forge-border select-none">
         <div className="flex items-center gap-2.5 min-w-0">
           <TerminalSquare size={13} className="text-forge-accent flex-shrink-0" />
@@ -69,8 +67,6 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
           <X size={13} />
         </button>
       </div>
-
-      {/* Terminal container */}
       <div className="flex-1 overflow-hidden bg-forge-black p-1">
         <div ref={containerRef} className="w-full h-full" />
       </div>

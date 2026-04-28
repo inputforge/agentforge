@@ -145,42 +145,19 @@ export const wsHandlers = {
 
   message(ws: ServerWebSocket<{ channel: string; agentId?: string }>, raw: string | Buffer) {
     const { channel, agentId } = ws.data;
+    if (!agentId) return;
 
-    if (channel === "shell" && agentId) {
-      try {
-        const msg = JSON.parse(String(raw)) as {
-          type: string;
-          data?: string;
-          cols?: number;
-          rows?: number;
-        };
-        if (msg.type === "input" && msg.data) {
-          shellSessionManager.write(agentId, msg.data);
-        } else if (msg.type === "resize" && msg.cols && msg.rows) {
-          shellSessionManager.resize(agentId, msg.cols, msg.rows);
-        }
-      } catch {
-        shellSessionManager.write(agentId, String(raw));
-      }
-      return;
-    }
-
-    if (channel !== "agent" || !agentId) return;
-
-    try {
-      const msg = JSON.parse(String(raw)) as {
-        type: string;
-        data?: string;
-        cols?: number;
-        rows?: number;
-      };
-      if (msg.type === "input" && msg.data) {
-        agentProcessManager.write(agentId, msg.data);
-      } else if (msg.type === "resize" && msg.cols && msg.rows) {
-        agentProcessManager.resize(agentId, msg.cols, msg.rows);
-      }
-    } catch {
+    if (channel === "agent") {
       agentProcessManager.write(agentId, String(raw));
+    } else if (channel === "shell") {
+      shellSessionManager.write(agentId, String(raw));
+    } else if (channel === "ctrl") {
+      try {
+        const { cols, rows } = JSON.parse(String(raw)) as { cols: number; rows: number };
+        // agentId is either an agent id or shell session id — try both
+        agentProcessManager.resize(agentId, cols, rows);
+        shellSessionManager.resize(agentId, cols, rows);
+      } catch {}
     }
   },
 
