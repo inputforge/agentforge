@@ -1,20 +1,20 @@
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useMemo, type RefObject } from "react";
 import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
 import { useXTerm } from "./useXTerm";
+import { useSessionSocket } from "./useSessionSocket";
 import { TERMINAL_OPTIONS } from "../lib/terminalConfig";
-
-function ctrlUrl(wsUrl: string): string {
-  // /ws/agent/:id → /ws/ctrl/:id  |  /ws/shell/:id → /ws/ctrl/:id
-  return wsUrl.replace(/^\/ws\/[^/]+\//, "/ws/ctrl/");
-}
 
 export function useForgeTerminal(wsUrl: string | null): {
   containerRef: RefObject<HTMLDivElement>;
 } {
   const fitAddon = useMemo(() => new FitAddon(), []);
   const { ref, instance } = useXTerm(TERMINAL_OPTIONS);
-  const ctrlWsRef = useRef<WebSocket | null>(null);
+  const { send } = useSessionSocket();
+
+  // terminalId is the last path segment: /ws/agent/<id> or /ws/shell/<id>
+  const parts = wsUrl?.split("/");
+  const terminalId = parts ? parts[parts.length - 1] : null;
 
   // Load FitAddon once when terminal is ready
   useEffect(() => {
@@ -22,7 +22,7 @@ export function useForgeTerminal(wsUrl: string | null): {
     instance.loadAddon(fitAddon);
   }, [instance, fitAddon]);
 
-  // ResizeObserver → fit + send resize over ctrl channel
+  // ResizeObserver → fit + send resize over session channel
   useEffect(() => {
     if (!instance || !ref.current) return;
     const container = ref.current;
@@ -33,25 +33,24 @@ export function useForgeTerminal(wsUrl: string | null): {
     };
     const observer = new ResizeObserver(() => {
       safeFit();
-      if (ctrlWsRef.current?.readyState === WebSocket.OPEN) {
-        ctrlWsRef.current.send(JSON.stringify({ cols: instance.cols, rows: instance.rows }));
+      if (terminalId) {
+        send({ type: "resize", agentId: terminalId, cols: instance.cols, rows: instance.rows });
       }
     });
     observer.observe(container);
     requestAnimationFrame(safeFit);
     return () => observer.disconnect();
-  }, [instance, ref, fitAddon]);
+  }, [instance, ref, fitAddon, send, terminalId]);
 
   // Data WS — AttachAddon owns it entirely (pure raw PTY)
   useEffect(() => {
     if (!wsUrl || !instance) return;
     let disposed = false;
     let attachAddon: AttachAddon | null = null;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-
     let dataSocket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     const connect = () => {
       if (disposed) return;
@@ -75,13 +74,6 @@ export function useForgeTerminal(wsUrl: string | null): {
       });
     };
 
-    // Ctrl WS — resize only
-    const ctrlWs = new WebSocket(`${protocol}//${window.location.host}${ctrlUrl(wsUrl)}`);
-    ctrlWsRef.current = ctrlWs;
-    ctrlWs.addEventListener("open", () => {
-      ctrlWs.send(JSON.stringify({ cols: instance.cols, rows: instance.rows }));
-    });
-
     connect();
 
     return () => {
@@ -89,8 +81,6 @@ export function useForgeTerminal(wsUrl: string | null): {
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       attachAddon?.dispose();
       dataSocket?.close();
-      ctrlWs.close();
-      ctrlWsRef.current = null;
     };
   }, [wsUrl, instance]);
 
