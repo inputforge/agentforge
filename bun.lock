@@ -8,6 +8,7 @@
         "@dnd-kit/core": "^6.1.0",
         "@dnd-kit/sortable": "^8.0.0",
         "@dnd-kit/utilities": "^3.2.2",
+        "@fontsource/jetbrains-mono": "^5.2.8",
         "@icons-pack/react-simple-icons": "^13.13.0",
         "@pierre/diffs": "^1.1.15",
         "@tailwindcss/vite": "^4.2.2",
@@ -22,7 +23,6 @@
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
         "react-router-dom": "^7.14.1",
-        "react-xtermjs": "^1.0.10",
         "simple-git": "^3.36.0",
         "tailwindcss": "^4.2.2",
         "zustand": "^4.5.5",
@@ -132,6 +132,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.21.5", "", { "os": "win32", "cpu": "ia32" }, "sha512-SWXFF1CL2RVNMaVs+BBClwtfZSvDgtL//G/smwAc5oVK/UPu2Gu9tIaRgFmYFFKrmg3SyAjSrElf0TiJ1v8fYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.21.5", "", { "os": "win32", "cpu": "x64" }, "sha512-tQd/1efJuzPC6rCFwEvLtci/xNFcTZknmXs98FYDfGE4wP9ClFV98nyKrzJKVPMhdDnjzLhdUyMX4PsQAPjwIw=="],
+
+    "@fontsource/jetbrains-mono": ["@fontsource/jetbrains-mono@5.2.8", "", {}, "sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ=="],
 
     "@icons-pack/react-simple-icons": ["@icons-pack/react-simple-icons@13.13.0", "", { "peerDependencies": { "react": "^16.13 || ^17 || ^18 || ^19" } }, "sha512-B5HhQMIpcSH4z8IZ8HFhD59CboHceKYMpPC9kAwGyKntvPdyJJv26DLu4Z1wAjcCLyrJhf11tMhiQGom9Rxb9g=="],
 
@@ -556,8 +558,6 @@
     "react-router": ["react-router@7.14.1", "", { "dependencies": { "cookie": "^1.0.1", "set-cookie-parser": "^2.6.0" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react-dom"] }, "sha512-5BCvFskyAAVumqhEKh/iPhLOIkfxcEUz8WqFIARCkMg8hZZzDYX9CtwxXA0e+qT8zAxmMC0x3Ckb9iMONwc5jg=="],
 
     "react-router-dom": ["react-router-dom@7.14.1", "", { "dependencies": { "react-router": "7.14.1" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-ZkrQuwwhGibjQLqH1eCdyiZyLWglPxzxdl5tgwgKEyCSGC76vmAjleGocRe3J/MLfzMUIKwaFJWpFVJhK3d2xA=="],
-
-    "react-xtermjs": ["react-xtermjs@1.0.10", "", { "peerDependencies": { "@xterm/xterm": "^5.5.0" } }, "sha512-+xpKEKbmsypWzRKE0FR1LNIGcI8gx+R6VMHe8IQW7iTbgeqp3Qg7SbiVNOzR+Ovb1QK4DPA3KqsIQV+XP0iRUA=="],
 
     "regex": ["regex@6.1.0", "", { "dependencies": { "regex-utilities": "^2.3.0" } }, "sha512-6VwtthbV4o/7+OaAF9I5L5V3llLEsoPyq9P1JVXkedTP33c7MfCG0/5NOPcSJn0TzXcG9YUrR0gQSWioew3LDg=="],
 

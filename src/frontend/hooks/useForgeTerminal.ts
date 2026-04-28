@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
-import { useXTerm } from "react-xtermjs";
+import { useXTerm } from "./useXTerm";
 import { TERMINAL_OPTIONS } from "../lib/terminalConfig";
 
 function ctrlUrl(wsUrl: string): string {
@@ -13,7 +13,7 @@ export function useForgeTerminal(wsUrl: string | null): {
   containerRef: RefObject<HTMLDivElement>;
 } {
   const fitAddon = useMemo(() => new FitAddon(), []);
-  const { ref, instance } = useXTerm({ options: TERMINAL_OPTIONS });
+  const { ref, instance } = useXTerm(TERMINAL_OPTIONS);
   const ctrlWsRef = useRef<WebSocket | null>(null);
 
   // Load FitAddon once when terminal is ready
