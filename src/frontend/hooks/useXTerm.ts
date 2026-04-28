@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
 // eslint-disable-next-line import/no-unassigned-import
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
 const FORGE_THEME = {
   background: "#080706",
@@ -93,8 +93,8 @@ export function useXTerm(wsUrl: string | null) {
       terminal = new Terminal({
         cursorBlink: true,
         fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-        fontSize: 13,
-        lineHeight: 1.4,
+        fontSize: 14,
+
         theme: FORGE_THEME,
         convertEol: true,
         scrollback: 5000,

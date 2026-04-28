@@ -5,8 +5,9 @@ import { MigrationRunner, SqliteAdapter } from "./migrator.ts";
 import { migrations } from "./migrations/index.ts";
 import type { Agent, RemoteConfig, Ticket } from "../../common/types.ts";
 
-const DB_PATH = join(process.cwd(), ".agentforge/data/agentforge.db");
-mkdirSync(join(process.cwd(), ".agentforge/data"), { recursive: true });
+const BASE_PATH = process.env.REPO_PATH ?? process.cwd();
+const DB_PATH = join(BASE_PATH, ".agentforge/data/agentforge.db");
+mkdirSync(join(BASE_PATH, ".agentforge/data"), { recursive: true });
 
 export const db = new Database(DB_PATH, { create: true });
 
