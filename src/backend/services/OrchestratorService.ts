@@ -109,7 +109,7 @@ export class OrchestratorService {
 
     let worktreePath = `/tmp/agentforge/${ticketId}`;
     let branch = `agent/${ticketId}`;
-    const baseBranch = config?.baseBranch ?? "main";
+    const baseBranch = git ? await git.currentBranch() : "main";
 
     mkdirSync(worktreePath, { recursive: true });
 
