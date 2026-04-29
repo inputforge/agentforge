@@ -104,6 +104,10 @@ export class GitWorktreeManager {
     // regardless of any new commits on baseBranch since then.
     const mergeBase = (await worktreeGit.raw(["merge-base", baseBranch, "HEAD"])).trim();
 
+    // Detect if baseBranch has moved ahead of the fork point — agent branch needs a rebase.
+    const baseBranchHead = (await worktreeGit.raw(["rev-parse", baseBranch])).trim();
+    const isDiverged = baseBranchHead !== mergeBase;
+
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
     const rawFull = await worktreeGit.diff([mergeBase]);
@@ -113,6 +117,7 @@ export class GitWorktreeManager {
 
     const result = parseDiff(filtered);
     if (generated.trim()) result.generatedRaw = generated;
+    result.isDiverged = isDiverged;
     return result;
   }
 
@@ -195,9 +200,10 @@ export class GitWorktreeManager {
     }
 
     try {
-      // baseBranch is already checked out in the main worktree — just fast-forward it
-      log.debug("fast-forward merging branch into base", { branch, baseBranch });
-      await this.baseGit.merge([branch, "--ff-only"]);
+      // Use `git fetch . branch:baseBranch` to ff-update the baseBranch ref without
+      // requiring it to be checked out in the main worktree.
+      log.debug("fast-forward updating base branch ref", { branch, baseBranch });
+      await this.baseGit.raw(["fetch", ".", `${branch}:${baseBranch}`]);
       log.info("fast-forward merge complete", { branch, baseBranch });
       return { success: true, conflicted: false };
     } catch (err) {
