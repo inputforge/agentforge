@@ -10,6 +10,11 @@ import { errorMeta, logger } from "../lib/logger.ts";
 
 const log = logger.child("orchestrator");
 
+function normalizedBranchName(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 /** Derive a concise title from the description — first sentence, capped at 72 chars. */
 function titleFromDescription(description: string): string | null {
   const trimmed = description.trim();
@@ -110,7 +115,10 @@ export class OrchestratorService {
     let worktreePath = `/tmp/agentforge/${ticketId}`;
     let branch = `agent/${ticketId}`;
     const baseBranch =
-      ticket.baseBranch ?? config?.baseBranch ?? (git ? await git.currentBranch() : "main");
+      normalizedBranchName(ticket.baseBranch) ??
+      normalizedBranchName(config?.baseBranch) ??
+      normalizedBranchName(git ? await git.currentBranch() : "main") ??
+      "main";
 
     mkdirSync(worktreePath, { recursive: true });
 

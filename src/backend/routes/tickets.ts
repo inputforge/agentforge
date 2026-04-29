@@ -160,13 +160,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       const remoteConfig = remoteStmts.get.get();
       if (remoteConfig) {
         const git = new GitWorktreeManager(remoteConfig.localPath);
-        await git.removeWorktree(existing.worktree).catch((err) => {
-          log.warn("failed to remove worktree on ticket delete", {
-            ticketId: id,
-            worktree: existing.worktree,
-            ...errorMeta(err),
-          });
-        });
+        await git.removeWorktree(existing.worktree);
       }
     }
 

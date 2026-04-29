@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import { remoteStmts } from "../db/index.ts";
+import { errorMeta, logger } from "../lib/logger.ts";
 import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { RemoteConfig } from "../../common/types.ts";
 
 export const remoteRouter = new Hono();
+const log = logger.child("remote");
 
 remoteRouter.get("/config", (c) => {
   const config = remoteStmts.get.get();
@@ -19,7 +21,8 @@ remoteRouter.get("/branches", async (c) => {
     const branches = await git.listBranches();
     return c.json({ branches });
   } catch (err) {
-    return c.json({ error: (err as Error).message }, 500);
+    log.error("failed to list branches", { localPath: config.localPath, ...errorMeta(err) });
+    return c.json({ error: "Internal server error" }, 500);
   }
 });
 

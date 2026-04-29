@@ -14,6 +14,7 @@ export function AgentDetailPanel() {
 
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
+  const { remoteConfig } = useStore();
 
   const [isMerging, setIsMerging] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -242,7 +243,7 @@ export function AgentDetailPanel() {
               <GitBranch size={12} className="text-forge-text-dim" />
               <select
                 className="forge-input w-auto min-w-[124px] py-0.5 px-2 text-xs"
-                value={agent.baseBranch}
+                value={agent.baseBranch ?? remoteConfig?.baseBranch ?? branchOptions[0]?.name ?? ""}
                 onChange={handleBaseBranchChange}
                 disabled={isUpdatingBaseBranch}
                 title="Select the target branch for diff, rebase, and merge"
@@ -262,7 +263,9 @@ export function AgentDetailPanel() {
               disabled={isMerging}
             >
               <GitMerge size={12} />
-              {isMerging ? "MERGING..." : `MERGE TO ${agent.baseBranch.toUpperCase()}`}
+              {isMerging
+                ? "MERGING..."
+                : `MERGE TO ${(agent.baseBranch ?? remoteConfig?.baseBranch ?? "BASE").toUpperCase()}`}
             </button>
           )}
           {agent.status === "error" && ticket.status === "in-progress" && (
