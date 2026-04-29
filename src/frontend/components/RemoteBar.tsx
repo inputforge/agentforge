@@ -83,7 +83,7 @@ export function RemoteBar() {
         <>
           <span className="text-forge-border">·</span>
           <GitBranch size={11} className="flex-shrink-0" />
-          <span className="text-forge-text text-xs">{branch}</span>
+          <span className="text-forge-text-dim text-xs">HEAD {branch}</span>
         </>
       )}
     </div>

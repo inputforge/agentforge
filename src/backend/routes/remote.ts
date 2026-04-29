@@ -1,13 +1,29 @@
 import { Hono } from "hono";
 import { remoteStmts } from "../db/index.ts";
+import { errorMeta, logger } from "../lib/logger.ts";
 import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { RemoteConfig } from "../../common/types.ts";
 
 export const remoteRouter = new Hono();
+const log = logger.child("remote");
 
 remoteRouter.get("/config", (c) => {
   const config = remoteStmts.get.get();
   return c.json(config);
+});
+
+remoteRouter.get("/branches", async (c) => {
+  const config = remoteStmts.get.get();
+  if (!config?.localPath) return c.json({ branches: [] });
+
+  try {
+    const git = new GitWorktreeManager(config.localPath);
+    const branches = await git.listBranches();
+    return c.json({ branches });
+  } catch (err) {
+    log.error("failed to list branches", { localPath: config.localPath, ...errorMeta(err) });
+    return c.json({ error: "Internal server error" }, 500);
+  }
 });
 
 // Detect the git repo at a given path (or CWD / REPO_PATH if not provided).

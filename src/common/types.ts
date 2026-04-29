@@ -7,6 +7,7 @@ export interface Ticket {
   title: string;
   description: string;
   status: TicketStatus;
+  baseBranch?: string | null;
   agentId?: string | null;
   worktree?: string | null;
   branch?: string | null;
@@ -36,6 +37,11 @@ export interface RemoteConfig {
   localPath: string;
 }
 
+export interface GitBranchInfo {
+  name: string;
+  current: boolean;
+}
+
 export interface DiffLine {
   type: "add" | "remove" | "context";
   content: string;
@@ -60,6 +66,7 @@ export interface DiffResult {
   totalDeletions: number;
   raw: string;
   generatedRaw?: string;
+  isDiverged?: boolean;
 }
 
 export interface MergeResult {

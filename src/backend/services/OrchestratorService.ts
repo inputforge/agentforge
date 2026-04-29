@@ -10,6 +10,11 @@ import { errorMeta, logger } from "../lib/logger.ts";
 
 const log = logger.child("orchestrator");
 
+function normalizedBranchName(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 /** Derive a concise title from the description — first sentence, capped at 72 chars. */
 function titleFromDescription(description: string): string | null {
   const trimmed = description.trim();
@@ -109,13 +114,17 @@ export class OrchestratorService {
 
     let worktreePath = `/tmp/agentforge/${ticketId}`;
     let branch = `agent/${ticketId}`;
-    const baseBranch = config?.baseBranch ?? "main";
+    const baseBranch =
+      normalizedBranchName(ticket.baseBranch) ??
+      normalizedBranchName(config?.baseBranch) ??
+      normalizedBranchName(git ? await git.currentBranch() : "main") ??
+      "main";
 
     mkdirSync(worktreePath, { recursive: true });
 
     if (git && config) {
       try {
-        const result = await git.createWorktree(ticketId);
+        const result = await git.createWorktree(ticketId, baseBranch);
         worktreePath = result.worktreePath;
         branch = result.branch;
       } catch (err) {
@@ -244,16 +253,10 @@ export class OrchestratorService {
     }
   }
 
-  private async cleanupTicket(ticketId: string): Promise<void> {
+  private cleanupTicket(ticketId: string): void {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
-
     agentProcessManager.kill(ticket.agentId);
-
-    if (ticket.worktree) {
-      const git = this.getGitManager();
-      if (git) await git.removeWorktree(ticket.worktree).catch(() => {});
-    }
   }
 
   private async handleAgentExit(
