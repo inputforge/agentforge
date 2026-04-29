@@ -107,23 +107,17 @@ export function AgentDetailPanel() {
     if (!agentId) return;
     setIsCommitting(true);
     try {
-      if (agent?.status === "running") {
-        await api.agents.sendInput(
-          agentId,
-          "Please commit all current changes with a descriptive commit message.\n",
-        );
-        addNotification({ type: "info", message: "Asked agent to commit changes." });
-      } else {
-        await api.agents.commit(agentId);
-        addNotification({ type: "info", message: "Changes committed." });
-        fetchDiff();
-      }
+      await api.agents.sendInput(
+        agentId,
+        "Please commit all current changes with a descriptive commit message.\n",
+      );
+      addNotification({ type: "info", message: "Asked agent to commit changes." });
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCommitting(false);
     }
-  }, [agentId, agent?.status, addNotification, fetchDiff]);
+  }, [agentId, addNotification]);
 
   const handleRebase = useCallback(async () => {
     if (!agentId) return;
