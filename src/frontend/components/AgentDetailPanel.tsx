@@ -79,7 +79,7 @@ export function AgentDetailPanel() {
     try {
       const result = await api.agents.merge(agentId);
       if (result.success) {
-        addNotification({ type: "info", message: `Merged ${ticket.branch} to main.` });
+        addNotification({ type: "info", message: `Merged ${ticket.branch} successfully.` });
         closeTicket();
       } else if (result.conflicted) {
         addNotification({
@@ -128,27 +128,18 @@ export function AgentDetailPanel() {
         addNotification({ type: "info", message: "Rebase completed successfully." });
         fetchDiff();
       } else if (result.conflicted) {
-        if (agent?.status === "running") {
-          await api.agents.sendInput(
-            agentId,
-            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\n",
-          );
-          addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
-        } else {
-          addNotification({
-            type: "merge-conflict",
-            message: "Rebase conflict detected — aborted. Relaunch agent to resolve.",
-            ticketId: ticket?.id,
-            agentId,
-          });
-        }
+        await api.agents.sendInput(
+          agentId,
+          "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\r",
+        );
+        addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
       }
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsRebasing(false);
     }
-  }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
+  }, [agentId, addNotification, fetchDiff]);
 
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;
@@ -205,7 +196,7 @@ export function AgentDetailPanel() {
               disabled={isMerging}
             >
               <GitMerge size={12} />
-              {isMerging ? "MERGING..." : "MERGE TO MAIN"}
+              {isMerging ? "MERGING..." : "MERGE"}
             </button>
           )}
           {agent.status === "error" && ticket.status === "in-progress" && (
