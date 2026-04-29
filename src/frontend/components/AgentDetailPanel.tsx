@@ -218,15 +218,17 @@ export function AgentDetailPanel() {
               {isRelaunching ? "LAUNCHING..." : "RELAUNCH"}
             </button>
           )}
-          <button
-            className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
-            onClick={handleRebase}
-            disabled={isRebasing}
-            title="Rebase agent branch onto base branch"
-          >
-            <GitBranch size={12} />
-            {isRebasing ? "REBASING..." : "REBASE"}
-          </button>
+          {diff?.isDiverged && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleRebase}
+              disabled={isRebasing}
+              title="Rebase agent branch onto base branch"
+            >
+              <GitBranch size={12} />
+              {isRebasing ? "REBASING..." : "REBASE"}
+            </button>
+          )}
           {diff && diff.files.length > 0 && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"

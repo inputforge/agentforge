@@ -60,6 +60,7 @@ export interface DiffResult {
   totalDeletions: number;
   raw: string;
   generatedRaw?: string;
+  isDiverged?: boolean;
 }
 
 export interface MergeResult {
