@@ -244,16 +244,10 @@ export class OrchestratorService {
     }
   }
 
-  private async cleanupTicket(ticketId: string): Promise<void> {
+  private cleanupTicket(ticketId: string): void {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
-
     agentProcessManager.kill(ticket.agentId);
-
-    if (ticket.worktree) {
-      const git = this.getGitManager();
-      if (git) await git.removeWorktree(ticket.worktree).catch(() => {});
-    }
   }
 
   private async handleAgentExit(

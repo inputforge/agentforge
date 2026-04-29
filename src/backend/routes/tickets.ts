@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
-import { agentStmts, ticketStmts } from "../db/index.ts";
+import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import type { AgentType, Ticket, TicketStatus } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 
 const VALID_STATUSES: TicketStatus[] = ["backlog", "in-progress", "review", "done"];
 const VALID_AGENT_TYPES: AgentType[] = ["claude-code", "codex", "custom"];
@@ -109,6 +110,20 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     const id = c.req.param("id");
     const existing = ticketStmts.get.get(id);
     if (!existing) return c.json({ error: "ticket not found" }, 404);
+
+    if (existing.worktree) {
+      const remoteConfig = remoteStmts.get.get();
+      if (remoteConfig) {
+        const git = new GitWorktreeManager(remoteConfig.localPath);
+        await git.removeWorktree(existing.worktree).catch((err) => {
+          log.warn("failed to remove worktree on ticket delete", {
+            ticketId: id,
+            worktree: existing.worktree,
+            ...errorMeta(err),
+          });
+        });
+      }
+    }
 
     ticketStmts.delete.run(id);
     broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });

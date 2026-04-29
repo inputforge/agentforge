@@ -62,13 +62,6 @@ agentsRouter.post("/:id/merge", async (c) => {
         const updatedTicket = ticketStmts.get.get(ticket.id);
         if (updatedTicket) broadcastNotification({ type: "ticket-updated", ticket: updatedTicket });
         broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });
-        await git.removeWorktree(agent.worktreePath).catch((err) => {
-          log.warn("failed to remove worktree after merge", {
-            agentId: agent.id,
-            worktreePath: agent.worktreePath,
-            ...errorMeta(err),
-          });
-        });
       }
     } else if (result.conflicted) {
       log.warn("merge aborted: rebase conflict", { agentId: agent.id, branch: agent.branch });
