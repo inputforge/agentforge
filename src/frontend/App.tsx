@@ -34,7 +34,6 @@ function KanbanPage() {
       </main>
       <CreateTicketModal />
       <IntegrationsModal open={integrationsOpen} onClose={closeIntegrations} />
-      <NotificationToast />
       {shellOpen && <ShellTerminal onClose={closeShell} />}
     </div>
   );
@@ -57,6 +56,7 @@ export function App() {
         <Route path="/" element={kanbanElement} />
         <Route path="/agent/:ticketId" element={agentElement} />
       </Routes>
+      <NotificationToast />
     </SessionSocketProvider>
   );
 }
