@@ -26,6 +26,7 @@ type RawTicket = {
   title: string;
   description: string;
   status: string;
+  baseBranch: string | null;
   agentId: string | null;
   worktree: string | null;
   branch: string | null;
@@ -51,6 +52,7 @@ type RawAgent = {
 
 const TICKET_COLS = `
   id, title, description, status,
+  base_branch AS baseBranch,
   agent_id    AS agentId,
   worktree,
   branch,
@@ -106,12 +108,13 @@ export const ticketStmts = {
       $title: string;
       $description: string;
       $status: string;
+      $baseBranch: string | null;
       $createdAt: number;
       $updatedAt: number;
     }): void => {
       db.query(
-        `INSERT INTO tickets (id, title, description, status, created_at, updated_at)
-         VALUES ($id, $title, $description, $status, $createdAt, $updatedAt)`,
+        `INSERT INTO tickets (id, title, description, status, base_branch, created_at, updated_at)
+         VALUES ($id, $title, $description, $status, $baseBranch, $createdAt, $updatedAt)`,
       ).run(args);
     },
   },
@@ -148,6 +151,13 @@ export const ticketStmts = {
     run: (args: { $agentTitle: string; $updatedAt: number; $id: string }): void => {
       db.query(
         "UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id",
+      ).run(args);
+    },
+  },
+  updateBaseBranch: {
+    run: (args: { $baseBranch: string; $updatedAt: number; $id: string }): void => {
+      db.query(
+        "UPDATE tickets SET base_branch = $baseBranch, updated_at = $updatedAt WHERE id = $id",
       ).run(args);
     },
   },
@@ -216,6 +226,11 @@ export const agentStmts = {
       db.query(
         "UPDATE agents SET session_id = $sessionId WHERE id = $id AND session_id IS NULL",
       ).run(args);
+    },
+  },
+  updateBaseBranch: {
+    run: (args: { $baseBranch: string; $id: string }): void => {
+      db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
     },
   },
 };

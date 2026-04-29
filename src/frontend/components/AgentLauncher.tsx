@@ -1,8 +1,8 @@
-import { ChevronRight, Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { ChevronRight, GitBranch, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, Ticket } from "../types";
+import type { AgentType, GitBranchInfo, Ticket } from "../types";
 
 const AGENTS: { type: AgentType; label: string; sub: string; command: string }[] = [
   {
@@ -53,10 +53,19 @@ function AgentButton({ a, launching, onLaunch }: AgentButtonProps) {
 }
 
 export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
-  const { addNotification, updateTicket, setAgent } = useStore();
+  const { addNotification, remoteConfig, updateTicket, setAgent } = useStore();
   const [launching, setLaunching] = useState<AgentType | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [customCmd, setCustomCmd] = useState("");
+  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
+  const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
+
+  useEffect(() => {
+    api.remote
+      .listBranches()
+      .then(({ branches: nextBranches }) => setBranches(nextBranches))
+      .catch(() => {});
+  }, []);
 
   const launch = useCallback(
     async (type: AgentType, custom?: string) => {
@@ -89,6 +98,24 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
     if (customCmd.trim()) launch("custom", customCmd.trim());
   }, [customCmd, launch]);
 
+  const handleBaseBranchChange = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextBranch = e.target.value;
+      if (!nextBranch || nextBranch === ticket.baseBranch) return;
+
+      setIsUpdatingBaseBranch(true);
+      try {
+        const result = await api.tickets.updateBaseBranch(ticket.id, nextBranch);
+        if (result.ticket) updateTicket(result.ticket.id, result.ticket);
+      } catch (err) {
+        addNotification({ type: "error", message: (err as Error).message });
+      } finally {
+        setIsUpdatingBaseBranch(false);
+      }
+    },
+    [ticket.id, ticket.baseBranch, updateTicket, addNotification],
+  );
+
   const handleHideCustom = useCallback(() => setShowCustom(false), []);
   const handleShowCustom = useCallback(() => setShowCustom(true), []);
 
@@ -109,6 +136,24 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
           <p className="text-forge-text-bright text-sm font-medium">{ticket.title}</p>
           {ticket.description && (
             <p className="text-forge-text-dim text-xs mt-1 leading-relaxed">{ticket.description}</p>
+          )}
+          {branches.length > 0 && (
+            <div className="mt-4 flex items-center gap-2">
+              <GitBranch size={12} className="text-forge-text-dim" />
+              <select
+                className="forge-input w-auto min-w-[160px] py-1 px-2 text-xs"
+                value={ticket.baseBranch ?? remoteConfig?.baseBranch ?? branches[0]?.name ?? ""}
+                onChange={handleBaseBranchChange}
+                disabled={isUpdatingBaseBranch}
+                title="Select the branch this ticket should commit and merge into"
+              >
+                {branches.map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 

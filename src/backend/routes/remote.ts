@@ -10,6 +10,19 @@ remoteRouter.get("/config", (c) => {
   return c.json(config);
 });
 
+remoteRouter.get("/branches", async (c) => {
+  const config = remoteStmts.get.get();
+  if (!config?.localPath) return c.json({ branches: [] });
+
+  try {
+    const git = new GitWorktreeManager(config.localPath);
+    const branches = await git.listBranches();
+    return c.json({ branches });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
+});
+
 // Detect the git repo at a given path (or CWD / REPO_PATH if not provided).
 // Saves the result as the active config and returns it.
 remoteRouter.post("/detect", async (c) => {

@@ -1,7 +1,7 @@
 import { simpleGit, type SimpleGit } from "simple-git";
 import { join } from "path";
 import { existsSync, mkdirSync, readFileSync } from "fs";
-import type { DiffResult, RemoteConfig } from "../../common/types.ts";
+import type { DiffResult, GitBranchInfo, RemoteConfig } from "../../common/types.ts";
 import { isGeneratedFile } from "../../common/generatedFiles.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
@@ -45,6 +45,13 @@ export class GitWorktreeManager {
     return (await this.baseGit.revparse(["--abbrev-ref", "HEAD"])).trim();
   }
 
+  async listBranches(): Promise<GitBranchInfo[]> {
+    const summary = await this.baseGit.branchLocal();
+    return summary.all
+      .filter((name) => !name.startsWith("agent/"))
+      .map((name) => ({ name, current: name === summary.current }));
+  }
+
   async clone(url: string, targetPath: string): Promise<void> {
     const parentDir = join(targetPath, "..");
     if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
@@ -61,7 +68,10 @@ export class GitWorktreeManager {
     await this.baseGit.push("origin", branch, ["--set-upstream"]);
   }
 
-  async createWorktree(ticketId: string): Promise<{ worktreePath: string; branch: string }> {
+  async createWorktree(
+    ticketId: string,
+    baseBranch: string,
+  ): Promise<{ worktreePath: string; branch: string }> {
     const branch = `agent/${ticketId}`;
     const worktreePath = join(this.repoPath, ".agentforge/worktrees", ticketId);
 
@@ -76,8 +86,9 @@ export class GitWorktreeManager {
     }
 
     try {
-      // Happy path: create new branch and worktree together
-      await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath]);
+      // Create the agent branch from the selected base branch, not whatever
+      // happens to be checked out in the main worktree.
+      await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath, baseBranch]);
       log.info("worktree created", { ticketId, worktreePath, branch });
     } catch {
       // Branch already exists (e.g. agent restarted after exit) — check it out without -b

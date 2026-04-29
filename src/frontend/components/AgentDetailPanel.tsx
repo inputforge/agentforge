@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, DiffResult } from "../types";
+import type { AgentType, DiffResult, GitBranchInfo } from "../types";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
@@ -21,6 +21,8 @@ export function AgentDetailPanel() {
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [diff, setDiff] = useState<DiffResult | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
+  const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
+  const [branchOptions, setBranchOptions] = useState<GitBranchInfo[]>([]);
   const diffIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const agentId = agent?.id;
@@ -73,13 +75,24 @@ export function AgentDetailPanel() {
     };
   }, [agentId, agent?.status, fetchDiff]);
 
+  useEffect(() => {
+    if (!agentId) return;
+    api.remote
+      .listBranches()
+      .then(({ branches }) => setBranchOptions(branches))
+      .catch(() => {});
+  }, [agentId]);
+
   const handleMerge = useCallback(async () => {
-    if (!agentId || !ticket) return;
+    if (!agentId || !ticket || !agent) return;
     setIsMerging(true);
     try {
       const result = await api.agents.merge(agentId);
       if (result.success) {
-        addNotification({ type: "info", message: `Merged ${ticket.branch} to main.` });
+        addNotification({
+          type: "info",
+          message: `Merged ${ticket.branch} into ${agent.baseBranch}.`,
+        });
         closeTicket();
       } else if (result.conflicted) {
         addNotification({
@@ -96,7 +109,7 @@ export function AgentDetailPanel() {
     } finally {
       setIsMerging(false);
     }
-  }, [agentId, ticket, addNotification, closeTicket]);
+  }, [agentId, ticket, agent, addNotification, closeTicket]);
 
   const handleKill = useCallback(() => {
     if (!agentId) return;
@@ -104,20 +117,21 @@ export function AgentDetailPanel() {
   }, [agentId]);
 
   const handleCommit = useCallback(async () => {
-    if (!agentId) return;
+    if (!agentId || !agent) return;
     setIsCommitting(true);
     try {
-      await api.agents.sendInput(
-        agentId,
-        "Please commit all current changes with a descriptive commit message.\n",
-      );
-      addNotification({ type: "info", message: "Asked agent to commit changes." });
+      await api.agents.commit(agentId);
+      addNotification({
+        type: "info",
+        message: `Committed changes on ${agent.branch}.`,
+      });
+      fetchDiff();
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCommitting(false);
     }
-  }, [agentId, addNotification]);
+  }, [agentId, agent, addNotification, fetchDiff]);
 
   const handleRebase = useCallback(async () => {
     if (!agentId) return;
@@ -149,6 +163,31 @@ export function AgentDetailPanel() {
       setIsRebasing(false);
     }
   }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
+
+  const handleBaseBranchChange = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      if (!ticket) return;
+      const nextBranch = e.target.value;
+      if (!nextBranch || nextBranch === (agent?.baseBranch ?? ticket.baseBranch)) return;
+
+      setIsUpdatingBaseBranch(true);
+      try {
+        const result = await api.tickets.updateBaseBranch(ticket.id, nextBranch);
+        if (result.ticket) updateTicket(result.ticket.id, result.ticket);
+        if (result.agent) setAgent(result.agent);
+        addNotification({
+          type: "info",
+          message: `Set this ticket to merge into ${nextBranch}.`,
+        });
+        fetchDiff();
+      } catch (err) {
+        addNotification({ type: "error", message: (err as Error).message });
+      } finally {
+        setIsUpdatingBaseBranch(false);
+      }
+    },
+    [ticket, agent, updateTicket, setAgent, addNotification, fetchDiff],
+  );
 
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;
@@ -198,6 +237,24 @@ export function AgentDetailPanel() {
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {branchOptions.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <GitBranch size={12} className="text-forge-text-dim" />
+              <select
+                className="forge-input w-auto min-w-[124px] py-0.5 px-2 text-xs"
+                value={agent.baseBranch}
+                onChange={handleBaseBranchChange}
+                disabled={isUpdatingBaseBranch}
+                title="Select the target branch for diff, rebase, and merge"
+              >
+                {branchOptions.map((option) => (
+                  <option key={option.name} value={option.name}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {ticket.status === "review" && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
@@ -205,7 +262,7 @@ export function AgentDetailPanel() {
               disabled={isMerging}
             >
               <GitMerge size={12} />
-              {isMerging ? "MERGING..." : "MERGE TO MAIN"}
+              {isMerging ? "MERGING..." : `MERGE TO ${agent.baseBranch.toUpperCase()}`}
             </button>
           )}
           {agent.status === "error" && ticket.status === "in-progress" && (

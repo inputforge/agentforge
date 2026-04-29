@@ -1,6 +1,7 @@
 import type {
   Agent,
   DiffResult,
+  GitBranchInfo,
   GitHubIssue,
   IntegrationConfig,
   LinearIssue,
@@ -38,6 +39,11 @@ export const api = {
       request<Ticket>(`/tickets/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
+      }),
+    updateBaseBranch: (id: string, baseBranch: string) =>
+      request<{ ticket: Ticket | null; agent: Agent | null }>(`/tickets/${id}/base-branch`, {
+        method: "PATCH",
+        body: JSON.stringify({ baseBranch }),
       }),
     delete: (id: string) => request<void>(`/tickets/${id}`, { method: "DELETE" }),
     spawn: (id: string, agentType: "claude-code" | "codex" | "custom", customCommand?: string) =>
@@ -103,6 +109,7 @@ export const api = {
         body: JSON.stringify({ branch, localPath }),
       }),
     getConfig: () => request<RemoteConfig | null>("/remote/config"),
+    listBranches: () => request<{ branches: GitBranchInfo[] }>("/remote/branches"),
     getBranch: () => request<{ branch: string | null }>("/remote/branch"),
     detect: (path?: string) =>
       request<RemoteConfig>("/remote/detect", { method: "POST", body: JSON.stringify({ path }) }),

@@ -30,6 +30,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       title: body.title.trim(),
       description: body.description?.trim() ?? "",
       status: "backlog",
+      baseBranch: remoteStmts.get.get()?.baseBranch ?? null,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -39,6 +40,7 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       $title: ticket.title,
       $description: ticket.description,
       $status: ticket.status,
+      $baseBranch: ticket.baseBranch ?? null,
       $createdAt: ticket.createdAt,
       $updatedAt: ticket.updatedAt,
     });
@@ -101,6 +103,49 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       const updatedTicket = ticketStmts.get.get(id);
       const agent = updatedTicket?.agentId ? agentStmts.get.get(updatedTicket.agentId) : null;
       return c.json({ ticket: updatedTicket, agent });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 500);
+    }
+  });
+
+  app.patch("/:id/base-branch", async (c) => {
+    const id = c.req.param("id");
+    const ticket = ticketStmts.get.get(id);
+    if (!ticket) return c.json({ error: "ticket not found" }, 404);
+
+    const remoteConfig = remoteStmts.get.get();
+    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+
+    const body = await c.req
+      .json<{ baseBranch?: string }>()
+      .catch(() => ({ baseBranch: undefined }) as { baseBranch?: string });
+    const baseBranch = body.baseBranch?.trim();
+    if (!baseBranch) return c.json({ error: "baseBranch is required" }, 400);
+
+    try {
+      const git = new GitWorktreeManager(remoteConfig.localPath);
+      const branches = await git.listBranches();
+      if (!branches.some((branch) => branch.name === baseBranch)) {
+        return c.json({ error: `Unknown branch: ${baseBranch}` }, 400);
+      }
+
+      ticketStmts.updateBaseBranch.run({
+        $baseBranch: baseBranch,
+        $updatedAt: Date.now(),
+        $id: id,
+      });
+
+      if (ticket.agentId) {
+        agentStmts.updateBaseBranch.run({ $baseBranch: baseBranch, $id: ticket.agentId });
+      }
+
+      const updatedTicket = ticketStmts.get.get(id);
+      const updatedAgent = updatedTicket?.agentId
+        ? agentStmts.get.get(updatedTicket.agentId)
+        : null;
+      if (updatedTicket) broadcastNotification({ type: "ticket-updated", ticket: updatedTicket });
+      if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
+      return c.json({ ticket: updatedTicket, agent: updatedAgent });
     } catch (err) {
       return c.json({ error: (err as Error).message }, 500);
     }

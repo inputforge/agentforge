@@ -7,6 +7,7 @@ export interface Ticket {
   title: string;
   description: string;
   status: TicketStatus;
+  baseBranch?: string | null;
   agentId?: string | null;
   worktree?: string | null;
   branch?: string | null;
@@ -34,6 +35,11 @@ export interface RemoteConfig {
   repoUrl: string;
   baseBranch: string;
   localPath: string;
+}
+
+export interface GitBranchInfo {
+  name: string;
+  current: boolean;
 }
 
 export interface DiffLine {
