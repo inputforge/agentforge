@@ -45,14 +45,23 @@ agentsRouter.post("/:id/merge", async (c) => {
   const remoteConfig = remoteStmts.get.get();
   if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
 
+  // Don't abort on conflict when agent is running — leave the worktree in conflicted
+  // state so the agent can resolve it, then the user can retry the merge.
+  const abortOnConflict = agent.status !== "running";
   log.info("merge requested", {
     agentId: agent.id,
     branch: agent.branch,
     baseBranch: remoteConfig.baseBranch,
+    abortOnConflict,
   });
   try {
     const git = new GitWorktreeManager(remoteConfig.localPath);
-    const result = await git.mergeToBase(agent.worktreePath, agent.branch, remoteConfig.baseBranch);
+    const result = await git.mergeToBase(
+      agent.worktreePath,
+      agent.branch,
+      remoteConfig.baseBranch,
+      abortOnConflict,
+    );
 
     if (result.success) {
       log.info("merge succeeded", { agentId: agent.id, branch: agent.branch });

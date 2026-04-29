@@ -82,12 +82,21 @@ export function AgentDetailPanel() {
         addNotification({ type: "info", message: `Merged ${ticket.branch} successfully.` });
         closeTicket();
       } else if (result.conflicted) {
-        addNotification({
-          type: "merge-conflict",
-          message: "Conflict during rebase — retrying.",
-          ticketId: ticket.id,
-          agentId,
-        });
+        if (agent?.status === "running") {
+          await api.agents.sendInput(
+            agentId,
+            "There are conflicts when rebasing onto the base branch during the merge. Please resolve the conflicts, complete the rebase with `git rebase --continue`, and notify me when done.\n",
+          );
+          addNotification({ type: "info", message: "Asked agent to fix merge conflicts." });
+        } else {
+          addNotification({
+            type: "merge-conflict",
+            message:
+              "Conflict during rebase — click REBASE to resolve conflicts, then retry merge.",
+            ticketId: ticket.id,
+            agentId,
+          });
+        }
       } else {
         addNotification({ type: "error", message: result.error ?? "Merge failed." });
       }
@@ -96,7 +105,7 @@ export function AgentDetailPanel() {
     } finally {
       setIsMerging(false);
     }
-  }, [agentId, ticket, addNotification, closeTicket]);
+  }, [agentId, agent?.status, ticket, addNotification, closeTicket]);
 
   const handleKill = useCallback(() => {
     if (!agentId) return;
@@ -128,18 +137,27 @@ export function AgentDetailPanel() {
         addNotification({ type: "info", message: "Rebase completed successfully." });
         fetchDiff();
       } else if (result.conflicted) {
-        await api.agents.sendInput(
-          agentId,
-          "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\r",
-        );
-        addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
+        if (agent?.status === "running") {
+          await api.agents.sendInput(
+            agentId,
+            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\n",
+          );
+          addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
+        } else {
+          addNotification({
+            type: "merge-conflict",
+            message: "Rebase conflict detected — aborted. Relaunch agent to resolve.",
+            ticketId: ticket?.id,
+            agentId,
+          });
+        }
       }
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsRebasing(false);
     }
-  }, [agentId, addNotification, fetchDiff]);
+  }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
 
   const handleRelaunch = useCallback(async () => {
     if (!agent || !ticket) return;

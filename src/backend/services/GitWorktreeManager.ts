@@ -166,8 +166,9 @@ export class GitWorktreeManager {
     worktreePath: string,
     branch: string,
     baseBranch: string,
+    abortOnConflict = true,
   ): Promise<{ success: boolean; conflicted: boolean; error?: string }> {
-    log.info("mergeToBase started", { branch, baseBranch, worktreePath });
+    log.info("mergeToBase started", { branch, baseBranch, worktreePath, abortOnConflict });
 
     // Refuse if the main worktree has staged or unstaged tracked-file changes
     const status = await this.baseGit.status();
@@ -194,7 +195,7 @@ export class GitWorktreeManager {
     }
 
     // Rebase agent branch onto local base branch for linear history
-    const rebaseResult = await this.rebase(worktreePath, baseBranch);
+    const rebaseResult = await this.rebase(worktreePath, baseBranch, abortOnConflict);
     if (!rebaseResult.success) {
       return { success: false, conflicted: true };
     }
