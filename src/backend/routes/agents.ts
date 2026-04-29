@@ -48,11 +48,11 @@ agentsRouter.post("/:id/merge", async (c) => {
   log.info("merge requested", {
     agentId: agent.id,
     branch: agent.branch,
-    baseBranch: remoteConfig.baseBranch,
+    baseBranch: agent.baseBranch,
   });
   try {
     const git = new GitWorktreeManager(remoteConfig.localPath);
-    const result = await git.mergeToBase(agent.worktreePath, agent.branch, remoteConfig.baseBranch);
+    const result = await git.mergeToBase(agent.worktreePath, agent.branch, agent.baseBranch);
 
     if (result.success) {
       log.info("merge succeeded", { agentId: agent.id, branch: agent.branch });
