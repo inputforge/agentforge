@@ -84,6 +84,9 @@ class GitWatcher {
     } else if (filename.startsWith("refs/heads/")) {
       const branch = filename.slice("refs/heads/".length);
       this.debounce(`ref:${branch}`, () => this.onRefChanged(branch), 300);
+      this.debounce("branches-updated", () => this.broadcast?.({ type: "branches-updated" }), 200);
+    } else if (filename === "packed-refs") {
+      this.debounce("branches-updated", () => this.broadcast?.({ type: "branches-updated" }), 200);
     }
   }
 
