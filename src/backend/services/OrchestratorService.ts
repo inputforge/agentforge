@@ -43,7 +43,7 @@ function buildCommand(
   switch (agentType) {
     case "claude-code":
       if (sessionId) {
-        return `claude --resume ${sessionId} --enable-auto-mode`;
+        return `claude --resume ${shellQuote(sessionId)} --enable-auto-mode`;
       }
       return prompt
         ? `claude --enable-auto-mode -- ${shellQuote(prompt)}`

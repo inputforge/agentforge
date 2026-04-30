@@ -92,10 +92,12 @@ export const wsHandlers = {
     const scrollback = agentScrollback.get(agentId) ?? [];
 
     if (emitter) {
-      // Running agent: do NOT replay scrollback. Claude Code's TUI uses
-      // cursor-movement sequences to maintain its status bar and progress
-      // display; replaying those against a fresh terminal state produces
-      // duplicate/garbled output. The agent will redraw on its next output.
+      // Replay buffered output first so the reconnecting terminal isn't blank
+      // while the agent is idle or waiting for input, then attach the live handler
+      // so future PTY chunks continue to stream.
+      for (const chunk of scrollback) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+      }
       const handler = (data: string) => {
         if (ws.readyState === WebSocket.OPEN) ws.send(data);
       };
