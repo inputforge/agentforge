@@ -70,6 +70,7 @@ interface AppState {
 }
 
 let notifCounter = 0;
+let branchFetchId = 0;
 
 export const useStore = create<AppState>((set, get) => ({
   tickets: [],
@@ -219,9 +220,10 @@ export const useStore = create<AppState>((set, get) => ({
   openCreateModal: () => set({ isCreateModalOpen: true }),
   closeCreateModal: () => set({ isCreateModalOpen: false }),
   fetchBranches: async () => {
+    const id = ++branchFetchId;
     try {
       const { branches } = await api.remote.listBranches();
-      set({ branches });
+      if (id === branchFetchId) set({ branches });
     } catch {
       // ignore transient errors
     }

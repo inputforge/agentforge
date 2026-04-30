@@ -1,5 +1,3 @@
-import { watch } from "fs";
-import { join } from "path";
 import { Hono } from "hono";
 import { assets, index } from "./assets.ts";
 import { agentStmts, initDb, remoteStmts } from "./db/index.ts";
@@ -56,28 +54,6 @@ function startGitWatcherIfConfigured() {
 
 await seedRemoteConfigIfEmpty();
 startGitWatcherIfConfigured();
-
-// Watch .git/refs/heads/ and packed-refs — broadcast branches-updated when they change
-{
-  const config = remoteStmts.get.get();
-  if (config?.localPath) {
-    let debounce: ReturnType<typeof setTimeout> | null = null;
-    const notify = () => {
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => broadcastNotification({ type: "branches-updated" }), 200);
-    };
-    try {
-      watch(join(config.localPath, ".git", "refs", "heads"), { recursive: true }, notify);
-    } catch {
-      /* refs/heads may not exist in a fresh repo */
-    }
-    try {
-      watch(join(config.localPath, ".git", "packed-refs"), notify);
-    } catch {
-      /* packed-refs may not exist */
-    }
-  }
-}
 
 // Re-attach to any agents that were running when the server last shut down
 {
