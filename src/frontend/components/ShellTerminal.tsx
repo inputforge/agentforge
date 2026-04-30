@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { X, TerminalSquare, FolderOpen } from "lucide-react";
+import { Terminal, type TerminalHandle } from "@wterm/react";
 import { api } from "../lib/api";
 import { useForgeTerminal } from "../hooks/useForgeTerminal";
+import { FORGE_TERMINAL_STYLE } from "../lib/terminalConfig";
+import type React from "react";
 
 interface ShellTerminalProps {
   onClose: () => void;
@@ -10,7 +13,7 @@ interface ShellTerminalProps {
 export function ShellTerminal({ onClose }: ShellTerminalProps) {
   const [wsUrl, setWsUrl] = useState<string | null>(null);
   const [cwd, setCwd] = useState("");
-  const { containerRef } = useForgeTerminal(wsUrl);
+  const { terminalRef, onData, onResize } = useForgeTerminal(wsUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +71,15 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
         </button>
       </div>
       <div className="flex-1 overflow-hidden bg-forge-black p-1">
-        <div ref={containerRef} className="w-full h-full" />
+        <Terminal
+          ref={terminalRef as React.Ref<TerminalHandle>}
+          onData={onData}
+          onResize={onResize}
+          autoResize
+          cursorBlink
+          className="w-full h-full"
+          style={FORGE_TERMINAL_STYLE as React.CSSProperties}
+        />
       </div>
     </div>
   );
