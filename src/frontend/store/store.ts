@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { Agent, AppNotification, RemoteConfig, Ticket, TicketStatus } from "../types";
+import type {
+  Agent,
+  AppNotification,
+  DiffResult,
+  RemoteConfig,
+  Ticket,
+  TicketStatus,
+} from "../types";
 import { api } from "../lib/api";
 
 // Registered by NavigateFnRegistrar in App.tsx so the store can trigger navigation.
@@ -14,6 +21,8 @@ interface AppState {
   agents: Record<string, Agent>;
   notifications: AppNotification[];
   remoteConfig: RemoteConfig | null;
+  currentBranch: string | null;
+  agentDiffs: Record<string, DiffResult>;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -42,6 +51,10 @@ interface AppState {
   addNotification: (n: Omit<AppNotification, "id" | "timestamp">) => void;
   dismissNotification: (id: string) => void;
 
+  // Git state actions
+  setCurrentBranch: (branch: string | null) => void;
+  setAgentDiff: (agentId: string, diff: DiffResult) => void;
+
   // UI actions
   openTicket: (ticketId: string) => void;
   closeTicket: () => void;
@@ -58,6 +71,8 @@ export const useStore = create<AppState>((set, get) => ({
   agents: {},
   notifications: [],
   remoteConfig: null,
+  currentBranch: null,
+  agentDiffs: {},
   activeTicketId: null,
   isCreateModalOpen: false,
   isConnected: false,
@@ -199,6 +214,9 @@ export const useStore = create<AppState>((set, get) => ({
   closeCreateModal: () => set({ isCreateModalOpen: false }),
   setConnected: (isConnected) => set({ isConnected }),
   setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
+  setCurrentBranch: (currentBranch) => set({ currentBranch }),
+  setAgentDiff: (agentId, diff) =>
+    set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
 }));
 
 export const selectTicketsByStatus = (status: TicketStatus) => (s: AppState) =>

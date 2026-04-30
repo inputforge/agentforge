@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { remoteStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+import { gitWatcher } from "../services/GitWatcher.ts";
 import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager.ts";
+import { broadcastNotification } from "../ws/hub.ts";
 import type { RemoteConfig } from "../../common/types.ts";
 
 export const remoteRouter = new Hono();
@@ -43,6 +45,8 @@ remoteRouter.post("/detect", async (c) => {
     $localPath: detected.localPath,
   });
 
+  gitWatcher.start(detected.localPath, broadcastNotification);
+
   return c.json(detected);
 });
 
@@ -78,6 +82,7 @@ remoteRouter.post("/clone", async (c) => {
       $baseBranch: config.baseBranch,
       $localPath: config.localPath,
     });
+    gitWatcher.start(config.localPath, broadcastNotification);
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: (err as Error).message }, 500);

@@ -1,6 +1,6 @@
 import { SiBitbucket, SiGit, SiGithub, SiGitlab } from "@icons-pack/react-simple-icons";
 import { GitBranch } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 
@@ -32,8 +32,7 @@ function parseRepo(url: string): { label: string; href?: string } {
 }
 
 export function RemoteBar() {
-  const { remoteConfig, setRemoteConfig } = useStore();
-  const [branch, setBranch] = useState<string | null>(null);
+  const { remoteConfig, setRemoteConfig, currentBranch, setCurrentBranch } = useStore();
 
   useEffect(() => {
     api.remote
@@ -44,17 +43,14 @@ export function RemoteBar() {
       .catch(() => {});
   }, [setRemoteConfig]);
 
+  // Fetch initial branch once; subsequent updates come via WS push
   useEffect(() => {
     if (!remoteConfig) return;
-    const fetchBranch = () =>
-      api.remote
-        .getBranch()
-        .then(({ branch: b }) => setBranch(b))
-        .catch(() => {});
-    fetchBranch();
-    const id = setInterval(fetchBranch, 5000);
-    return () => clearInterval(id);
-  }, [remoteConfig]);
+    api.remote
+      .getBranch()
+      .then(({ branch }) => setCurrentBranch(branch))
+      .catch(() => {});
+  }, [remoteConfig, setCurrentBranch]);
 
   if (!remoteConfig) {
     return (
@@ -79,11 +75,11 @@ export function RemoteBar() {
       ) : (
         <span className="text-forge-accent text-xs truncate max-w-[220px]">{label}</span>
       )}
-      {branch && (
+      {currentBranch && (
         <>
           <span className="text-forge-border">·</span>
           <GitBranch size={11} className="flex-shrink-0" />
-          <span className="text-forge-text-dim text-xs">HEAD {branch}</span>
+          <span className="text-forge-text-dim text-xs">HEAD {currentBranch}</span>
         </>
       )}
     </div>
