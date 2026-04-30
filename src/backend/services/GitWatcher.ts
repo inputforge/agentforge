@@ -14,10 +14,12 @@ class GitWatcher {
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private broadcast: BroadcastFn | null = null;
   private localPath: string | null = null;
+  private gitManager: GitWorktreeManager | null = null;
 
   start(localPath: string, broadcast: BroadcastFn): void {
     this.stop();
     this.localPath = localPath;
+    this.gitManager = new GitWorktreeManager(localPath);
     this.broadcast = broadcast;
 
     const gitDir = join(localPath, ".git");
@@ -61,7 +63,11 @@ class GitWatcher {
   unwatchWorktree(agentId: string): void {
     this.watchers.get(`worktree:${agentId}`)?.close();
     this.watchers.delete(`worktree:${agentId}`);
-    this.debounceTimers.delete(`diff:${agentId}`);
+    const timer = this.debounceTimers.get(`diff:${agentId}`);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(`diff:${agentId}`);
+    }
   }
 
   stop(): void {
@@ -69,6 +75,7 @@ class GitWatcher {
     this.watchers.clear();
     for (const t of this.debounceTimers.values()) clearTimeout(t);
     this.debounceTimers.clear();
+    this.gitManager = null;
   }
 
   private handleGitChange(filename: string): void {
@@ -128,7 +135,7 @@ class GitWatcher {
   }
 
   private git(): GitWorktreeManager | null {
-    return this.localPath ? new GitWorktreeManager(this.localPath) : null;
+    return this.gitManager;
   }
 }
 
