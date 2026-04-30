@@ -4,6 +4,7 @@ import { errorMeta, logger } from "../lib/logger.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
+import type { AgentType } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 
 const log = logger.child("agents");
@@ -92,22 +93,23 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const agent = agentStmts.get.get(c.req.param("id"));
     if (!agent) return c.json({ error: "agent not found" }, 404);
 
-    const remoteConfig = remoteStmts.get.get();
-    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+    let targetAgentId = agent.id;
 
-    const body = await c.req.json<{ message?: string }>().catch(() => ({ message: undefined }));
-    const message = body.message?.trim() || "chore: commit agent changes";
-
-    log.info("commit requested", { agentId: agent.id, message });
-    try {
-      const git = new GitWorktreeManager(remoteConfig.localPath);
-      await git.commitWorktree(agent.worktreePath, message);
-      log.info("commit succeeded", { agentId: agent.id });
-      return c.json({ ok: true });
-    } catch (err) {
-      log.error("commit failed", { agentId: agent.id, ...errorMeta(err) });
-      return c.json({ error: (err as Error).message }, 500);
+    if (!agentProcessManager.isRunning(agent.id)) {
+      log.info("spawning agent for commit", { agentId: agent.id, ticketId: agent.ticketId });
+      await orchestrator.spawnAgent(agent.ticketId, agent.type as AgentType);
+      const ticket = ticketStmts.get.get(agent.ticketId);
+      if (ticket?.agentId) targetAgentId = ticket.agentId;
     }
+
+    log.info("sending commit prompt", { agentId: targetAgentId });
+    agentProcessManager.write(
+      targetAgentId,
+      "Please commit all current changes with a descriptive commit message.",
+    );
+    await Bun.sleep(100);
+    agentProcessManager.write(targetAgentId, Buffer.from([0x0d]));
+    return c.json({ ok: true });
   });
 
   app.post("/:id/rebase", async (c) => {
@@ -117,24 +119,37 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const remoteConfig = remoteStmts.get.get();
     if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
 
-    const abortOnConflict = agent.status !== "running";
+    const isRunning = agentProcessManager.isRunning(agent.id);
+    // Only abort on conflict when the agent isn't running — if it is running,
+    // leave the worktree in the conflicted state so the agent can resolve it.
     log.info("rebase requested", {
       agentId: agent.id,
       baseBranch: agent.baseBranch,
-      abortOnConflict,
+      isRunning,
     });
     try {
       const git = new GitWorktreeManager(remoteConfig.localPath);
-      const result = await git.rebase(agent.worktreePath, agent.baseBranch, abortOnConflict);
+      const result = await git.rebase(agent.worktreePath, agent.baseBranch, !isRunning);
       if (result.success) {
         log.info("rebase succeeded", { agentId: agent.id });
       } else if (result.conflicted) {
-        log.warn("rebase conflict detected", { agentId: agent.id, abortOnConflict });
+        log.warn("rebase conflict detected", { agentId: agent.id, isRunning });
+        if (isRunning) {
+          agentProcessManager.write(
+            agent.id,
+            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.",
+          );
+          await Bun.sleep(100);
+          agentProcessManager.write(agent.id, Buffer.from([0x0d]));
+        }
       }
-      return c.json(result);
+      return c.json({ ...result, resolving: result.conflicted && isRunning });
     } catch (err) {
       log.error("rebase threw unexpected error", { agentId: agent.id, ...errorMeta(err) });
-      return c.json({ success: false, conflicted: false, error: (err as Error).message }, 500);
+      return c.json(
+        { success: false, conflicted: false, resolving: false, error: (err as Error).message },
+        500,
+      );
     }
   });
 

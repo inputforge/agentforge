@@ -58,9 +58,10 @@ export const api = {
     getDiff: (id: string) => request<DiffResult>(`/agents/${id}/diff`),
     merge: (id: string) => request<MergeResult>(`/agents/${id}/merge`, { method: "POST" }),
     rebase: (id: string) =>
-      request<{ success: boolean; conflicted: boolean }>(`/agents/${id}/rebase`, {
-        method: "POST",
-      }),
+      request<{ success: boolean; conflicted: boolean; resolving: boolean }>(
+        `/agents/${id}/rebase`,
+        { method: "POST" },
+      ),
     kill: (id: string) => request<void>(`/agents/${id}/kill`, { method: "POST" }),
     restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
     commit: (id: string, message?: string) =>

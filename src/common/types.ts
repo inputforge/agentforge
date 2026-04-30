@@ -67,6 +67,7 @@ export interface DiffResult {
   raw: string;
   generatedRaw?: string;
   isDiverged?: boolean;
+  aheadCount?: number;
 }
 
 export interface MergeResult {
