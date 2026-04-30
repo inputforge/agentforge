@@ -116,6 +116,12 @@ export function AgentDetailPanel() {
     api.agents.restart(agentId).catch(() => {});
   }, [agentId]);
 
+  const selectAgentTab = useCallback(() => setActiveTab("agent"), []);
+  const selectShellTab = useCallback(() => {
+    setActiveTab("shell");
+    setShellMounted(true);
+  }, []);
+
   const handleCommit = useCallback(async () => {
     if (!agentId) return;
     setIsCommitting(true);
@@ -316,7 +322,7 @@ export function AgentDetailPanel() {
                     ? "text-forge-text border-b-2 border-forge-accent -mb-px"
                     : "text-forge-text-muted hover:text-forge-text"
                 }`}
-                onClick={() => setActiveTab("agent")}
+                onClick={selectAgentTab}
               >
                 <Bot size={11} />
                 AGENT
@@ -327,10 +333,7 @@ export function AgentDetailPanel() {
                     ? "text-forge-text border-b-2 border-forge-accent -mb-px"
                     : "text-forge-text-muted hover:text-forge-text"
                 }`}
-                onClick={() => {
-                  setActiveTab("shell");
-                  setShellMounted(true);
-                }}
+                onClick={selectShellTab}
               >
                 <Terminal size={11} />
                 TERMINAL
