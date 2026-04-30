@@ -71,7 +71,7 @@ export class AgentProcessManager {
     return ap;
   }
 
-  write(agentId: string, input: string): void {
+  write(agentId: string, input: string | Buffer): void {
     const ap = processes.get(agentId);
     if (!ap) throw new Error(`No process for agent ${agentId}`);
     ap.proc.terminal!.write(input);

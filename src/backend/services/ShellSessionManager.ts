@@ -47,7 +47,7 @@ export class ShellSessionManager {
     return session;
   }
 
-  write(sessionId: string, input: string): void {
+  write(sessionId: string, input: string | Buffer): void {
     sessions.get(sessionId)?.terminal.write(input);
   }
 
