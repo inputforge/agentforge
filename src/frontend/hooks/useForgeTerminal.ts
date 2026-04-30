@@ -91,7 +91,7 @@ export function useForgeTerminal(wsUrl: string | null): {
       attachAddon?.dispose();
       dataSocket?.close();
     };
-  }, [wsUrl, instance]);
+  }, [wsUrl, instance, terminalId, send, fitAddon]);
 
   return { containerRef: ref as RefObject<HTMLDivElement> };
 }
