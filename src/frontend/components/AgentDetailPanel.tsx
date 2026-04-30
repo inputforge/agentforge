@@ -1,16 +1,24 @@
 import { GitBranch, GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, DiffResult, GitBranchInfo } from "../types";
+import type { AgentType, GitBranchInfo } from "../types";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
 
 export function AgentDetailPanel() {
-  const { getActiveTicket, getActiveAgent, closeTicket, addNotification, updateTicket, setAgent } =
-    useStore();
+  const {
+    getActiveTicket,
+    getActiveAgent,
+    closeTicket,
+    addNotification,
+    updateTicket,
+    setAgent,
+    agentDiffs,
+    setAgentDiff,
+  } = useStore();
 
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
@@ -20,13 +28,12 @@ export function AgentDetailPanel() {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
   const [isRelaunching, setIsRelaunching] = useState(false);
-  const [diff, setDiff] = useState<DiffResult | null>(null);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
   const [branchOptions, setBranchOptions] = useState<GitBranchInfo[]>([]);
-  const diffIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const agentId = agent?.id;
+  const diff = agentId ? (agentDiffs[agentId] ?? null) : null;
 
   // ── Auto-relaunch dead agent when ticket is opened ────────────────────────
 
@@ -46,35 +53,23 @@ export function AgentDetailPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.id, agent?.id]);
 
-  // ── Diff polling ─────────────────────────────────────────────────────────
+  // ── Diff: initial fetch; live updates arrive via WS diff-updated event ───
 
   const fetchDiff = useCallback(async () => {
     if (!agentId) return;
     try {
       const result = await api.agents.getDiff(agentId);
-      setDiff(result);
+      setAgentDiff(agentId, result);
     } catch {
       // ignore transient errors
     }
-  }, [agentId]);
+  }, [agentId, setAgentDiff]);
 
   useEffect(() => {
     if (!agentId) return;
     setIsDiffLoading(true);
     fetchDiff().finally(() => setIsDiffLoading(false));
-
-    // Poll while agent is running
-    if (agent?.status === "running") {
-      diffIntervalRef.current = setInterval(fetchDiff, 5000);
-    }
-
-    return () => {
-      if (diffIntervalRef.current) {
-        clearInterval(diffIntervalRef.current);
-        diffIntervalRef.current = null;
-      }
-    };
-  }, [agentId, agent?.status, fetchDiff]);
+  }, [agentId, fetchDiff]);
 
   useEffect(() => {
     if (!agentId) return;

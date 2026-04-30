@@ -9,6 +9,7 @@ import { remoteRouter } from "./routes/remote.ts";
 import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
 import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
+import { gitWatcher } from "./services/GitWatcher.ts";
 import { OrchestratorService } from "./services/OrchestratorService.ts";
 import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
@@ -43,7 +44,16 @@ async function seedRemoteConfigIfEmpty() {
   });
 }
 
+function startGitWatcherIfConfigured() {
+  const config = remoteStmts.get.get();
+  if (config) {
+    gitWatcher.start(config.localPath, broadcastNotification);
+    log.info("git watcher started", { localPath: config.localPath });
+  }
+}
+
 await seedRemoteConfigIfEmpty();
+startGitWatcherIfConfigured();
 
 // Re-attach to any agents that were running when the server last shut down
 {

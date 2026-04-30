@@ -4,6 +4,7 @@ import { join } from "path";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import type { Agent, AgentType } from "../../common/types.ts";
 import { agentProcessManager } from "./AgentProcessManager.ts";
+import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
 import { appendScrollback } from "../ws/hub.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -182,6 +183,7 @@ export class OrchestratorService {
       // immediately on agent-updated find a live emitter and non-empty scrollback.
       const agent = agentStmts.get.get(agentId);
       if (!agent) throw new Error("agent record was not created");
+      gitWatcher.watchWorktree(agentId, worktreePath, baseBranch);
       this.broadcast({ type: "agent-updated", agent: agent });
       const updatedTicket = ticketStmts.get.get(ticketId);
       if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
@@ -257,6 +259,7 @@ export class OrchestratorService {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
     agentProcessManager.kill(ticket.agentId);
+    gitWatcher.unwatchWorktree(ticket.agentId);
   }
 
   private async handleAgentExit(
@@ -265,6 +268,7 @@ export class OrchestratorService {
     ticketId: string,
     ticketTitle: string,
   ): Promise<void> {
+    gitWatcher.unwatchWorktree(agentId);
     const updatedAgent = agentStmts.get.get(agentId);
     if (updatedAgent) {
       this.broadcast({ type: "agent-updated", agent: updatedAgent });
