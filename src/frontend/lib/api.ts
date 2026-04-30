@@ -62,6 +62,7 @@ export const api = {
         method: "POST",
       }),
     kill: (id: string) => request<void>(`/agents/${id}/kill`, { method: "POST" }),
+    restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
     commit: (id: string, message?: string) =>
       request<void>(`/agents/${id}/commit`, { method: "POST", body: JSON.stringify({ message }) }),
     sendInput: (id: string, input: string) =>

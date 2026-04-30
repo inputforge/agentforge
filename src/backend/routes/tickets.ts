@@ -89,9 +89,6 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
 
     const ticket = ticketStmts.get.get(id);
     if (!ticket) return c.json({ error: "ticket not found" }, 404);
-    if (ticket.status !== "in-progress") {
-      return c.json({ error: "ticket must be in-progress to spawn an agent" }, 400);
-    }
     if (ticket.agentId && agentProcessManager.isRunning(ticket.agentId)) {
       return c.json({ error: "agent already running for this ticket" }, 409);
     }

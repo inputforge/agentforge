@@ -76,7 +76,7 @@ app.use("*", requestLogger());
 
 // REST API
 app.route("/api/tickets", ticketsRouter(orchestrator));
-app.route("/api/agents", agentsRouter);
+app.route("/api/agents", agentsRouter(orchestrator));
 app.route("/api/hooks", hooksRouter);
 app.route("/api/remote", remoteRouter);
 app.route("/api/shell", shellRouter);
