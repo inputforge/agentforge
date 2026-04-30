@@ -160,7 +160,7 @@ export const wsHandlers = {
     const { channel, agentId } = ws.data;
 
     if (channel === "agent" && agentId) {
-      agentProcessManager.write(agentId, raw);
+      agentProcessManager.tryWrite(agentId, raw);
     } else if (channel === "shell" && agentId) {
       shellSessionManager.write(agentId, raw);
     } else if (channel === "session") {
