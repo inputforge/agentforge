@@ -8,6 +8,7 @@ export interface AgentProcess {
   id: string;
   proc: ReturnType<typeof Bun.spawn>;
   emitter: EventEmitter;
+  terminating: boolean;
 }
 
 const processes = new Map<string, AgentProcess>();
@@ -66,14 +67,14 @@ export class AgentProcessManager {
 
     agentStmts.updatePid.run({ $pid: proc.pid, $id: agentId });
 
-    const ap: AgentProcess = { id: agentId, proc, emitter };
+    const ap: AgentProcess = { id: agentId, proc, emitter, terminating: false };
     processes.set(agentId, ap);
     return ap;
   }
 
   write(agentId: string, input: string | Buffer): void {
     const ap = processes.get(agentId);
-    if (!ap) throw new Error(`No process for agent ${agentId}`);
+    if (!ap || ap.terminating) throw new Error(`No process for agent ${agentId}`);
     ap.proc.terminal!.write(input);
   }
 
@@ -87,9 +88,13 @@ export class AgentProcessManager {
   async killAndWait(agentId: string): Promise<void> {
     const ap = processes.get(agentId);
     if (!ap) return;
+    ap.terminating = true;
     ap.proc.kill();
-    processes.delete(agentId);
     await ap.proc.exited;
+    // proc.exited.then() registered in spawn() runs first (registered earlier),
+    // so the DB update, onExit callback, and processes.delete() all complete
+    // before this line; the delete here is a safe no-op guard.
+    processes.delete(agentId);
   }
 
   subscribe(agentId: string): EventEmitter | null {
@@ -101,7 +106,8 @@ export class AgentProcessManager {
   }
 
   isRunning(agentId: string): boolean {
-    return processes.has(agentId);
+    const ap = processes.get(agentId);
+    return ap !== undefined && !ap.terminating;
   }
 
   listRunning(): string[] {
