@@ -64,7 +64,6 @@ export function agentsRouter(orchestrator: OrchestratorService) {
           const updatedTicket = ticketStmts.get.get(ticket.id);
           if (updatedTicket)
             broadcastNotification({ type: "ticket-updated", ticket: updatedTicket });
-          broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });
           orchestrator.onTicketMoved(ticket.id, "done").catch((err) => {
             log.error("orchestrator cleanup failed after merge", {
               agentId: agent.id,
