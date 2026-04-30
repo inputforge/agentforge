@@ -200,17 +200,17 @@
     @apply inline-block w-1.5 h-1.5 bg-forge-red;
   }
 
-  /* xterm.js container overrides */
-  .xterm-container {
-    @apply w-full h-full;
-  }
-
-  .xterm-container .xterm {
-    padding: 8px;
-  }
-
-  .xterm-container .xterm-viewport {
+  /* xterm.js overrides — selectors verified against xterm v6 DOM structure.
+     Zeroing the viewport scrollbar prevents xterm's programmatic scrollbar-
+     width probe from picking up our global 6px rule, which would otherwise
+     cause the terminal screen to be ~6px narrower than the container. */
+  .xterm .xterm-viewport {
     background-color: transparent !important;
+  }
+
+  .xterm .xterm-viewport::-webkit-scrollbar {
+    width: 0;
+    height: 0;
   }
 }
 

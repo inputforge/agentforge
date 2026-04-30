@@ -43,15 +43,15 @@ function buildCommand(
   switch (agentType) {
     case "claude-code":
       if (sessionId) {
-        return `claude --resume ${sessionId} --dangerously-skip-permissions`;
+        return `claude --resume ${sessionId} --enable-auto-mode`;
       }
       return prompt
-        ? `claude --dangerously-skip-permissions -- ${shellQuote(prompt)}`
-        : "claude --dangerously-skip-permissions";
+        ? `claude --enable-auto-mode -- ${shellQuote(prompt)}`
+        : "claude --enable-auto-mode";
     case "codex":
       return prompt ? `codex -- ${shellQuote(prompt)}` : "codex";
     case "custom":
-      return customCommand?.trim() || "claude --dangerously-skip-permissions";
+      return customCommand?.trim() || "claude --enable-auto-mode";
   }
 }
 

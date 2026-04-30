@@ -29,6 +29,5 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
   fontFamily: '"JetBrains Mono", ui-monospace, monospace',
   fontSize: 14,
   theme: FORGE_THEME,
-  convertEol: true,
   scrollback: 5000,
 };

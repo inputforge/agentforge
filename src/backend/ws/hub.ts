@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
-import { agentStmts } from "../db/index.ts";
+import { agentStmts, ticketStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -16,9 +16,6 @@ const log = logger.child("ws");
 
 // Global notification subscribers
 const notificationClients = new Set<ServerWebSocket<{ channel: string; agentId?: string }>>();
-
-// Per-agent terminal subscribers
-const agentClients = new Map<string, Set<ServerWebSocket<{ channel: string; agentId?: string }>>>();
 
 // Per-shell terminal subscribers
 const shellClients = new Map<string, Set<ServerWebSocket<{ channel: string; agentId?: string }>>>();
@@ -90,30 +87,36 @@ export const wsHandlers = {
 
     if (channel !== "agent" || !agentId) return;
 
-    if (!agentClients.has(agentId)) agentClients.set(agentId, new Set());
-    agentClients.get(agentId)!.add(ws);
-
-    // Replay buffered output for agents still in memory
-    const scrollback = agentScrollback.get(agentId) ?? [];
-    for (const chunk of scrollback) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
-    }
-
     // Subscribe to live PTY output if the process is still running
     const emitter = agentProcessManager.subscribe(agentId);
+    const scrollback = agentScrollback.get(agentId) ?? [];
+
     if (emitter) {
+      // Running agent: do NOT replay scrollback. Claude Code's TUI uses
+      // cursor-movement sequences to maintain its status bar and progress
+      // display; replaying those against a fresh terminal state produces
+      // duplicate/garbled output. The agent will redraw on its next output.
       const handler = (data: string) => {
         if (ws.readyState === WebSocket.OPEN) ws.send(data);
       };
       emitter.on("data", handler);
       (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
       (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
-    } else if (scrollback.length === 0) {
+    } else {
+      // Completed agent: replay scrollback so the user can read the output.
+      for (const chunk of scrollback) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+      }
+    }
+
+    if (!emitter && scrollback.length === 0) {
       const agent = agentStmts.get.get(agentId);
       const status = agent?.status;
-      if (agent && (status === "done" || status === "error")) {
+      const ticket = agent ? ticketStmts.get.get(agent.ticketId) : null;
+      const ticketDone = ticket?.status === "done";
+      if (agent && (status === "done" || status === "error") && !ticketDone) {
         if (agent.sessionId) {
-          const command = `claude --resume ${agent.sessionId} --dangerously-skip-permissions`;
+          const command = `claude --resume ${agent.sessionId} --enable-auto-mode`;
           const { emitter: replayEmitter } = agentProcessManager.spawn(
             agentId,
             command,
@@ -155,9 +158,9 @@ export const wsHandlers = {
     const { channel, agentId } = ws.data;
 
     if (channel === "agent" && agentId) {
-      agentProcessManager.write(agentId, String(raw));
+      agentProcessManager.write(agentId, raw);
     } else if (channel === "shell" && agentId) {
-      shellSessionManager.write(agentId, String(raw));
+      shellSessionManager.write(agentId, raw);
     } else if (channel === "session") {
       let parsed: unknown;
       try {
@@ -197,7 +200,6 @@ export const wsHandlers = {
     }
 
     if (channel === "agent" && agentId) {
-      agentClients.get(agentId)?.delete(ws);
       const rec = ws as unknown as Record<string, unknown>;
       const emitter = rec["_emitter"] as { off(e: string, fn: unknown): void } | undefined;
       if (emitter && rec["_ptyHandler"]) emitter.off("data", rec["_ptyHandler"]);

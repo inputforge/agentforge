@@ -62,6 +62,15 @@ export function useForgeTerminal(wsUrl: string | null): {
         attachAddon?.dispose();
         attachAddon = new AttachAddon(ws);
         instance.loadAddon(attachAddon);
+        // Sync PTY dimensions to the actual xterm size immediately so
+        // Claude Code's cursor-movement sequences are calculated for the
+        // right column count from the first byte of output.
+        try {
+          fitAddon.fit();
+        } catch {}
+        if (terminalId) {
+          send({ type: "resize", agentId: terminalId, cols: instance.cols, rows: instance.rows });
+        }
       });
       ws.addEventListener("close", () => {
         attachAddon?.dispose();
