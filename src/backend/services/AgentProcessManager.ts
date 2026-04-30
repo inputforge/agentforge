@@ -84,6 +84,14 @@ export class AgentProcessManager {
     processes.delete(agentId);
   }
 
+  async killAndWait(agentId: string): Promise<void> {
+    const ap = processes.get(agentId);
+    if (!ap) return;
+    ap.proc.kill();
+    processes.delete(agentId);
+    await ap.proc.exited;
+  }
+
   subscribe(agentId: string): EventEmitter | null {
     return processes.get(agentId)?.emitter ?? null;
   }

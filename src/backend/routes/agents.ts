@@ -155,14 +155,19 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     if (!agent) return c.json({ error: "agent not found" }, 404);
 
     log.info("restarting agent", { agentId: id });
-    agentProcessManager.kill(id);
+    await agentProcessManager.killAndWait(id);
     await orchestrator.resumeAgent(agent);
     return c.body(null, 204);
   });
 
   app.post("/:id/input", async (c) => {
     const id = c.req.param("id");
-    const body = await c.req.json<{ input?: string }>();
+    let body: { input?: string };
+    try {
+      body = await c.req.json<{ input?: string }>();
+    } catch {
+      return c.json({ error: "invalid JSON" }, 400);
+    }
     if (!body.input) return c.json({ error: "input is required" }, 400);
 
     try {
