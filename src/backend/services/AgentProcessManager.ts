@@ -78,6 +78,12 @@ export class AgentProcessManager {
     ap.proc.terminal!.write(input);
   }
 
+  tryWrite(agentId: string, input: string | Buffer): void {
+    const ap = processes.get(agentId);
+    if (!ap || ap.terminating) return;
+    ap.proc.terminal!.write(input);
+  }
+
   kill(agentId: string): void {
     const ap = processes.get(agentId);
     if (!ap) return;
@@ -106,6 +112,10 @@ export class AgentProcessManager {
   }
 
   isRunning(agentId: string): boolean {
+    return processes.has(agentId);
+  }
+
+  isAcceptingInput(agentId: string): boolean {
     const ap = processes.get(agentId);
     return ap !== undefined && !ap.terminating;
   }
