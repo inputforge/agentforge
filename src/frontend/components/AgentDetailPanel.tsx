@@ -1,4 +1,4 @@
-import { GitBranch, GitCommit, GitMerge, RefreshCw, Square, X } from "lucide-react";
+import { GitBranch, GitCommit, GitMerge, RefreshCw, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
@@ -99,27 +99,22 @@ export function AgentDetailPanel() {
     }
   }, [agentId, ticket, agent, addNotification, closeTicket]);
 
-  const handleKill = useCallback(() => {
+  const handleRestart = useCallback(() => {
     if (!agentId) return;
-    api.agents.kill(agentId).catch(() => {});
+    api.agents.restart(agentId).catch(() => {});
   }, [agentId]);
 
   const handleCommit = useCallback(async () => {
-    if (!agentId || !agent) return;
+    if (!agentId) return;
     setIsCommitting(true);
     try {
       await api.agents.commit(agentId);
-      addNotification({
-        type: "info",
-        message: `Committed changes on ${agent.branch}.`,
-      });
-      fetchDiff();
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
     } finally {
       setIsCommitting(false);
     }
-  }, [agentId, agent, addNotification, fetchDiff]);
+  }, [agentId, addNotification]);
 
   const handleRebase = useCallback(async () => {
     if (!agentId) return;
@@ -130,11 +125,7 @@ export function AgentDetailPanel() {
         addNotification({ type: "info", message: "Rebase completed successfully." });
         fetchDiff();
       } else if (result.conflicted) {
-        if (agent?.status === "running") {
-          await api.agents.sendInput(
-            agentId,
-            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.\n",
-          );
+        if (result.resolving) {
           addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
         } else {
           addNotification({
@@ -150,7 +141,7 @@ export function AgentDetailPanel() {
     } finally {
       setIsRebasing(false);
     }
-  }, [agentId, agent?.status, ticket?.id, addNotification, fetchDiff]);
+  }, [agentId, ticket?.id, addNotification, fetchDiff]);
 
   const handleBaseBranchChange = useCallback(
     async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -243,7 +234,7 @@ export function AgentDetailPanel() {
               </select>
             </div>
           )}
-          {ticket.status === "review" && (
+          {(diff?.aheadCount ?? 0) > 0 && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
               onClick={handleMerge}
@@ -288,12 +279,12 @@ export function AgentDetailPanel() {
             </button>
           )}
           <button
-            className="forge-btn-danger py-0.5 px-2 flex items-center gap-1.5"
-            onClick={handleKill}
-            title="Kill agent"
+            className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"
+            onClick={handleRestart}
+            title="Restart agent"
           >
-            <Square size={11} />
-            KILL
+            <RotateCcw size={11} />
+            RESTART
           </button>
           <button className="forge-btn-ghost py-0.5 px-2" onClick={closeTicket}>
             <X size={13} />

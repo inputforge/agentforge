@@ -119,6 +119,11 @@ export class GitWorktreeManager {
     const baseBranchHead = (await worktreeGit.raw(["rev-parse", baseBranch])).trim();
     const isDiverged = baseBranchHead !== mergeBase;
 
+    const aheadCountStr = (
+      await worktreeGit.raw(["rev-list", "--count", `${mergeBase}..HEAD`])
+    ).trim();
+    const aheadCount = parseInt(aheadCountStr, 10) || 0;
+
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
     const rawFull = await worktreeGit.diff([mergeBase]);
@@ -129,6 +134,7 @@ export class GitWorktreeManager {
     const result = parseDiff(filtered);
     if (generated.trim()) result.generatedRaw = generated;
     result.isDiverged = isDiverged;
+    result.aheadCount = aheadCount;
     return result;
   }
 
@@ -173,6 +179,19 @@ export class GitWorktreeManager {
     }
   }
 
+  private async findWorktreeForBranch(branch: string): Promise<string | null> {
+    const raw = await this.baseGit.raw(["worktree", "list", "--porcelain"]);
+    const entries = raw.trim().split(/\n\n+/);
+    for (const entry of entries) {
+      const pathMatch = entry.match(/^worktree (.+)$/m);
+      const branchMatch = entry.match(/^branch refs\/heads\/(.+)$/m);
+      if (pathMatch && branchMatch && branchMatch[1] === branch) {
+        return pathMatch[1];
+      }
+    }
+    return null;
+  }
+
   async mergeToBase(
     worktreePath: string,
     branch: string,
@@ -211,10 +230,22 @@ export class GitWorktreeManager {
     }
 
     try {
-      // Use `git fetch . branch:baseBranch` to ff-update the baseBranch ref without
-      // requiring it to be checked out in the main worktree.
-      log.debug("fast-forward updating base branch ref", { branch, baseBranch });
-      await this.baseGit.raw(["fetch", ".", `${branch}:${baseBranch}`]);
+      // Find which worktree (if any) has baseBranch checked out.
+      const checkedOutAt = await this.findWorktreeForBranch(baseBranch);
+      if (checkedOutAt) {
+        // baseBranch is live in a worktree — run ff-merge there directly.
+        log.debug("base branch checked out in worktree, running ff-merge there", {
+          branch,
+          baseBranch,
+          checkedOutAt,
+        });
+        const wtGit = simpleGit(checkedOutAt);
+        await wtGit.merge(["--ff-only", branch]);
+      } else {
+        // baseBranch is not checked out anywhere — safe to update ref via fetch.
+        log.debug("fast-forward updating base branch ref via fetch", { branch, baseBranch });
+        await this.baseGit.raw(["fetch", ".", `${branch}:${baseBranch}`]);
+      }
       log.info("fast-forward merge complete", { branch, baseBranch });
       return { success: true, conflicted: false };
     } catch (err) {
