@@ -116,6 +116,10 @@ export function AgentDetailPanel() {
     api.agents.restart(agentId).catch(() => {});
   }, [agentId]);
 
+  useEffect(() => {
+    setShellMounted(false);
+  }, [agentId]);
+
   const selectAgentTab = useCallback(() => setActiveTab("agent"), []);
   const selectShellTab = useCallback(() => {
     setActiveTab("shell");
