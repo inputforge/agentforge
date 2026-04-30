@@ -1,4 +1,13 @@
-import { GitBranch, GitCommit, GitMerge, RefreshCw, RotateCcw, X } from "lucide-react";
+import {
+  Bot,
+  GitBranch,
+  GitCommit,
+  GitMerge,
+  RefreshCw,
+  RotateCcw,
+  Terminal,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
@@ -7,6 +16,7 @@ import type { AgentType } from "../types";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
+import { WorktreeShellPanel } from "./WorktreeShellPanel";
 
 export function AgentDetailPanel() {
   const {
@@ -25,6 +35,8 @@ export function AgentDetailPanel() {
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
 
+  const [activeTab, setActiveTab] = useState<"agent" | "shell">("agent");
+  const [shellMounted, setShellMounted] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [isRebasing, setIsRebasing] = useState(false);
@@ -103,6 +115,16 @@ export function AgentDetailPanel() {
     if (!agentId) return;
     api.agents.restart(agentId).catch(() => {});
   }, [agentId]);
+
+  useEffect(() => {
+    setShellMounted(false);
+  }, [agentId]);
+
+  const selectAgentTab = useCallback(() => setActiveTab("agent"), []);
+  const selectShellTab = useCallback(() => {
+    setActiveTab("shell");
+    setShellMounted(true);
+  }, []);
 
   const handleCommit = useCallback(async () => {
     if (!agentId) return;
@@ -295,7 +317,42 @@ export function AgentDetailPanel() {
       {/* Split body: terminal | diff */}
       <PanelGroup orientation="horizontal" className="flex-1 overflow-hidden">
         <Panel defaultSize={60} minSize={20}>
-          <AgentTerminalPanel agentId={agentId!} />
+          <div className="flex flex-col w-full h-full">
+            {/* Tab bar */}
+            <div className="flex items-center border-b border-r border-forge-border bg-forge-panel flex-shrink-0">
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase tracking-widest transition-colors ${
+                  activeTab === "agent"
+                    ? "text-forge-text border-b-2 border-forge-accent -mb-px"
+                    : "text-forge-text-muted hover:text-forge-text"
+                }`}
+                onClick={selectAgentTab}
+              >
+                <Bot size={11} />
+                AGENT
+              </button>
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase tracking-widest transition-colors ${
+                  activeTab === "shell"
+                    ? "text-forge-text border-b-2 border-forge-accent -mb-px"
+                    : "text-forge-text-muted hover:text-forge-text"
+                }`}
+                onClick={selectShellTab}
+              >
+                <Terminal size={11} />
+                TERMINAL
+              </button>
+            </div>
+            {/* Tab content */}
+            <div className="flex-1 overflow-hidden relative">
+              <div className={`absolute inset-0 ${activeTab === "agent" ? "" : "invisible"}`}>
+                <AgentTerminalPanel agentId={agentId!} />
+              </div>
+              <div className={`absolute inset-0 ${activeTab === "shell" ? "" : "invisible"}`}>
+                {shellMounted && <WorktreeShellPanel agentId={agentId!} />}
+              </div>
+            </div>
+          </div>
         </Panel>
         <PanelResizeHandle className="w-1 bg-forge-border hover:bg-forge-accent transition-colors duration-150 cursor-col-resize flex-shrink-0" />
         <Panel defaultSize={40} minSize={15}>

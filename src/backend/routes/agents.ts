@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import { randomUUID } from "crypto";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
 import type { AgentType } from "../../common/types.ts";
-import { broadcastNotification } from "../ws/hub.ts";
+import { shellSessionManager } from "../services/ShellSessionManager.ts";
+import { broadcastNotification, clearShellScrollback } from "../ws/hub.ts";
 
 const log = logger.child("agents");
 
@@ -192,6 +194,17 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       log.error("failed to write input to agent", { agentId: id, ...errorMeta(err) });
       return c.json({ error: (err as Error).message }, 500);
     }
+  });
+
+  app.post("/:id/shell", (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+
+    const sessionId = randomUUID();
+    shellSessionManager.spawn(sessionId, agent.worktreePath, (id) => {
+      clearShellScrollback(id);
+    });
+    return c.json({ id: sessionId, cwd: agent.worktreePath });
   });
 
   return app;

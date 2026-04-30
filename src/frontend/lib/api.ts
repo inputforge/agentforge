@@ -71,6 +71,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ input }),
       }),
+    createShell: (id: string) =>
+      request<{ id: string; cwd: string }>(`/agents/${id}/shell`, { method: "POST" }),
   },
 
   shell: {
