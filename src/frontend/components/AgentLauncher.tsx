@@ -1,8 +1,8 @@
 import { ChevronRight, GitBranch, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, GitBranchInfo, Ticket } from "../types";
+import type { AgentType, Ticket } from "../types";
 
 const AGENTS: { type: AgentType; label: string; sub: string; command: string }[] = [
   {
@@ -53,19 +53,11 @@ function AgentButton({ a, launching, onLaunch }: AgentButtonProps) {
 }
 
 export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
-  const { addNotification, remoteConfig, updateTicket, setAgent } = useStore();
+  const { addNotification, remoteConfig, updateTicket, setAgent, branches } = useStore();
   const [launching, setLaunching] = useState<AgentType | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [customCmd, setCustomCmd] = useState("");
-  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
-
-  useEffect(() => {
-    api.remote
-      .listBranches()
-      .then(({ branches: nextBranches }) => setBranches(nextBranches))
-      .catch(() => {});
-  }, []);
 
   const launch = useCallback(
     async (type: AgentType, custom?: string) => {

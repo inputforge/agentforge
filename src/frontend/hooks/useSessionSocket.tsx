@@ -16,7 +16,8 @@ type IncomingEvent =
   | { type: "notification"; notification: Omit<AppNotification, "id" | "timestamp"> }
   | { type: "kanban-sync"; tickets: Ticket[] }
   | { type: "branch-updated"; branch: string | null }
-  | { type: "diff-updated"; agentId: string; diff: DiffResult };
+  | { type: "diff-updated"; agentId: string; diff: DiffResult }
+  | { type: "branches-updated" };
 
 interface SessionSocketContextValue {
   send: (msg: object) => void;
@@ -25,8 +26,15 @@ interface SessionSocketContextValue {
 const SessionSocketContext = createContext<SessionSocketContextValue>({ send: () => {} });
 
 export function SessionSocketProvider({ children }: { children: ReactNode }) {
-  const { setConnected, addNotification, updateTicket, setAgent, setCurrentBranch, setAgentDiff } =
-    useStore();
+  const {
+    setConnected,
+    addNotification,
+    updateTicket,
+    setAgent,
+    setCurrentBranch,
+    setAgentDiff,
+    fetchBranches,
+  } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,6 +74,9 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
             case "diff-updated":
               setAgentDiff(event.agentId, event.diff);
               break;
+            case "branches-updated":
+              fetchBranches();
+              break;
           }
         } catch {
           // malformed message — ignore
@@ -91,7 +102,15 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [setConnected, addNotification, updateTicket, setAgent, setCurrentBranch, setAgentDiff]);
+  }, [
+    setConnected,
+    addNotification,
+    updateTicket,
+    setAgent,
+    setCurrentBranch,
+    setAgentDiff,
+    fetchBranches,
+  ]);
 
   const send = useCallback((msg: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

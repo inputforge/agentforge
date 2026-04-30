@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, GitBranchInfo } from "../types";
+import type { AgentType } from "../types";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
@@ -18,11 +18,12 @@ export function AgentDetailPanel() {
     setAgent,
     agentDiffs,
     setAgentDiff,
+    remoteConfig,
+    branches: branchOptions,
   } = useStore();
 
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
-  const { remoteConfig } = useStore();
 
   const [isMerging, setIsMerging] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -30,7 +31,6 @@ export function AgentDetailPanel() {
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
-  const [branchOptions, setBranchOptions] = useState<GitBranchInfo[]>([]);
 
   const agentId = agent?.id;
   const diff = agentId ? (agentDiffs[agentId] ?? null) : null;
@@ -70,14 +70,6 @@ export function AgentDetailPanel() {
     setIsDiffLoading(true);
     fetchDiff().finally(() => setIsDiffLoading(false));
   }, [agentId, fetchDiff]);
-
-  useEffect(() => {
-    if (!agentId) return;
-    api.remote
-      .listBranches()
-      .then(({ branches }) => setBranchOptions(branches))
-      .catch(() => {});
-  }, [agentId]);
 
   const handleMerge = useCallback(async () => {
     if (!agentId || !ticket || !agent) return;

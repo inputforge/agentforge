@@ -3,6 +3,7 @@ import type {
   Agent,
   AppNotification,
   DiffResult,
+  GitBranchInfo,
   RemoteConfig,
   Ticket,
   TicketStatus,
@@ -23,6 +24,7 @@ interface AppState {
   remoteConfig: RemoteConfig | null;
   currentBranch: string | null;
   agentDiffs: Record<string, DiffResult>;
+  branches: GitBranchInfo[];
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -55,6 +57,9 @@ interface AppState {
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
 
+  // Branch actions
+  fetchBranches: () => Promise<void>;
+
   // UI actions
   openTicket: (ticketId: string) => void;
   closeTicket: () => void;
@@ -73,6 +78,7 @@ export const useStore = create<AppState>((set, get) => ({
   remoteConfig: null,
   currentBranch: null,
   agentDiffs: {},
+  branches: [],
   activeTicketId: null,
   isCreateModalOpen: false,
   isConnected: false,
@@ -212,6 +218,15 @@ export const useStore = create<AppState>((set, get) => ({
   },
   openCreateModal: () => set({ isCreateModalOpen: true }),
   closeCreateModal: () => set({ isCreateModalOpen: false }),
+  fetchBranches: async () => {
+    try {
+      const { branches } = await api.remote.listBranches();
+      set({ branches });
+    } catch {
+      // ignore transient errors
+    }
+  },
+
   setConnected: (isConnected) => set({ isConnected }),
   setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
   setCurrentBranch: (currentBranch) => set({ currentBranch }),

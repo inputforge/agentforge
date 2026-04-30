@@ -40,11 +40,12 @@ function KanbanPage() {
 }
 
 export function App() {
-  const { fetchTickets } = useStore();
+  const { fetchTickets, fetchBranches } = useStore();
 
   useEffect(() => {
     fetchTickets();
-  }, [fetchTickets]);
+    fetchBranches();
+  }, [fetchTickets, fetchBranches]);
 
   const kanbanElement = useMemo(() => <KanbanPage />, []);
   const agentElement = useMemo(() => <AgentPage />, []);
