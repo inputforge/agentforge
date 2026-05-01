@@ -36,95 +36,6 @@ interface LocalTurn {
   agentStartIndex: number;
 }
 
-// ── Style constants ───────────────────────────────────────────────────────────
-
-const codeBlockWrapStyle = {
-  background: "rgba(34,197,94,0.05)",
-  borderLeft: "2px solid rgba(34,197,94,0.5)",
-};
-
-const userMsgInnerStyle = {
-  background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.06))",
-  borderRight: "2px solid #f59e0b",
-  borderTop: "1px solid rgba(245,158,11,0.2)",
-  borderBottom: "1px solid rgba(245,158,11,0.1)",
-  borderLeft: "1px solid rgba(245,158,11,0.08)",
-};
-const userMsgHeaderStyle = { opacity: 0.55 };
-const userMsgAmberStyle = { color: "#fbbf24" };
-
-const agentFinalWrapStyle = {
-  borderLeft: "2px solid #67e8f9",
-  background: "linear-gradient(135deg, rgba(103,232,249,0.07), rgba(103,232,249,0.02))",
-  borderTop: "1px solid rgba(103,232,249,0.15)",
-  borderRight: "1px solid rgba(103,232,249,0.06)",
-  borderBottom: "1px solid rgba(103,232,249,0.06)",
-};
-const agentIconStyle = { color: "#67e8f9", flexShrink: 0 };
-const agentCyanStyle = { color: "#67e8f9" };
-const agentDraftWrapStyle = { borderLeft: "1px solid rgba(103,232,249,0.12)" };
-const agentDraftHeaderStyle = { opacity: 0.4 };
-const agentDraftContentStyle = { opacity: 0.72 };
-
-const thinkingWrapStyle = { borderLeft: "1px solid rgba(245,158,11,0.25)" };
-const thinkingLabelStyle = { color: "rgba(245,158,11,0.6)" };
-const thinkingTrackStyle = { background: "rgba(245,158,11,0.08)" };
-const thinkingScanStyle = {
-  background: "linear-gradient(90deg, transparent, rgba(245,158,11,0.4), transparent)",
-};
-const THINKING_DOT_STYLES = [
-  { animationDelay: "0s" },
-  { animationDelay: "0.2s" },
-  { animationDelay: "0.4s" },
-];
-
-const planStepIconStyle = { flexShrink: 0 };
-
-const planWrapStyle = {
-  border: "1px solid rgba(103,232,249,0.12)",
-  background: "rgba(103,232,249,0.03)",
-};
-const planBtnStyle = { background: "transparent", cursor: "pointer", border: "none" };
-const planLabelStyle = { color: "#67e8f9", opacity: 0.7 };
-const planCountStyle = { color: "#6e6860" };
-const planTrackStyle = { background: "rgba(103,232,249,0.1)" };
-
-const activityWrapStyle = {
-  border: "1px solid rgba(103,232,249,0.08)",
-  background: "rgba(255,255,255,0.01)",
-};
-const activityBtnStyle = { background: "transparent", cursor: "pointer", border: "none" };
-const activityLabelStyle = { color: "rgba(103,232,249,0.8)" };
-
-const diffWrapStyle = { background: "rgba(0,0,0,0.3)" };
-
-const liveToolCallWrapStyle = {
-  background: "rgba(245,158,11,0.04)",
-  borderLeft: "2px solid rgba(245,158,11,0.35)",
-};
-const liveToolCallStatusStyle = { color: "rgba(245,158,11,0.7)" };
-const liveEditWrapStyle = {
-  background: "rgba(34,197,94,0.03)",
-  borderLeft: "2px solid rgba(34,197,94,0.4)",
-};
-const liveEditStatusStyle = { color: "rgba(34,197,94,0.7)" };
-
-const panelBgStyle = { background: "#0f0e0c" };
-const panelDividerStyle = { background: "rgba(110,104,96,0.3)" };
-const panelThreadStyle = { color: "rgba(110,104,96,0.5)", maxWidth: 120 };
-const panelScrollStyle = { paddingBottom: 8 };
-const panelEmptyBoxStyle = {
-  border: "1px solid rgba(103,232,249,0.15)",
-  background: "rgba(103,232,249,0.03)",
-};
-const panelEmptyBotStyle = { color: "rgba(103,232,249,0.4)" };
-const dimTextStyle = { color: "#3d3a36" };
-const panelErrorWrapStyle = {
-  border: "1px solid rgba(239,68,68,0.3)",
-  background: "rgba(239,68,68,0.04)",
-};
-const panelTextareaStyle = { minHeight: 72 };
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTurn[] {
@@ -147,7 +58,7 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
     const lang = /language-(\w+)/.exec(className ?? "")?.[1];
     if (lang) {
       return (
-        <div className="my-2 overflow-x-auto" style={codeBlockWrapStyle}>
+        <div className="my-2 overflow-x-auto bg-forge-green/5 border-l-2 border-l-forge-green/50">
           <div className="px-3 pt-1.5 pb-0 text-[9px] uppercase tracking-widest text-forge-green/50">
             {lang}
           </div>
@@ -205,15 +116,11 @@ function MarkdownContent({ text }: { text: string }) {
 function UserMessage({ text }: { text: string }) {
   return (
     <div className="flex justify-end animate-fade-in">
-      <div className="max-w-[88%] px-3 py-2.5 font-mono" style={userMsgInnerStyle}>
-        <div className="flex items-center gap-1.5 mb-1.5" style={userMsgHeaderStyle}>
-          <span className="text-[9px] uppercase tracking-widest" style={userMsgAmberStyle}>
-            YOU
-          </span>
+      <div className="max-w-[88%] px-3 py-2.5 font-mono bg-gradient-to-br from-forge-amber/12 to-forge-amber/6 border-r-2 border-r-forge-amber border-t border-t-forge-amber/20 border-b border-b-forge-amber/10 border-l border-l-forge-amber/8">
+        <div className="flex items-center gap-1.5 mb-1.5 opacity-[0.55]">
+          <span className="text-[9px] uppercase tracking-widest text-forge-amber-glow">YOU</span>
         </div>
-        <p className="text-xs leading-relaxed whitespace-pre-wrap" style={userMsgAmberStyle}>
-          {text}
-        </p>
+        <p className="text-xs leading-relaxed whitespace-pre-wrap text-forge-amber-glow">{text}</p>
       </div>
     </div>
   );
@@ -222,12 +129,10 @@ function UserMessage({ text }: { text: string }) {
 function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFinal: boolean }) {
   if (isFinal) {
     return (
-      <div className="px-4 py-3 animate-fade-in" style={agentFinalWrapStyle}>
+      <div className="px-4 py-3 animate-fade-in border-l-2 border-l-forge-accent bg-gradient-to-br from-forge-accent/7 to-forge-accent/2 border-t border-t-forge-accent/15 border-r border-r-forge-accent/6 border-b border-b-forge-accent/6">
         <div className="flex items-center gap-1.5 mb-2.5">
-          <Zap size={9} style={agentIconStyle} />
-          <span className="text-[9px] uppercase tracking-widest" style={agentCyanStyle}>
-            AGENT
-          </span>
+          <Zap size={9} className="text-forge-accent flex-shrink-0" />
+          <span className="text-[9px] uppercase tracking-widest text-forge-accent">AGENT</span>
         </div>
         <MarkdownContent text={message.text} />
       </div>
@@ -235,14 +140,12 @@ function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFina
   }
 
   return (
-    <div className="px-3 py-2 animate-fade-in" style={agentDraftWrapStyle}>
-      <div className="flex items-center gap-1.5 mb-1.5" style={agentDraftHeaderStyle}>
-        <Code2 size={8} style={agentIconStyle} />
-        <span className="text-[9px] uppercase tracking-widest" style={agentCyanStyle}>
-          AGENT
-        </span>
+    <div className="px-3 py-2 animate-fade-in border-l border-l-forge-accent/12">
+      <div className="flex items-center gap-1.5 mb-1.5 opacity-40">
+        <Code2 size={8} className="text-forge-accent flex-shrink-0" />
+        <span className="text-[9px] uppercase tracking-widest text-forge-accent">AGENT</span>
       </div>
-      <div style={agentDraftContentStyle}>
+      <div className="opacity-[0.72]">
         <MarkdownContent text={message.text} />
       </div>
     </div>
@@ -251,18 +154,18 @@ function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFina
 
 function ThinkingIndicator({ hasMessages }: { hasMessages: boolean }) {
   return (
-    <div className="px-3 py-2.5 animate-fade-in" style={thinkingWrapStyle}>
+    <div className="px-3 py-2.5 animate-fade-in border-l border-l-forge-amber/25">
       <div className="flex items-center gap-2">
-        <span className="text-[9px] uppercase tracking-widest" style={thinkingLabelStyle}>
+        <span className="text-[9px] uppercase tracking-widest text-forge-amber/60">
           {hasMessages ? "PROCESSING" : "THINKING"}
         </span>
         <div className="flex items-center gap-1">
-          {THINKING_DOT_STYLES.map((dotStyle, i) => (
-            <span key={i} className="codex-thinking-dot" style={dotStyle} />
-          ))}
+          <span className="codex-thinking-dot [animation-delay:0s]" />
+          <span className="codex-thinking-dot [animation-delay:0.2s]" />
+          <span className="codex-thinking-dot [animation-delay:0.4s]" />
         </div>
-        <div className="flex-1 h-px overflow-hidden relative" style={thinkingTrackStyle}>
-          <div className="absolute inset-y-0 w-1/4 codex-scan-bar" style={thinkingScanStyle} />
+        <div className="flex-1 h-px overflow-hidden relative bg-forge-amber/8">
+          <div className="absolute inset-y-0 w-1/4 codex-scan-bar bg-gradient-to-r from-transparent via-forge-amber/40 to-transparent" />
         </div>
       </div>
     </div>
@@ -274,28 +177,27 @@ function PlanStep({ step, isLast }: { step: CodexPlanStep; isLast: boolean }) {
   const isActive = step.status === "inProgress";
   const isPending = step.status === "pending";
 
-  const connectorStyle = useMemo(
-    () => ({
-      minHeight: 8,
-      background: isCompleted ? "rgba(34,197,94,0.25)" : "rgba(110,104,96,0.2)",
-    }),
-    [isCompleted],
-  );
-
-  const textStyle = useMemo(
-    () => ({ color: isCompleted ? "#22c55e" : isActive ? "#fbbf24" : "#6e6860" }),
-    [isCompleted, isActive],
-  );
-
   return (
     <div className="flex items-start gap-2.5">
-      <div className="flex flex-col items-center mt-0.5" style={planStepIconStyle}>
+      <div className="flex flex-col items-center mt-0.5 flex-shrink-0">
         {isCompleted && <CheckCircle2 size={11} className="text-forge-green" />}
         {isActive && <ChevronRight size={11} className="text-forge-amber animate-status-blink" />}
         {isPending && <Circle size={11} className="text-forge-text-muted" />}
-        {!isLast && <div className="w-px flex-1 mt-1" style={connectorStyle} />}
+        {!isLast && (
+          <div
+            className={`w-px flex-1 mt-1 min-h-2 ${isCompleted ? "bg-forge-green/25" : "bg-forge-text-dim/20"}`}
+          />
+        )}
       </div>
-      <span className="text-xs leading-relaxed pb-2" style={textStyle}>
+      <span
+        className={`text-xs leading-relaxed pb-2 ${
+          isCompleted
+            ? "text-forge-green"
+            : isActive
+              ? "text-forge-amber-glow"
+              : "text-forge-text-dim"
+        }`}
+      >
         {step.step}
       </span>
     </div>
@@ -308,34 +210,35 @@ function PlanSection({ steps }: { steps: CodexPlanStep[] }) {
 
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
 
-  const progressFillStyle = useMemo(
-    () => ({
-      width: `${(completed / Math.max(steps.length, 1)) * 100}%`,
-      background: "rgba(103,232,249,0.6)",
-    }),
+  const progressWidth = useMemo(
+    () => `${(completed / Math.max(steps.length, 1)) * 100}%`,
     [completed, steps.length],
   );
 
+  const progressStyle = useMemo(() => ({ width: progressWidth }), [progressWidth]);
+
   return (
-    <div className="mx-4 mt-4 mb-1" style={planWrapStyle}>
+    <div className="mx-4 mt-4 mb-1 border border-forge-accent/12 bg-forge-accent/3">
       <button
-        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left bg-transparent cursor-pointer border-0"
         onClick={toggleCollapsed}
-        style={planBtnStyle}
       >
         {collapsed ? (
           <ChevronRight size={10} className="text-forge-text-dim flex-shrink-0" />
         ) : (
           <ChevronDown size={10} className="text-forge-text-dim flex-shrink-0" />
         )}
-        <span className="text-[9px] uppercase tracking-widest" style={planLabelStyle}>
+        <span className="text-[9px] uppercase tracking-widest text-forge-accent opacity-70">
           PLAN
         </span>
-        <span className="ml-auto text-[9px] font-mono" style={planCountStyle}>
+        <span className="ml-auto text-[9px] font-mono text-forge-text-dim">
           {completed}/{steps.length}
         </span>
-        <div className="w-16 h-1 overflow-hidden" style={planTrackStyle}>
-          <div className="h-full transition-all duration-500" style={progressFillStyle} />
+        <div className="w-16 h-1 overflow-hidden bg-forge-accent/10">
+          <div
+            className="h-full transition-all duration-500 bg-forge-accent/60"
+            style={progressStyle}
+          />
         </div>
       </button>
 
@@ -351,24 +254,31 @@ function PlanSection({ steps }: { steps: CodexPlanStep[] }) {
 }
 
 function StatusBadge({ status }: { status: CodexTurnStatus }) {
-  const config: Record<CodexTurnStatus, { label: string; color: string; dot?: string }> = {
-    idle: { label: "IDLE", color: "#6e6860" },
-    running: { label: "RUNNING", color: "#3b82f6", dot: "animate-status-blink" },
-    completed: { label: "DONE", color: "#22c55e" },
-    failed: { label: "FAILED", color: "#ef4444" },
-    interrupted: { label: "INTERRUPTED", color: "#f59e0b" },
+  const config: Record<
+    CodexTurnStatus,
+    { label: string; dotClass: string; labelClass: string; dot?: string }
+  > = {
+    idle: { label: "IDLE", dotClass: "bg-forge-text-dim", labelClass: "text-forge-text-dim" },
+    running: {
+      label: "RUNNING",
+      dotClass: "bg-forge-blue",
+      labelClass: "text-forge-blue",
+      dot: "animate-status-blink",
+    },
+    completed: { label: "DONE", dotClass: "bg-forge-green", labelClass: "text-forge-green" },
+    failed: { label: "FAILED", dotClass: "bg-forge-red", labelClass: "text-forge-red" },
+    interrupted: {
+      label: "INTERRUPTED",
+      dotClass: "bg-forge-amber",
+      labelClass: "text-forge-amber",
+    },
   };
   const c = config[status] ?? config.idle;
 
-  const dotStyle = useMemo(() => ({ background: c.color, borderRadius: "50%" }), [c.color]);
-  const labelStyle = useMemo(() => ({ color: c.color }), [c.color]);
-
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`inline-block w-1.5 h-1.5 ${c.dot ?? ""}`} style={dotStyle} />
-      <span className="text-[9px] uppercase tracking-widest" style={labelStyle}>
-        {c.label}
-      </span>
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${c.dotClass} ${c.dot ?? ""}`} />
+      <span className={`text-[9px] uppercase tracking-widest ${c.labelClass}`}>{c.label}</span>
     </div>
   );
 }
@@ -390,20 +300,17 @@ function ActivitySection({
   if (count === 0) return null;
 
   return (
-    <div className="mx-4 mt-3" style={activityWrapStyle}>
+    <div className="mx-4 mt-3 border border-forge-accent/8 bg-white/[0.01]">
       <button
-        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left bg-transparent cursor-pointer border-0"
         onClick={toggleCollapsed}
-        style={activityBtnStyle}
       >
         {collapsed ? (
           <ChevronRight size={10} className="text-forge-text-dim flex-shrink-0" />
         ) : (
           <ChevronDown size={10} className="text-forge-text-dim flex-shrink-0" />
         )}
-        <span className="text-[9px] uppercase tracking-widest" style={activityLabelStyle}>
-          {title}
-        </span>
+        <span className="text-[9px] uppercase tracking-widest text-forge-accent/80">{title}</span>
         <span className="ml-auto text-[9px] font-mono text-forge-text-dim">{count}</span>
       </button>
       {!collapsed && <div className="px-3 pb-3 pt-1 flex flex-col gap-2">{children}</div>}
@@ -411,9 +318,8 @@ function ActivitySection({
   );
 }
 
-function DiffLine({ color, line }: { color: string; line: string }) {
-  const style = useMemo(() => ({ color, display: "block" }), [color]);
-  return <span style={style}>{line || " "}</span>;
+function DiffLine({ colorClass, line }: { colorClass: string; line: string }) {
+  return <span className={`block ${colorClass}`}>{line || " "}</span>;
 }
 
 function DiffPreview({ diff }: { diff: string }) {
@@ -422,20 +328,21 @@ function DiffPreview({ diff }: { diff: string }) {
     (l) => (l.startsWith("+") && !l.startsWith("+++")) || l.startsWith("@@"),
   );
   return (
-    <div className="px-3 pb-2 max-h-48 overflow-y-auto overflow-x-auto" style={diffWrapStyle}>
+    <div className="px-3 pb-2 max-h-48 overflow-y-auto overflow-x-auto bg-black/30">
       <pre className="text-[10px] font-mono leading-relaxed">
         {lines.map((line, i) => {
-          let color: string;
+          let colorClass: string;
           if (isUnifiedDiff) {
-            if (line.startsWith("+") && !line.startsWith("+++")) color = "#22c55e";
-            else if (line.startsWith("-") && !line.startsWith("---")) color = "#ef4444";
-            else if (line.startsWith("@@")) color = "#67e8f9";
-            else if (line.startsWith("+++") || line.startsWith("---")) color = "#6b7280";
-            else color = "rgba(110,104,96,0.6)";
+            if (line.startsWith("+") && !line.startsWith("+++")) colorClass = "text-forge-green";
+            else if (line.startsWith("-") && !line.startsWith("---")) colorClass = "text-forge-red";
+            else if (line.startsWith("@@")) colorClass = "text-forge-accent";
+            else if (line.startsWith("+++") || line.startsWith("---"))
+              colorClass = "text-[#6b7280]";
+            else colorClass = "text-forge-text-dim/60";
           } else {
-            color = "rgba(34,197,94,0.7)";
+            colorClass = "text-forge-green/70";
           }
-          return <DiffLine key={i} color={color} line={line} />;
+          return <DiffLine key={i} colorClass={colorClass} line={line} />;
         })}
       </pre>
     </div>
@@ -527,8 +434,7 @@ function LiveActivityFeed({
       {toolCalls.map((tc) => (
         <div
           key={tc.id}
-          className="flex items-center gap-2 px-3 py-2 animate-fade-in"
-          style={liveToolCallWrapStyle}
+          className="flex items-center gap-2 px-3 py-2 animate-fade-in bg-forge-amber/4 border-l-2 border-l-forge-amber/35"
         >
           <Zap size={9} className="text-forge-amber flex-shrink-0 animate-status-blink" />
           <span className="text-xs text-forge-text truncate">
@@ -540,23 +446,20 @@ function LiveActivityFeed({
               {tc.details}
             </span>
           )}
-          <span
-            className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0"
-            style={liveToolCallStatusStyle}
-          >
+          <span className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 text-forge-amber/70">
             IN PROGRESS
           </span>
         </div>
       ))}
       {edits.map((edit) => (
-        <div key={edit.id} className="flex flex-col animate-fade-in" style={liveEditWrapStyle}>
+        <div
+          key={edit.id}
+          className="flex flex-col animate-fade-in bg-forge-green/3 border-l-2 border-l-forge-green/40"
+        >
           <div className="flex items-center gap-2 px-3 py-2">
             <FileText size={9} className="text-forge-green flex-shrink-0" />
             <span className="text-xs text-forge-text font-mono break-all flex-1">{edit.path}</span>
-            <span
-              className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0"
-              style={liveEditStatusStyle}
-            >
+            <span className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 text-forge-green/70">
               WRITING
             </span>
           </div>
@@ -697,18 +600,14 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
   return (
     <div className="flex flex-col flex-1 w-full h-full border-r border-forge-border">
       {/* Header */}
-      <div
-        className="px-3 py-2 border-b border-forge-border flex items-center gap-2 flex-shrink-0"
-        style={panelBgStyle}
-      >
+      <div className="px-3 py-2 border-b border-forge-border flex items-center gap-2 flex-shrink-0 bg-forge-panel">
         <Bot size={11} className="text-forge-text-muted" />
         <span className="text-forge-text-muted text-[10px] uppercase tracking-widest">CODEX</span>
-        <div className="h-3 w-px mx-1" style={panelDividerStyle} />
+        <div className="h-3 w-px mx-1 bg-forge-text-dim/30" />
         <StatusBadge status={status} />
         {codexState?.threadId && (
           <span
-            className="ml-auto text-[9px] font-mono truncate"
-            style={panelThreadStyle}
+            className="ml-auto text-[9px] font-mono truncate text-forge-text-dim/50 max-w-[120px]"
             title={codexState.threadId}
           >
             {codexState.threadId.slice(0, 8)}…
@@ -717,11 +616,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
       </div>
 
       {/* Unified scrollable area */}
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto bg-forge-black"
-        style={panelScrollStyle}
-      >
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto bg-forge-black pb-2">
         {/* Plan */}
         {codexState?.plan && codexState.plan.length > 0 && <PlanSection steps={codexState.plan} />}
 
@@ -768,10 +663,10 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
         {conversationBlocks.initialMessages.length === 0 &&
           conversationBlocks.userBlocks.length === 0 && (
             <div className="flex flex-col items-center justify-center h-32 gap-3 px-4 mt-4">
-              <div className="w-8 h-8 flex items-center justify-center" style={panelEmptyBoxStyle}>
-                <Bot size={14} style={panelEmptyBotStyle} />
+              <div className="w-8 h-8 flex items-center justify-center border border-forge-accent/15 bg-forge-accent/3">
+                <Bot size={14} className="text-forge-accent/40" />
               </div>
-              <p className="text-[10px] uppercase tracking-widest text-center" style={dimTextStyle}>
+              <p className="text-[10px] uppercase tracking-widest text-center text-forge-text-muted">
                 {isRunning ? "Codex is starting..." : "No messages yet"}
               </p>
             </div>
@@ -789,7 +684,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
 
         {/* Error */}
         {codexState?.lastError && (
-          <div className="mx-4 mt-3 px-3 py-2.5 flex items-start gap-2" style={panelErrorWrapStyle}>
+          <div className="mx-4 mt-3 px-3 py-2.5 flex items-start gap-2 border border-forge-red/30 bg-forge-red/4">
             <AlertTriangle size={11} className="text-forge-red flex-shrink-0 mt-0.5" />
             <pre className="text-xs text-forge-red whitespace-pre-wrap leading-relaxed">
               {codexState.lastError}
@@ -799,24 +694,18 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
       </div>
 
       {/* Input */}
-      <div
-        className="border-t border-forge-border flex flex-col gap-2 p-3 flex-shrink-0"
-        style={panelBgStyle}
-      >
+      <div className="border-t border-forge-border flex flex-col gap-2 p-3 flex-shrink-0 bg-forge-panel">
         <div className="flex items-center justify-between mb-0.5">
-          <label className="text-[9px] uppercase tracking-widest" style={dimTextStyle}>
+          <label className="text-[9px] uppercase tracking-widest text-forge-text-muted">
             STEER CODEX
           </label>
           {input.trim().length > 0 && (
-            <span className="text-[9px] font-mono" style={dimTextStyle}>
-              ⌘↵ to send
-            </span>
+            <span className="text-[9px] font-mono text-forge-text-muted">⌘↵ to send</span>
           )}
         </div>
         <textarea
           ref={textareaRef}
-          className="forge-input resize-none"
-          style={panelTextareaStyle}
+          className="forge-input resize-none min-h-[72px]"
           placeholder={
             isRunning ? "Steer the active turn..." : "Start a new turn on this Codex thread..."
           }
@@ -825,7 +714,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
           onKeyDown={handleKeyDown}
         />
         <div className="flex items-center justify-between">
-          <span className="text-[9px] font-mono" style={dimTextStyle}>
+          <span className="text-[9px] font-mono text-forge-text-muted">
             {isRunning ? "turn/steer" : "turn/start"}
           </span>
           <button
