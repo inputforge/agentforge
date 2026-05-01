@@ -190,7 +190,7 @@ export class CodexService {
       loginStatusText: loginStatusText || null,
       error: authenticated
         ? null
-        : "Codex is installed locally but not signed in. Run `./node_modules/.bin/codex login`.",
+        : "Codex is installed locally but not signed in. Run `npm exec -- codex login`.",
     };
   }
 }

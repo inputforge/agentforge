@@ -655,6 +655,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
   const isRunning = status === "running";
 
   useEffect(() => {
+    setTurns([]);
     let cancelled = false;
     api.agents
       .getCodexState(agentId)

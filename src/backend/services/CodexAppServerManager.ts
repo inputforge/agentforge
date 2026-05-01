@@ -986,6 +986,7 @@ export class CodexAppServerManager {
       this.pushState(session);
       session.ready?.reject(error);
       session.ready = undefined;
+      sessions.delete(session.agentId);
       return;
     }
 
