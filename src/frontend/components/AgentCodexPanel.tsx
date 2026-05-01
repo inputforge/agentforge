@@ -13,6 +13,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type {
@@ -34,65 +36,12 @@ interface LocalTurn {
   agentStartIndex: number;
 }
 
-type Segment =
-  | { type: "code"; lang: string; content: string }
-  | { type: "command"; content: string }
-  | { type: "text"; content: string };
-
-function parseMessage(text: string): Segment[] {
-  const result: Segment[] = [];
-  const codeBlockRe = /```(\w*)\n?([\s\S]*?)```/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = codeBlockRe.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parseInline(text.slice(cursor, match.index), result);
-    }
-    result.push({ type: "code", lang: match[1] || "sh", content: match[2].trimEnd() });
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < text.length) {
-    parseInline(text.slice(cursor), result);
-  }
-  return result;
-}
-
-function parseInline(raw: string, out: Segment[]): void {
-  const lines = raw.split("\n");
-  let textAcc = "";
-
-  for (const line of lines) {
-    const t = line.trim();
-    const isCmd = /^\$\s+/.test(t) || /^>\s+/.test(t) || /^%\s+/.test(t);
-    if (isCmd && t.length > 2) {
-      if (textAcc) {
-        out.push({ type: "text", content: textAcc.trimEnd() });
-        textAcc = "";
-      }
-      out.push({ type: "command", content: t });
-    } else {
-      textAcc += (textAcc ? "\n" : "") + line;
-    }
-  }
-  if (textAcc.trim()) out.push({ type: "text", content: textAcc });
-}
-
 // ── Style constants ───────────────────────────────────────────────────────────
 
 const codeBlockWrapStyle = {
   background: "rgba(34,197,94,0.05)",
   borderLeft: "2px solid rgba(34,197,94,0.5)",
 };
-const codeBlockLangStyle = { color: "rgba(34,197,94,0.5)" };
-const codeBlockPreStyle = { color: "#22c55e" };
-
-const commandLineWrapStyle = {
-  background: "rgba(34,197,94,0.04)",
-  borderLeft: "1px solid rgba(34,197,94,0.3)",
-  color: "#22c55e",
-};
-const commandLineIconStyle = { opacity: 0.6, flexShrink: 0 };
 
 const userMsgInnerStyle = {
   background: "linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.06))",
@@ -189,52 +138,67 @@ function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTur
   ];
 }
 
-function CodeBlock({ lang, content }: { lang: string; content: string }) {
-  return (
-    <div className="my-2 overflow-x-auto" style={codeBlockWrapStyle}>
-      {lang && (
-        <div
-          className="px-3 pt-1.5 pb-0 text-[9px] uppercase tracking-widest"
-          style={codeBlockLangStyle}
-        >
-          {lang}
+const mdRemarkPlugins = [remarkGfm];
+
+const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+  p: ({ children }) => <p className="text-xs leading-relaxed text-forge-text my-1">{children}</p>,
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children }) => {
+    const lang = /language-(\w+)/.exec(className ?? "")?.[1];
+    if (lang) {
+      return (
+        <div className="my-2 overflow-x-auto" style={codeBlockWrapStyle}>
+          <div className="px-3 pt-1.5 pb-0 text-[9px] uppercase tracking-widest text-forge-green/50">
+            {lang}
+          </div>
+          <pre className="px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap font-mono text-forge-green">
+            {String(children).replace(/\n$/, "")}
+          </pre>
         </div>
-      )}
-      <pre
-        className="px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap font-mono"
-        style={codeBlockPreStyle}
-      >
-        {content}
-      </pre>
-    </div>
-  );
-}
-
-function CommandLine({ content }: { content: string }) {
-  return (
-    <div
-      className="my-1 flex items-center gap-2 px-2 py-1 text-xs font-mono"
-      style={commandLineWrapStyle}
+      );
+    }
+    return (
+      <code className="font-mono text-xs text-forge-green bg-forge-surface px-1">{children}</code>
+    );
+  },
+  ul: ({ children }) => (
+    <ul className="text-xs text-forge-text list-disc list-inside my-1 space-y-0.5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="text-xs text-forge-text list-decimal list-inside my-1 space-y-0.5">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  h1: ({ children }) => <h1 className="text-sm font-mono text-forge-accent my-2">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-xs font-mono text-forge-accent my-2">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-xs font-mono text-forge-text-dim my-1">{children}</h3>,
+  strong: ({ children }) => (
+    <strong className="text-forge-text-bright font-mono">{children}</strong>
+  ),
+  em: ({ children }) => <em className="text-forge-text-dim italic">{children}</em>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-forge-accent/30 pl-3 my-1 text-forge-text-dim text-xs">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-forge-accent underline underline-offset-2"
     >
-      <Terminal size={9} style={commandLineIconStyle} />
-      <span className="whitespace-pre-wrap break-all">{content}</span>
-    </div>
-  );
-}
+      {children}
+    </a>
+  ),
+};
 
-function MessageSegments({ segments }: { segments: Segment[] }) {
+function MarkdownContent({ text }: { text: string }) {
   return (
-    <>
-      {segments.map((seg, i) => {
-        if (seg.type === "code") return <CodeBlock key={i} lang={seg.lang} content={seg.content} />;
-        if (seg.type === "command") return <CommandLine key={i} content={seg.content} />;
-        return (
-          <p key={i} className="text-xs leading-relaxed whitespace-pre-wrap text-forge-text">
-            {seg.content}
-          </p>
-        );
-      })}
-    </>
+    <ReactMarkdown remarkPlugins={mdRemarkPlugins} components={mdComponents}>
+      {text}
+    </ReactMarkdown>
   );
 }
 
@@ -256,8 +220,6 @@ function UserMessage({ text }: { text: string }) {
 }
 
 function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFinal: boolean }) {
-  const segments = useMemo(() => parseMessage(message.text), [message.text]);
-
   if (isFinal) {
     return (
       <div className="px-4 py-3 animate-fade-in" style={agentFinalWrapStyle}>
@@ -267,7 +229,7 @@ function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFina
             AGENT
           </span>
         </div>
-        <MessageSegments segments={segments} />
+        <MarkdownContent text={message.text} />
       </div>
     );
   }
@@ -281,7 +243,7 @@ function AgentMessageBlock({ message, isFinal }: { message: CodexMessage; isFina
         </span>
       </div>
       <div style={agentDraftContentStyle}>
-        <MessageSegments segments={segments} />
+        <MarkdownContent text={message.text} />
       </div>
     </div>
   );
