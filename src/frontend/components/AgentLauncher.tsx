@@ -19,6 +19,18 @@ const AGENTS: { type: AgentType; label: string; sub: string; command: string }[]
   },
 ];
 
+const CODEX_STATUS_UNAVAILABLE: CodexStatus = {
+  installed: false,
+  authenticated: false,
+  ready: false,
+  command: null,
+  binaryPath: null,
+  version: null,
+  authMethod: null,
+  loginStatusText: null,
+  error: "Couldn't verify local Codex. Refresh and try again.",
+};
+
 interface AgentButtonProps {
   a: (typeof AGENTS)[number];
   launching: AgentType | null;
@@ -113,13 +125,14 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
   const [isCheckingCodex, setIsCheckingCodex] = useState(true);
+  const codexReady = codexStatus?.ready === true;
 
   const refreshCodexStatus = useCallback(() => {
     setIsCheckingCodex(true);
     api.integrations.codex
       .status()
       .then(setCodexStatus)
-      .catch(() => setCodexStatus(null))
+      .catch(() => setCodexStatus(CODEX_STATUS_UNAVAILABLE))
       .finally(() => setIsCheckingCodex(false));
   }, []);
 
@@ -232,12 +245,12 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
               key={a.type}
               a={a}
               launching={launching}
-              disabled={a.type === "codex" && (isCheckingCodex || codexStatus?.ready === false)}
+              disabled={a.type === "codex" && (isCheckingCodex || !codexReady)}
               reason={
-                a.type === "codex" && (isCheckingCodex || codexStatus?.ready === false)
+                a.type === "codex" && (isCheckingCodex || !codexReady)
                   ? isCheckingCodex
                     ? "Checking local Codex..."
-                    : "Sign in to Codex, then refresh here."
+                    : (codexStatus?.error ?? "Couldn't verify local Codex. Refresh and try again.")
                   : null
               }
               onLaunch={launch}

@@ -211,7 +211,7 @@ export function agentsRouter(orchestrator: OrchestratorService) {
 
     log.info("restarting agent", { agentId: id });
     if (agent.type === "codex") {
-      codexAppServerManager.kill(id);
+      await codexAppServerManager.killAndWait(id);
     } else {
       await agentProcessManager.killAndWait(id);
     }

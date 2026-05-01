@@ -25,7 +25,7 @@ Open [http://localhost:5173](http://localhost:5173).
 If you want to use Codex, sign in once after install:
 
 ```bash
-./node_modules/.bin/codex login
+npm exec -- codex login
 ```
 
 You can confirm AgentForge sees the runtime in **Integrations → Codex**.

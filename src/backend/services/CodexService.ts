@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import { spawn } from "node:child_process";
 import { join } from "path";
 import type { CodexStatus } from "../../common/types.ts";
 
@@ -10,6 +11,15 @@ const localCodexBinary = join(
   ".bin",
   process.platform === "win32" ? "codex.cmd" : "codex",
 );
+const statusProbeTimeoutMs = Number(process.env.AGENTFORGE_CODEX_STATUS_TIMEOUT_MS ?? 5000);
+
+interface ProbeResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  error: Error | null;
+}
 
 function decodeOutput(output: Uint8Array | undefined): string {
   return output ? decoder.decode(output).trim() : "";
@@ -42,6 +52,53 @@ function parseAuthMethod(output: string): CodexStatus["authMethod"] {
 
 function isAuthenticated(output: string): boolean {
   return /logged in/i.test(output) && !/not logged in/i.test(output);
+}
+
+function probeFailure(label: string, result: ProbeResult): string | null {
+  if (result.timedOut) return `${label} timed out after ${statusProbeTimeoutMs}ms.`;
+  if (result.error) return `${label} failed: ${result.error.message}`;
+  if (result.exitCode !== 0) {
+    const output = cleanCodexOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+    return `${label} exited with code ${result.exitCode ?? "unknown"}${output ? `: ${output}` : ""}`;
+  }
+  return null;
+}
+
+function runProbe(binaryPath: string, args: string[]): Promise<ProbeResult> {
+  return new Promise((resolve) => {
+    const proc = spawn(binaryPath, args, {
+      cwd: projectRoot,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (exitCode: number | null, error: Error | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        exitCode,
+        stdout: decodeOutput(Buffer.concat(stdout)),
+        stderr: decodeOutput(Buffer.concat(stderr)),
+        timedOut,
+        error,
+      });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+    }, statusProbeTimeoutMs);
+
+    proc.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    proc.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    proc.on("error", (err) => finish(null, err));
+    proc.on("close", (code) => finish(code, null));
+  });
 }
 
 export class CodexService {
@@ -81,26 +138,44 @@ export class CodexService {
       };
     }
 
-    const versionProc = Bun.spawnSync([binaryPath, "--version"], {
-      cwd: projectRoot,
-      env: process.env,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const versionOutput = [decodeOutput(versionProc.stdout), decodeOutput(versionProc.stderr)]
-      .filter(Boolean)
-      .join("\n");
+    const versionProbe = await runProbe(binaryPath, ["--version"]);
+    const versionFailure = probeFailure("Codex version probe", versionProbe);
+    if (versionFailure) {
+      return {
+        installed: false,
+        authenticated: false,
+        ready: false,
+        command,
+        binaryPath,
+        version: null,
+        authMethod: null,
+        loginStatusText: null,
+        error: versionFailure,
+      };
+    }
+
+    const versionOutput = [versionProbe.stdout, versionProbe.stderr].filter(Boolean).join("\n");
     const version = parseVersion(versionOutput);
 
-    const loginProc = Bun.spawnSync([binaryPath, "login", "status"], {
-      cwd: projectRoot,
-      env: process.env,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const loginProbe = await runProbe(binaryPath, ["login", "status"]);
     const loginStatusText = cleanCodexOutput(
-      [decodeOutput(loginProc.stdout), decodeOutput(loginProc.stderr)].filter(Boolean).join("\n"),
+      [loginProbe.stdout, loginProbe.stderr].filter(Boolean).join("\n"),
     );
+    const loginFailure = probeFailure("Codex login status probe", loginProbe);
+    if (loginFailure) {
+      return {
+        installed: true,
+        authenticated: false,
+        ready: false,
+        command,
+        binaryPath,
+        version,
+        authMethod: null,
+        loginStatusText: loginStatusText || null,
+        error: loginFailure,
+      };
+    }
+
     const authenticated = isAuthenticated(loginStatusText);
     const authMethod = parseAuthMethod(loginStatusText);
 

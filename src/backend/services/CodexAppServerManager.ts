@@ -48,6 +48,7 @@ interface CodexSession {
 }
 
 const sessions = new Map<string, CodexSession>();
+const sessionBootTimeoutMs = 10000;
 
 function initialState(agentId: string): CodexAgentState {
   return {
@@ -212,6 +213,10 @@ export class CodexAppServerManager {
       void this.handleMessage(session, line);
     });
 
+    proc.on("error", (err) => {
+      this.finalizeSession(session, "failed", 1, err.message);
+    });
+
     proc.on("close", (code) => {
       rl.close();
       if (!session.finalized) {
@@ -286,8 +291,11 @@ export class CodexAppServerManager {
   async writeToAgent(agent: Agent, input: string): Promise<void> {
     let session = sessions.get(agent.id);
     if (!session?.threadId) {
-      if (!agent.sessionId) throw new Error(`No Codex session for agent ${agent.id}`);
-      session = await this.restore(agent);
+      session = session
+        ? await this.waitForSessionThread(agent.id)
+        : agent.sessionId
+          ? await this.restore(agent)
+          : await this.waitForSessionThread(agent.id);
     }
 
     agentStmts.updateStatus.run({
@@ -356,6 +364,15 @@ export class CodexAppServerManager {
 
     rl.on("line", (line) => {
       void this.handleMessage(session, line);
+    });
+
+    proc.on("error", (err) => {
+      if (session.ready) {
+        session.ready.reject(err);
+        session.ready = undefined;
+      } else {
+        this.finalizeSession(session, "failed", 1, err.message);
+      }
     });
 
     proc.on("close", (code) => {
@@ -427,12 +444,51 @@ export class CodexAppServerManager {
     sessions.delete(agentId);
   }
 
+  killAndWait(agentId: string): Promise<void> {
+    const session = sessions.get(agentId);
+    if (!session) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, 2000);
+      const finish = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      session.proc.once("close", finish);
+      session.proc.once("error", finish);
+      this.kill(agentId);
+    });
+  }
+
   subscribe(agentId: string): EventEmitter | null {
     return sessions.get(agentId)?.emitter ?? null;
   }
 
   isRunning(agentId: string): boolean {
     return sessions.has(agentId);
+  }
+
+  private waitForSessionThread(agentId: string): Promise<CodexSession> {
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const timer = setInterval(() => {
+        const session = sessions.get(agentId);
+        if (session?.threadId) {
+          clearInterval(timer);
+          resolve(session);
+          return;
+        }
+        if (!session) {
+          clearInterval(timer);
+          reject(new Error(`No Codex session for agent ${agentId}`));
+          return;
+        }
+        if (Date.now() - startedAt >= sessionBootTimeoutMs) {
+          clearInterval(timer);
+          reject(new Error(`Timed out waiting for Codex session ${agentId} to start`));
+        }
+      }, 50);
+    });
   }
 
   async getState(agent: Agent): Promise<CodexAgentState> {
@@ -1089,13 +1145,17 @@ export class CodexAppServerManager {
           : interrupted
             ? "interrupted"
             : "completed";
-        const exitCode = failed ? 1 : 0;
+        const exitCode = failed || interrupted ? 1 : 0;
 
         // Clear the active turn but keep the process alive so the user can send follow-up messages.
         session.activeTurnId = null;
         session.state.turnId = null;
         session.state.status = codexStatus;
-        session.state.lastError = failed ? (turn?.error?.message ?? "Codex turn failed") : null;
+        session.state.lastError = failed
+          ? (turn?.error?.message ?? "Codex turn failed")
+          : interrupted
+            ? "Codex turn interrupted"
+            : null;
         this.pushState(session);
 
         agentStmts.updateStatus.run({

@@ -1,2 +1,11 @@
 #!/bin/sh
-bun run format && git add -u && bun run check
+staged_files="$(mktemp)"
+git diff --cached --name-only --diff-filter=ACMR -z > "$staged_files"
+
+bun run format
+if [ -s "$staged_files" ]; then
+  xargs -0 git add -- < "$staged_files"
+fi
+rm -f "$staged_files"
+
+bun run check

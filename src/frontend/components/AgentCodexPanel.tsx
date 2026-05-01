@@ -178,6 +178,17 @@ const panelTextareaStyle = { minHeight: 72 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTurn[] {
+  const serverIds = new Set(serverTurns.map((turn) => turn.id));
+  return [
+    ...serverTurns.map((serverTurn) => {
+      const localTurn = localTurns.find((turn) => turn.id === serverTurn.id);
+      return localTurn ? { ...localTurn, ...serverTurn } : serverTurn;
+    }),
+    ...localTurns.filter((turn) => !serverIds.has(turn.id)),
+  ];
+}
+
 function CodeBlock({ lang, content }: { lang: string; content: string }) {
   return (
     <div className="my-2 overflow-x-auto" style={codeBlockWrapStyle}>
@@ -650,7 +661,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
       .then((state) => {
         if (cancelled) return;
         setCodexState(agentId, state);
-        setTurns(state.userMessages);
+        setTurns((existing) => mergeTurns(state.userMessages, existing));
       })
       .catch((err) => addNotification({ type: "error", message: (err as Error).message }));
     return () => {
@@ -660,11 +671,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
 
   useEffect(() => {
     if (!codexState?.userMessages.length) return;
-    setTurns((existing) => {
-      const existingIds = existing.map((turn) => turn.id).join(",");
-      const nextIds = codexState.userMessages.map((turn) => turn.id).join(",");
-      return existingIds === nextIds ? existing : codexState.userMessages;
-    });
+    setTurns((existing) => mergeTurns(codexState.userMessages, existing));
   }, [codexState?.userMessages]);
 
   const lastMessageIsForCurrentTurn = useMemo(() => {
@@ -677,7 +684,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [allMessages.length, isRunning, inProgressEdits.length, inProgressToolCalls.length]);
+  }, [allMessages, isRunning, inProgressEdits.length, inProgressToolCalls.length]);
 
   const handleSend = useCallback(async () => {
     const value = input.trim();
@@ -694,6 +701,8 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
       setTurns((prev) => prev.filter((t) => t.id !== turnId));
+      setInput(value);
+      textareaRef.current?.focus();
     } finally {
       setIsSending(false);
     }

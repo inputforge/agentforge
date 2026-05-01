@@ -239,7 +239,11 @@ export const useStore = create<AppState>((set, get) => ({
   setAgentDiff: (agentId, diff) =>
     set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
   setCodexState: (agentId, state) =>
-    set((s) => ({ codexStates: { ...s.codexStates, [agentId]: state } })),
+    set((s) => {
+      const current = s.codexStates[agentId];
+      if (current && current.updatedAt > state.updatedAt) return s;
+      return { codexStates: { ...s.codexStates, [agentId]: state } };
+    }),
 }));
 
 export const selectTicketsByStatus = (status: TicketStatus) => (s: AppState) =>

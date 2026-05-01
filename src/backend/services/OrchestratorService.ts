@@ -240,6 +240,7 @@ export class OrchestratorService {
         await codexAppServerManager.restore(agent, (id, exitCode) => {
           void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
         });
+        gitWatcher.watchWorktree(agent.id, agent.worktreePath, agent.baseBranch);
         appendScrollback(
           agent.id,
           `\r\n\x1b[33m[restored codex thread ${agent.sessionId}]\x1b[0m\r\n`,

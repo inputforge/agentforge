@@ -33,7 +33,7 @@ integrationsRouter.get("/codex/status", async (c) => {
     return c.json(await codexService.getStatus());
   } catch (err) {
     log.error("codex status probe failed", { error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
+    return c.json({ error: "Failed to check Codex status." }, 502);
   }
 });
 
