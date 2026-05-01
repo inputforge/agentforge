@@ -7,7 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { Agent, AppNotification, DiffResult, Ticket } from "../types";
+import type { Agent, AppNotification, CodexAgentState, DiffResult, Ticket } from "../types";
 import { useStore } from "../store";
 
 type IncomingEvent =
@@ -17,6 +17,7 @@ type IncomingEvent =
   | { type: "kanban-sync"; tickets: Ticket[] }
   | { type: "branch-updated"; branch: string | null }
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
+  | { type: "codex-state-updated"; agentId: string; state: CodexAgentState }
   | { type: "branches-updated" };
 
 interface SessionSocketContextValue {
@@ -33,6 +34,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgent,
     setCurrentBranch,
     setAgentDiff,
+    setCodexState,
     fetchBranches,
   } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
@@ -74,6 +76,9 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
             case "diff-updated":
               setAgentDiff(event.agentId, event.diff);
               break;
+            case "codex-state-updated":
+              setCodexState(event.agentId, event.state);
+              break;
             case "branches-updated":
               fetchBranches();
               break;
@@ -109,6 +114,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgent,
     setCurrentBranch,
     setAgentDiff,
+    setCodexState,
     fetchBranches,
   ]);
 

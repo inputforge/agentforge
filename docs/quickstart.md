@@ -7,7 +7,7 @@ Get AgentForge running in under five minutes.
 - [Bun](https://bun.sh) v1.0 or later
 - At least one AI coding agent CLI installed:
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
-  - [Codex](https://github.com/openai/codex) — `npm install -g @openai/codex`
+  - Codex is bundled with AgentForge via `@openai/codex`
   - Or any other CLI agent (Aider, etc.)
 - A git repository you want agents to work on
 
@@ -21,6 +21,14 @@ bun run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173).
+
+If you want to use Codex, sign in once after install:
+
+```bash
+./node_modules/.bin/codex login
+```
+
+You can confirm AgentForge sees the runtime in **Integrations → Codex**.
 
 ## Connect your repository
 
@@ -41,7 +49,7 @@ The first line of your description becomes the ticket title automatically. Check
 Drag the ticket from **BACKLOG** into **IN PROGRESS**, or click the ticket to open it and move it. A launcher panel appears — pick an agent:
 
 - **Claude** — uses `claude --dangerously-skip-permissions` with your description as the prompt
-- **Codex** — uses `codex` with your description as the prompt
+- **Codex** — uses the bundled local `codex` CLI after you sign in once
 - **Custom** — type any CLI command
 
 The agent starts immediately in an isolated git worktree. You can watch it work in the live terminal on the right. If the agent exits with an error, click **RELAUNCH** to restart it.

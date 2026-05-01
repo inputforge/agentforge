@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { integrationStmts, remoteStmts } from "../db/index.ts";
 import { logger } from "../lib/logger.ts";
 import { GitHubService } from "../services/GitHubService.ts";
+import { codexService } from "../services/CodexService.ts";
 import { globalConfig } from "../services/GlobalConfigService.ts";
 import { LinearService } from "../services/LinearService.ts";
 
@@ -26,6 +27,15 @@ function parseGitHubOwnerRepo(repoUrl: string): { owner: string; repo: string } 
 }
 
 export const integrationsRouter = new Hono();
+
+integrationsRouter.get("/codex/status", async (c) => {
+  try {
+    return c.json(await codexService.getStatus());
+  } catch (err) {
+    log.error("codex status probe failed", { error: (err as Error).message });
+    return c.json({ error: (err as Error).message }, 502);
+  }
+});
 
 // ─── Config endpoints ──────────────────────────────────────────────────────
 

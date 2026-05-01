@@ -8,6 +8,8 @@ import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
 import { appendScrollback } from "../ws/hub.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+import { codexService } from "./CodexService.ts";
+import { codexAppServerManager } from "./CodexAppServerManager.ts";
 
 const log = logger.child("orchestrator");
 
@@ -50,7 +52,7 @@ function buildCommand(
         ? `claude --enable-auto-mode -- ${shellQuote(prompt)}`
         : "claude --enable-auto-mode";
     case "codex":
-      return prompt ? `codex -- ${shellQuote(prompt)}` : "codex";
+      return codexService.buildAppServerCommand();
     case "custom":
       return customCommand?.trim() || "claude --enable-auto-mode";
   }
@@ -141,8 +143,10 @@ export class OrchestratorService {
       }
     }
 
-    // Inject Claude hook settings so lifecycle events POST back to us
-    writeHookSettings(worktreePath, agentId);
+    if (agentType === "claude-code") {
+      // Inject Claude hook settings so lifecycle events POST back to us
+      writeHookSettings(worktreePath, agentId);
+    }
 
     agentStmts.insert.run({
       $id: agentId,
@@ -175,9 +179,15 @@ export class OrchestratorService {
     }
 
     try {
-      agentProcessManager.spawn(agentId, command, worktreePath, (id, exitCode) => {
-        void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
-      });
+      if (agentType === "codex") {
+        codexAppServerManager.spawn(agentId, ticket.description, worktreePath, (id, exitCode) => {
+          void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
+        });
+      } else {
+        agentProcessManager.spawn(agentId, command, worktreePath, (id, exitCode) => {
+          void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
+        });
+      }
 
       // Broadcast only after the process is registered so WS clients connecting
       // immediately on agent-updated find a live emitter and non-empty scrollback.
@@ -214,6 +224,41 @@ export class OrchestratorService {
   async resumeAgent(agent: Agent): Promise<void> {
     const ticket = ticketStmts.get.get(agent.ticketId);
     if (!ticket) return;
+
+    if (agent.type === "codex") {
+      if (!agent.sessionId) {
+        agentStmts.updateStatus.run({
+          $id: agent.id,
+          $status: "error",
+          $endedAt: Date.now(),
+        });
+        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
+        return;
+      }
+
+      try {
+        await codexAppServerManager.restore(agent, (id, exitCode) => {
+          void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
+        });
+        appendScrollback(
+          agent.id,
+          `\r\n\x1b[33m[restored codex thread ${agent.sessionId}]\x1b[0m\r\n`,
+        );
+        const updatedAgent = agentStmts.get.get(agent.id);
+        if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
+      } catch (err) {
+        const msg = (err as Error).message;
+        log.error("failed to restore codex app-server", { agentId: agent.id, ...errorMeta(err) });
+        appendScrollback(agent.id, `\x1b[31m[codex restore failed] ${msg}\x1b[0m\r\n`);
+        agentStmts.updateStatus.run({
+          $id: agent.id,
+          $status: "error",
+          $endedAt: Date.now(),
+        });
+        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
+      }
+      return;
+    }
 
     if (!agent.sessionId) {
       // No session to resume — mark as error so the UI shows a clear state
@@ -258,7 +303,12 @@ export class OrchestratorService {
   private cleanupTicket(ticketId: string): void {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
-    agentProcessManager.kill(ticket.agentId);
+    const agent = agentStmts.get.get(ticket.agentId);
+    if (agent?.type === "codex") {
+      codexAppServerManager.kill(ticket.agentId);
+    } else {
+      agentProcessManager.kill(ticket.agentId);
+    }
     gitWatcher.unwatchWorktree(ticket.agentId);
   }
 

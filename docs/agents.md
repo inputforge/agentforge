@@ -23,9 +23,9 @@ Claude Code gets the ticket description as an inline prompt and runs non-interac
 
 Runs [OpenAI Codex CLI](https://github.com/openai/codex).
 
-**Command:** `codex "<your description>"`
+**Command:** bundled local `codex "<your description>"`
 
-**Requirements:** `codex` must be on your PATH and authenticated.
+**Requirements:** sign in locally with `./node_modules/.bin/codex login` or `codex app`.
 
 ### Custom
 

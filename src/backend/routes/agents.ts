@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
+import { codexAppServerManager } from "../services/CodexAppServerManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
 import type { AgentType } from "../../common/types.ts";
@@ -39,6 +40,19 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       return c.json(diff);
     } catch (err) {
       log.error("failed to fetch diff", { agentId: agent.id, ...errorMeta(err) });
+      return c.json({ error: (err as Error).message }, 500);
+    }
+  });
+
+  app.get("/:id/codex-state", async (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (agent.type !== "codex") return c.json({ error: "agent is not a codex agent" }, 400);
+
+    try {
+      return c.json(await codexAppServerManager.getState(agent));
+    } catch (err) {
+      log.error("failed to load codex state", { agentId: agent.id, ...errorMeta(err) });
       return c.json({ error: (err as Error).message }, 500);
     }
   });
@@ -97,7 +111,12 @@ export function agentsRouter(orchestrator: OrchestratorService) {
 
     let targetAgentId = agent.id;
 
-    if (!agentProcessManager.isRunning(agent.id)) {
+    const isRunning =
+      agent.type === "codex"
+        ? codexAppServerManager.isRunning(agent.id)
+        : agentProcessManager.isRunning(agent.id);
+
+    if (!isRunning) {
       log.info("spawning agent for commit", { agentId: agent.id, ticketId: agent.ticketId });
       await orchestrator.spawnAgent(agent.ticketId, agent.type as AgentType);
       const ticket = ticketStmts.get.get(agent.ticketId);
@@ -105,12 +124,21 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     }
 
     log.info("sending commit prompt", { agentId: targetAgentId });
-    agentProcessManager.write(
-      targetAgentId,
-      "Please commit all current changes with a descriptive commit message.",
-    );
-    await Bun.sleep(100);
-    agentProcessManager.write(targetAgentId, Buffer.from([0x0d]));
+    if (agent.type === "codex") {
+      const targetAgent = agentStmts.get.get(targetAgentId);
+      if (!targetAgent) return c.json({ error: "agent not found" }, 404);
+      await codexAppServerManager.writeToAgent(
+        targetAgent,
+        "Please commit all current changes with a descriptive commit message.",
+      );
+    } else {
+      agentProcessManager.write(
+        targetAgentId,
+        "Please commit all current changes with a descriptive commit message.",
+      );
+      await Bun.sleep(100);
+      agentProcessManager.write(targetAgentId, Buffer.from([0x0d]));
+    }
     return c.json({ ok: true });
   });
 
@@ -121,7 +149,10 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const remoteConfig = remoteStmts.get.get();
     if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
 
-    const isRunning = agentProcessManager.isRunning(agent.id);
+    const isRunning =
+      agent.type === "codex"
+        ? codexAppServerManager.isRunning(agent.id)
+        : agentProcessManager.isRunning(agent.id);
     // Only abort on conflict when the agent isn't running — if it is running,
     // leave the worktree in the conflicted state so the agent can resolve it.
     log.info("rebase requested", {
@@ -137,12 +168,15 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       } else if (result.conflicted) {
         log.warn("rebase conflict detected", { agentId: agent.id, isRunning });
         if (isRunning) {
-          agentProcessManager.write(
-            agent.id,
-            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.",
-          );
-          await Bun.sleep(100);
-          agentProcessManager.write(agent.id, Buffer.from([0x0d]));
+          const prompt =
+            "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.";
+          if (agent.type === "codex") {
+            await codexAppServerManager.writeToAgent(agent, prompt);
+          } else {
+            agentProcessManager.write(agent.id, prompt);
+            await Bun.sleep(100);
+            agentProcessManager.write(agent.id, Buffer.from([0x0d]));
+          }
         }
       }
       return c.json({ ...result, resolving: result.conflicted && isRunning });
@@ -161,7 +195,11 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     if (!agent) return c.json({ error: "agent not found" }, 404);
 
     log.info("killing agent", { agentId: id });
-    agentProcessManager.kill(id);
+    if (agent.type === "codex") {
+      codexAppServerManager.kill(id);
+    } else {
+      agentProcessManager.kill(id);
+    }
     agentStmts.updateStatus.run({ $id: id, $status: "error", $endedAt: Date.now() });
     return c.body(null, 204);
   });
@@ -172,7 +210,11 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     if (!agent) return c.json({ error: "agent not found" }, 404);
 
     log.info("restarting agent", { agentId: id });
-    await agentProcessManager.killAndWait(id);
+    if (agent.type === "codex") {
+      codexAppServerManager.kill(id);
+    } else {
+      await agentProcessManager.killAndWait(id);
+    }
     await orchestrator.resumeAgent(agent);
     return c.body(null, 204);
   });
@@ -188,7 +230,13 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     if (!body.input) return c.json({ error: "input is required" }, 400);
 
     try {
-      agentProcessManager.write(id, body.input);
+      const agent = agentStmts.get.get(id);
+      if (!agent) return c.json({ error: "agent not found" }, 404);
+      if (agent.type === "codex") {
+        await codexAppServerManager.writeToAgent(agent, body.input);
+      } else {
+        agentProcessManager.write(id, body.input);
+      }
       return c.json({ ok: true });
     } catch (err) {
       log.error("failed to write input to agent", { agentId: id, ...errorMeta(err) });

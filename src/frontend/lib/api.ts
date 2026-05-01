@@ -1,9 +1,11 @@
 import type {
   Agent,
+  CodexAgentState,
   DiffResult,
   GitBranchInfo,
   GitHubIssue,
   IntegrationConfig,
+  CodexStatus,
   LinearIssue,
   LinearTeam,
   MergeResult,
@@ -55,6 +57,7 @@ export const api = {
 
   agents: {
     get: (id: string) => request<Agent>(`/agents/${id}`),
+    getCodexState: (id: string) => request<CodexAgentState>(`/agents/${id}/codex-state`),
     getDiff: (id: string) => request<DiffResult>(`/agents/${id}/diff`),
     merge: (id: string) => request<MergeResult>(`/agents/${id}/merge`, { method: "POST" }),
     rebase: (id: string) =>
@@ -81,6 +84,9 @@ export const api = {
   },
 
   integrations: {
+    codex: {
+      status: () => request<CodexStatus>("/integrations/codex/status"),
+    },
     getConfig: (provider: "github" | "linear") =>
       request<IntegrationConfig>(`/integrations/${provider}/config`),
     saveConfig: (provider: "github" | "linear", data: Record<string, string>) =>

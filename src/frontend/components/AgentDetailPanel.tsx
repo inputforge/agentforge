@@ -13,6 +13,7 @@ import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "reac
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type { AgentType } from "../types";
+import { AgentCodexPanel } from "./AgentCodexPanel";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
 import { AgentTerminalPanel } from "./AgentTerminalPanel";
@@ -346,7 +347,11 @@ export function AgentDetailPanel() {
             {/* Tab content */}
             <div className="flex-1 overflow-hidden relative">
               <div className={`absolute inset-0 ${activeTab === "agent" ? "" : "invisible"}`}>
-                <AgentTerminalPanel agentId={agentId!} />
+                {agent.type === "codex" ? (
+                  <AgentCodexPanel agentId={agentId!} />
+                ) : (
+                  <AgentTerminalPanel agentId={agentId!} />
+                )}
               </div>
               <div className={`absolute inset-0 ${activeTab === "shell" ? "" : "invisible"}`}>
                 {shellMounted && <WorktreeShellPanel agentId={agentId!} />}

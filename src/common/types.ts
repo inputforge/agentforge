@@ -113,3 +113,75 @@ export interface IntegrationConfig {
   repo?: string;
   teamId?: string;
 }
+
+export interface CodexStatus {
+  installed: boolean;
+  authenticated: boolean;
+  ready: boolean;
+  command: string | null;
+  binaryPath: string | null;
+  version: string | null;
+  authMethod: "apikey" | "chatgpt" | "agentIdentity" | "unknown" | null;
+  loginStatusText: string | null;
+  error: string | null;
+}
+
+export type CodexTurnStatus = "idle" | "running" | "completed" | "failed" | "interrupted";
+export type CodexPlanStepStatus = "pending" | "inProgress" | "completed";
+
+export interface CodexPlanStep {
+  step: string;
+  status: CodexPlanStepStatus;
+}
+
+export interface CodexMessage {
+  id: string;
+  text: string;
+}
+
+export interface CodexUserMessage {
+  id: string;
+  userText: string;
+  agentStartIndex: number;
+}
+
+export interface CodexAction {
+  id: string;
+  kind: string;
+  title: string;
+  command?: string | null;
+  status?: string | null;
+  details?: string | null;
+}
+
+export interface CodexToolCall {
+  id: string;
+  kind: "mcp" | "dynamic" | "collab";
+  tool: string;
+  server?: string | null;
+  status: string;
+  details?: string | null;
+}
+
+export interface CodexEdit {
+  id: string;
+  path: string;
+  kind: string;
+  diff: string;
+  status?: string | null;
+}
+
+export interface CodexAgentState {
+  agentId: string;
+  threadId: string | null;
+  turnId: string | null;
+  status: CodexTurnStatus;
+  userMessages: CodexUserMessage[];
+  messages: CodexMessage[];
+  plan: CodexPlanStep[];
+  actions: CodexAction[];
+  toolCalls: CodexToolCall[];
+  edits: CodexEdit[];
+  lastError: string | null;
+  updatedAt: number;
+}

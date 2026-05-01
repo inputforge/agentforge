@@ -1,2 +1,2 @@
 #!/bin/sh
-bun run check
+bun run format && git add -u && bun run check
