@@ -46,7 +46,6 @@ export class CodexAppServerManager implements IAgentManager {
     onExit: (agentId: string, code: number) => void,
   ): EventEmitter {
     const binary = codexService.resolveBinaryPath();
-    if (!binary) throw new Error("Local Codex CLI is not installed");
 
     const proc = spawn(binary, ["app-server"], {
       cwd: worktreePath,

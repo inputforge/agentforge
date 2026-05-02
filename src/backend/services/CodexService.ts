@@ -1,16 +1,9 @@
-import { existsSync } from "fs";
 import { spawn } from "node:child_process";
 import { join } from "path";
 import type { CodexStatus } from "../../common/types.ts";
 
 const decoder = new TextDecoder();
 const projectRoot = join(import.meta.dir, "../../..");
-const localCodexBinary = join(
-  projectRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "codex.cmd" : "codex",
-);
 const statusProbeTimeoutMs = Number(process.env.AGENTFORGE_CODEX_STATUS_TIMEOUT_MS ?? 5000);
 
 interface ProbeResult {
@@ -102,29 +95,30 @@ function runProbe(binaryPath: string, args: string[]): Promise<ProbeResult> {
 }
 
 export class CodexService {
-  resolveBinaryPath(): string | null {
+  resolveBinaryPath(): string {
     const override = process.env.AGENTFORGE_CODEX_BIN?.trim();
     if (override) return override;
-    if (existsSync(localCodexBinary)) return localCodexBinary;
-    return null;
+    return "codex";
   }
 
   buildLaunchCommand(prompt: string): string {
-    const binary = this.resolveBinaryPath() ?? "codex";
+    const binary = this.resolveBinaryPath();
     const quotedBinary = `"${binary.replace(/"/g, '\\"')}"`;
     return prompt.trim() ? `${quotedBinary} -- ${shellQuote(prompt.trim())}` : quotedBinary;
   }
 
   buildAppServerCommand(): string {
-    const binary = this.resolveBinaryPath() ?? "codex";
+    const binary = this.resolveBinaryPath();
     return `"${binary.replace(/"/g, '\\"')}" app-server`;
   }
 
   async getStatus(): Promise<CodexStatus> {
-    const binaryPath = this.resolveBinaryPath();
-    const command = binaryPath ?? "codex";
+    const command = this.resolveBinaryPath();
 
-    if (!binaryPath) {
+    const versionProbe = await runProbe(command, ["--version"]);
+    const versionFailure = probeFailure("Codex version probe", versionProbe);
+    if (versionFailure) {
+      const notOnPath = versionProbe.error?.message?.includes("ENOENT");
       return {
         installed: false,
         authenticated: false,
@@ -134,30 +128,16 @@ export class CodexService {
         version: null,
         authMethod: null,
         loginStatusText: null,
-        error: "Codex is not installed locally. Run `bun install` to add the bundled CLI.",
-      };
-    }
-
-    const versionProbe = await runProbe(binaryPath, ["--version"]);
-    const versionFailure = probeFailure("Codex version probe", versionProbe);
-    if (versionFailure) {
-      return {
-        installed: false,
-        authenticated: false,
-        ready: false,
-        command,
-        binaryPath,
-        version: null,
-        authMethod: null,
-        loginStatusText: null,
-        error: versionFailure,
+        error: notOnPath
+          ? "Codex is not installed. Run `npm install -g @openai/codex` or `bun add -g @openai/codex`."
+          : versionFailure,
       };
     }
 
     const versionOutput = [versionProbe.stdout, versionProbe.stderr].filter(Boolean).join("\n");
     const version = parseVersion(versionOutput);
 
-    const loginProbe = await runProbe(binaryPath, ["login", "status"]);
+    const loginProbe = await runProbe(command, ["login", "status"]);
     const loginStatusText = cleanCodexOutput(
       [loginProbe.stdout, loginProbe.stderr].filter(Boolean).join("\n"),
     );
@@ -168,7 +148,7 @@ export class CodexService {
         authenticated: false,
         ready: false,
         command,
-        binaryPath,
+        binaryPath: null,
         version,
         authMethod: null,
         loginStatusText: loginStatusText || null,
@@ -184,13 +164,11 @@ export class CodexService {
       authenticated,
       ready: authenticated,
       command,
-      binaryPath,
+      binaryPath: null,
       version,
       authMethod,
       loginStatusText: loginStatusText || null,
-      error: authenticated
-        ? null
-        : "Codex is installed locally but not signed in. Run `npm exec -- codex login`.",
+      error: authenticated ? null : "Codex is not signed in. Run `codex login`.",
     };
   }
 }

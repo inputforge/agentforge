@@ -14,7 +14,7 @@ Open [http://localhost:5173](http://localhost:5173). The backend runs on port `3
 ### Prerequisites
 
 - [Bun](https://bun.sh) runtime
-- At least one external AI coding agent installed if you want more than the bundled Codex support (e.g. `claude`, `aider`)
+- At least one AI coding agent installed (e.g. `claude`, `codex`, `aider`)
 
 ## Usage
 
@@ -33,12 +33,10 @@ Drag the ticket to **IN PROGRESS** (or click it). A launcher panel opens — pic
 | Agent      | Command used                            |
 | ---------- | --------------------------------------- |
 | **Claude** | `claude --dangerously-skip-permissions` |
-| **Codex**  | bundled `codex` CLI via `@openai/codex` |
+| **Codex**  | `codex`                                 |
 | **Custom** | Any CLI you type in                     |
 
 AgentForge creates an isolated git worktree and branch (`agent/<ticketId>`) and spawns the agent inside it.
-
-When you move a ticket to **In Progress** and open the agent picker, AgentForge checks whether the bundled local Codex CLI is installed and signed in.
 
 ### 4. Watch and interact
 
