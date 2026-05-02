@@ -143,6 +143,7 @@ export interface CodexUserMessage {
   id: string;
   userText: string;
   agentStartIndex: number;
+  clientId?: string;
 }
 
 export interface CodexAction {

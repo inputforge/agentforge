@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, ComponentProps, KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../lib/api";
@@ -35,24 +36,35 @@ interface LocalTurn {
   id: string;
   userText: string;
   agentStartIndex: number;
+  clientId?: string;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTurn[] {
   const serverIds = new Set(serverTurns.map((turn) => turn.id));
+  const confirmedClientIds = new Set(
+    serverTurns.flatMap((turn) => (turn.clientId ? [turn.clientId] : [])),
+  );
   return [
     ...serverTurns.map((serverTurn) => {
-      const localTurn = localTurns.find((turn) => turn.id === serverTurn.id);
+      const localTurn = localTurns.find(
+        (turn) =>
+          turn.id === serverTurn.id ||
+          (serverTurn.clientId && turn.clientId === serverTurn.clientId),
+      );
       return localTurn ? { ...localTurn, ...serverTurn } : serverTurn;
     }),
-    ...localTurns.filter((turn) => !serverIds.has(turn.id)),
+    ...localTurns.filter(
+      (turn) =>
+        !serverIds.has(turn.id) && !(turn.clientId && confirmedClientIds.has(turn.clientId)),
+    ),
   ];
 }
 
 const mdRemarkPlugins = [remarkGfm];
 
-const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
+const mdComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
   p: ({ children }) => <p className="text-xs leading-relaxed text-forge-text my-1">{children}</p>,
   pre: ({ children }) => <>{children}</>,
   code: ({ className, children }) => {
@@ -566,15 +578,15 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
     setIsSending(true);
 
     const agentStartIndex = allMessages.length;
-    const turnId = `turn-${Date.now()}`;
-    setTurns((prev) => [...prev, { id: turnId, userText: value, agentStartIndex }]);
+    const clientId = `turn-${Date.now()}`;
+    setTurns((prev) => [...prev, { id: clientId, userText: value, agentStartIndex, clientId }]);
     setInput("");
 
     try {
-      await api.agents.sendInput(agentId, value);
+      await api.agents.sendInput(agentId, value, clientId);
     } catch (err) {
       addNotification({ type: "error", message: (err as Error).message });
-      setTurns((prev) => prev.filter((t) => t.id !== turnId));
+      setTurns((prev) => prev.filter((t) => t.clientId !== clientId));
       setInput(value);
       textareaRef.current?.focus();
     } finally {
@@ -594,7 +606,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
   }, [agentId, addNotification]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         void handleSend();
@@ -604,7 +616,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
   );
 
   const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value),
+    (e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value),
     [],
   );
 

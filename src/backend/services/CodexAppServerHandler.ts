@@ -1,5 +1,6 @@
 import type { EventEmitter } from "events";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import path from "node:path";
 import type readline from "node:readline";
 import type {
   CodexAction,
@@ -71,12 +72,18 @@ export function textInput(text: string) {
   return [{ type: "text", text, text_elements: [] }];
 }
 
-export function pushUserMessage(state: CodexAgentState, id: string, text: string): void {
+export function pushUserMessage(
+  state: CodexAgentState,
+  id: string,
+  text: string,
+  clientId?: string,
+): void {
   if (!text.trim()) return;
   state.userMessages = upsertById(state.userMessages, {
     id,
     userText: text,
     agentStartIndex: state.messages.length,
+    ...(clientId && { clientId }),
   } satisfies CodexUserMessage);
 }
 
@@ -121,8 +128,7 @@ function stringifyJson(value: unknown): string {
 }
 
 function relativePath(absPath: string, cwd: string): string {
-  const prefix = cwd.endsWith("/") ? cwd : cwd + "/";
-  return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath;
+  return path.relative(cwd, absPath) || absPath;
 }
 
 function summarizeCommandAction(action: Record<string, unknown>): string {
@@ -170,8 +176,13 @@ export function appendSessionMessage(session: CodexSession, itemId: string, delt
   pushSessionState(session);
 }
 
-export function appendSessionUserMessage(session: CodexSession, id: string, text: string): void {
-  pushUserMessage(session.state, id, text);
+export function appendSessionUserMessage(
+  session: CodexSession,
+  id: string,
+  text: string,
+  clientId?: string,
+): void {
+  pushUserMessage(session.state, id, text, clientId);
   pushSessionState(session);
 }
 
@@ -370,10 +381,10 @@ function hydrateFileChanges(
     if (!change || typeof change !== "object") continue;
     const fileChange = change as Record<string, unknown>;
     const rawPath = typeof fileChange.path === "string" ? fileChange.path : "unknown";
-    const path = cwd ? relativePath(rawPath, cwd) : rawPath;
+    const relPath = cwd ? relativePath(rawPath, cwd) : rawPath;
     upsertEditInState(state, {
-      id: `${itemId}:${path}`,
-      path,
+      id: `${itemId}:${relPath}`,
+      path: relPath,
       kind: typeof fileChange.kind === "string" ? fileChange.kind : "update",
       diff: typeof fileChange.diff === "string" ? fileChange.diff : "",
       status,
@@ -464,10 +475,10 @@ export function handleCompletedItem(session: CodexSession, item: Record<string, 
       if (change && typeof change === "object") {
         const fileChange = change as Record<string, unknown>;
         const rawPath = typeof fileChange.path === "string" ? fileChange.path : "unknown";
-        const path = relativePath(rawPath, session.cwd);
+        const relPath = relativePath(rawPath, session.cwd);
         upsertSessionEdit(session, {
-          id: `${itemId}:${path}`,
-          path,
+          id: `${itemId}:${relPath}`,
+          path: relPath,
           kind: typeof fileChange.kind === "string" ? fileChange.kind : "update",
           diff: typeof fileChange.diff === "string" ? fileChange.diff : "",
           status: typeof item.status === "string" ? item.status : null,
@@ -615,10 +626,10 @@ export function handleSessionMessage(session: CodexSession, line: string): void 
         if (change && typeof change === "object") {
           const fileChange = change as Record<string, unknown>;
           const rawPath = typeof fileChange.path === "string" ? fileChange.path : "unknown";
-          const path = relativePath(rawPath, session.cwd);
+          const relPath = relativePath(rawPath, session.cwd);
           upsertSessionEdit(session, {
-            id: `${itemId}:${path}`,
-            path,
+            id: `${itemId}:${relPath}`,
+            path: relPath,
             kind: typeof fileChange.kind === "string" ? fileChange.kind : "update",
             diff: typeof fileChange.diff === "string" ? fileChange.diff : "",
             status: "inProgress",

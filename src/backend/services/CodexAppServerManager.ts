@@ -116,7 +116,7 @@ export class CodexAppServerManager implements IAgentManager {
     return emitter;
   }
 
-  write(agentId: string, input: string): void {
+  write(agentId: string, input: string, clientId?: string): void {
     const session = sessions.get(agentId);
     if (!session?.threadId) throw new Error(`No Codex session for agent ${agentId}`);
 
@@ -127,7 +127,7 @@ export class CodexAppServerManager implements IAgentManager {
     session.nextRequestId += 1;
 
     if (session.activeTurnId) {
-      appendSessionUserMessage(session, `user:${Date.now()}`, text);
+      appendSessionUserMessage(session, `user:${Date.now()}`, text, clientId);
       sendToSession(session, {
         method: "turn/steer",
         id,
@@ -138,7 +138,7 @@ export class CodexAppServerManager implements IAgentManager {
         },
       });
     } else {
-      appendSessionUserMessage(session, `user:${Date.now()}`, text);
+      appendSessionUserMessage(session, `user:${Date.now()}`, text, clientId);
       sendToSession(session, {
         method: "turn/start",
         id,
@@ -147,7 +147,7 @@ export class CodexAppServerManager implements IAgentManager {
     }
   }
 
-  async writeToAgent(agent: Agent, input: string): Promise<void> {
+  async writeToAgent(agent: Agent, input: string, clientId?: string): Promise<void> {
     let session = sessions.get(agent.id);
     if (!session?.threadId) {
       session = session
@@ -161,7 +161,7 @@ export class CodexAppServerManager implements IAgentManager {
     const updatedAgent = agentStmts.get.get(agent.id);
     if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
 
-    this.write(agent.id, input);
+    this.write(agent.id, input, clientId);
   }
 
   restore(

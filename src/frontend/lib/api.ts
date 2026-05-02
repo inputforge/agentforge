@@ -70,10 +70,10 @@ export const api = {
     restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
     commit: (id: string, message?: string) =>
       request<void>(`/agents/${id}/commit`, { method: "POST", body: JSON.stringify({ message }) }),
-    sendInput: (id: string, input: string) =>
+    sendInput: (id: string, input: string, clientId?: string) =>
       request<void>(`/agents/${id}/input`, {
         method: "POST",
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input, ...(clientId && { clientId }) }),
       }),
     createShell: (id: string) =>
       request<{ id: string; cwd: string }>(`/agents/${id}/shell`, { method: "POST" }),

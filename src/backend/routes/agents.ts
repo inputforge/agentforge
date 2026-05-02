@@ -193,9 +193,10 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
     if (!agent) return c.json({ error: "agent not found" }, 404);
-    if (agent.type === "codex") {
-      codexAppServerManager.interrupt(id);
+    if (agent.type !== "codex") {
+      return c.json({ error: "interrupt unsupported for agent type" }, 400);
     }
+    codexAppServerManager.interrupt(id);
     return c.body(null, 204);
   });
 
@@ -231,9 +232,9 @@ export function agentsRouter(orchestrator: OrchestratorService) {
 
   app.post("/:id/input", async (c) => {
     const id = c.req.param("id");
-    let body: { input?: string };
+    let body: { input?: string; clientId?: string };
     try {
-      body = await c.req.json<{ input?: string }>();
+      body = await c.req.json<{ input?: string; clientId?: string }>();
     } catch {
       return c.json({ error: "invalid JSON" }, 400);
     }
@@ -243,7 +244,7 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       const agent = agentStmts.get.get(id);
       if (!agent) return c.json({ error: "agent not found" }, 404);
       if (agent.type === "codex") {
-        await codexAppServerManager.writeToAgent(agent, body.input);
+        await codexAppServerManager.writeToAgent(agent, body.input, body.clientId);
       } else {
         agentProcessManager.write(id, body.input);
       }
