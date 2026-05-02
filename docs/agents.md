@@ -25,7 +25,7 @@ Runs [OpenAI Codex CLI](https://github.com/openai/codex).
 
 **Command:** `codex "<your description>"`
 
-**Requirements:** `codex` must be on your PATH and authenticated.
+**Requirements:** `codex` must be on your PATH and authenticated (`codex login`).
 
 ### Custom
 

@@ -1,9 +1,11 @@
 import type {
   Agent,
+  CodexAgentState,
   DiffResult,
   GitBranchInfo,
   GitHubIssue,
   IntegrationConfig,
+  CodexStatus,
   LinearIssue,
   LinearTeam,
   MergeResult,
@@ -55,6 +57,7 @@ export const api = {
 
   agents: {
     get: (id: string) => request<Agent>(`/agents/${id}`),
+    getCodexState: (id: string) => request<CodexAgentState>(`/agents/${id}/codex-state`),
     getDiff: (id: string) => request<DiffResult>(`/agents/${id}/diff`),
     merge: (id: string) => request<MergeResult>(`/agents/${id}/merge`, { method: "POST" }),
     rebase: (id: string) =>
@@ -62,14 +65,15 @@ export const api = {
         `/agents/${id}/rebase`,
         { method: "POST" },
       ),
+    interrupt: (id: string) => request<void>(`/agents/${id}/interrupt`, { method: "POST" }),
     kill: (id: string) => request<void>(`/agents/${id}/kill`, { method: "POST" }),
     restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
     commit: (id: string, message?: string) =>
       request<void>(`/agents/${id}/commit`, { method: "POST", body: JSON.stringify({ message }) }),
-    sendInput: (id: string, input: string) =>
+    sendInput: (id: string, input: string, clientId?: string) =>
       request<void>(`/agents/${id}/input`, {
         method: "POST",
-        body: JSON.stringify({ input }),
+        body: JSON.stringify({ input, ...(clientId && { clientId }) }),
       }),
     createShell: (id: string) =>
       request<{ id: string; cwd: string }>(`/agents/${id}/shell`, { method: "POST" }),
@@ -81,6 +85,9 @@ export const api = {
   },
 
   integrations: {
+    codex: {
+      status: () => request<CodexStatus>("/integrations/codex/status"),
+    },
     getConfig: (provider: "github" | "linear") =>
       request<IntegrationConfig>(`/integrations/${provider}/config`),
     saveConfig: (provider: "github" | "linear", data: Record<string, string>) =>

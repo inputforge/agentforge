@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import { agentStmts } from "../db/index.ts";
 import { appendScrollback } from "../ws/hub.ts";
+import type { IAgentManager } from "./AgentManager.ts";
 
 const decoder = new TextDecoder();
 
@@ -13,7 +14,7 @@ export interface AgentProcess {
 
 const processes = new Map<string, AgentProcess>();
 
-export class AgentProcessManager {
+export class AgentProcessManager implements IAgentManager {
   spawn(
     agentId: string,
     command: string,
