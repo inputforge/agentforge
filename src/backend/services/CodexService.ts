@@ -4,7 +4,10 @@ import type { CodexStatus } from "../../common/types.ts";
 
 const decoder = new TextDecoder();
 const projectRoot = join(import.meta.dir, "../../..");
-const statusProbeTimeoutMs = Number(process.env.AGENTFORGE_CODEX_STATUS_TIMEOUT_MS ?? 5000);
+const _rawTimeout = Number(process.env.AGENTFORGE_CODEX_STATUS_TIMEOUT_MS);
+const statusProbeTimeoutMs = Number.isFinite(_rawTimeout)
+  ? Math.max(1000, Math.min(60000, _rawTimeout))
+  : 5000;
 
 interface ProbeResult {
   exitCode: number | null;

@@ -243,6 +243,7 @@ export class CodexAppServerManager implements IAgentManager {
       const timer = setTimeout(() => {
         const error = new Error("Timed out while restoring Codex thread");
         session.ready = undefined;
+        session.finalized = true;
         sessions.delete(agent.id);
         rl.close();
         proc.kill();
@@ -256,6 +257,7 @@ export class CodexAppServerManager implements IAgentManager {
         },
         reject: (error) => {
           clearTimeout(timer);
+          session.finalized = true;
           sessions.delete(agent.id);
           rl.close();
           proc.kill();

@@ -321,6 +321,9 @@ function InlineToolCall({ toolCall }: { toolCall: CodexToolCall }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetails = Boolean(toolCall.details);
   const isInProgress = toolCall.status === "inProgress";
+  const handleClick = useCallback(() => {
+    if (hasDetails) setExpanded((e) => !e);
+  }, [hasDetails]);
 
   return (
     <div
@@ -328,7 +331,7 @@ function InlineToolCall({ toolCall }: { toolCall: CodexToolCall }) {
     >
       <button
         className="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
-        onClick={() => hasDetails && setExpanded((e) => !e)}
+        onClick={handleClick}
         disabled={!hasDetails}
       >
         <Zap
@@ -366,6 +369,9 @@ function InlineEdit({ edit }: { edit: CodexEdit }) {
   const [expanded, setExpanded] = useState(false);
   const isInProgress = edit.status === "inProgress";
   const hasDiff = Boolean(edit.diff);
+  const handleClick = useCallback(() => {
+    if (hasDiff) setExpanded((e) => !e);
+  }, [hasDiff]);
 
   return (
     <div
@@ -373,7 +379,7 @@ function InlineEdit({ edit }: { edit: CodexEdit }) {
     >
       <button
         className="flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
-        onClick={() => hasDiff && setExpanded((e) => !e)}
+        onClick={handleClick}
         disabled={!hasDiff}
       >
         <FileText
@@ -403,12 +409,15 @@ function InlineEdit({ edit }: { edit: CodexEdit }) {
 function InlineAction({ action }: { action: CodexAction }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetails = Boolean(action.details);
+  const handleClick = useCallback(() => {
+    if (hasDetails) setExpanded((e) => !e);
+  }, [hasDetails]);
 
   return (
     <div className="animate-fade-in border-l-2 border-l-forge-text-dim/20 bg-white/[0.01]">
       <button
         className="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
-        onClick={() => hasDetails && setExpanded((e) => !e)}
+        onClick={handleClick}
         disabled={!hasDetails}
       >
         <Terminal size={9} className="text-forge-text-dim/50 flex-shrink-0" />
@@ -485,6 +494,10 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
 
   const inProgressEdits = useMemo(() => edits.filter((e) => e.status === "inProgress"), [edits]);
   const completedEdits = useMemo(() => edits.filter((e) => e.status !== "inProgress"), [edits]);
+  const allEdits = useMemo(
+    () => [...completedEdits, ...inProgressEdits],
+    [completedEdits, inProgressEdits],
+  );
   const inProgressToolCalls = useMemo(
     () => toolCalls.filter((tc) => tc.status === "inProgress"),
     [toolCalls],
@@ -492,6 +505,10 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
   const completedToolCalls = useMemo(
     () => toolCalls.filter((tc) => tc.status !== "inProgress"),
     [toolCalls],
+  );
+  const allToolCalls = useMemo(
+    () => [...completedToolCalls, ...inProgressToolCalls],
+    [completedToolCalls, inProgressToolCalls],
   );
 
   const conversationBlocks = useMemo(() => {
@@ -668,11 +685,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
 
         {/* Inline activity — completed and in-progress together, in the flow */}
         <div className="px-4 mt-2">
-          <InlineActivityGroup
-            actions={actions}
-            toolCalls={[...completedToolCalls, ...inProgressToolCalls]}
-            edits={[...completedEdits, ...inProgressEdits]}
-          />
+          <InlineActivityGroup actions={actions} toolCalls={allToolCalls} edits={allEdits} />
         </div>
 
         {/* Thinking indicator */}
