@@ -9,10 +9,11 @@ import {
   FileText,
   RefreshCw,
   Send,
+  Square,
   Terminal,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../lib/api";
@@ -283,41 +284,6 @@ function StatusBadge({ status }: { status: CodexTurnStatus }) {
   );
 }
 
-function ActivitySection({
-  title,
-  count,
-  children,
-  defaultCollapsed = true,
-}: {
-  title: string;
-  count: number;
-  children: ReactNode;
-  defaultCollapsed?: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
-
-  if (count === 0) return null;
-
-  return (
-    <div className="mx-4 mt-3 border border-forge-accent/8 bg-white/[0.01]">
-      <button
-        className="w-full flex items-center gap-2 px-3 py-2 text-left bg-transparent cursor-pointer border-0"
-        onClick={toggleCollapsed}
-      >
-        {collapsed ? (
-          <ChevronRight size={10} className="text-forge-text-dim flex-shrink-0" />
-        ) : (
-          <ChevronDown size={10} className="text-forge-text-dim flex-shrink-0" />
-        )}
-        <span className="text-[9px] uppercase tracking-widest text-forge-accent/80">{title}</span>
-        <span className="ml-auto text-[9px] font-mono text-forge-text-dim">{count}</span>
-      </button>
-      {!collapsed && <div className="px-3 pb-3 pt-1 flex flex-col gap-2">{children}</div>}
-    </div>
-  );
-}
-
 function DiffLine({ colorClass, line }: { colorClass: string; line: string }) {
   return <span className={`block ${colorClass}`}>{line || " "}</span>;
 }
@@ -349,50 +315,46 @@ function DiffPreview({ diff }: { diff: string }) {
   );
 }
 
-function ActionRow({ action }: { action: CodexAction }) {
-  return (
-    <div className="forge-surface p-2.5">
-      <div className="flex items-center gap-2">
-        <Terminal size={10} className="text-forge-accent flex-shrink-0" />
-        <span className="text-xs text-forge-text">{action.title}</span>
-        {action.status && (
-          <span className="ml-auto text-[9px] uppercase tracking-widest text-forge-text-dim">
-            {action.status}
-          </span>
-        )}
-      </div>
-      {action.command && (
-        <pre className="mt-2 text-[10px] text-forge-green whitespace-pre-wrap break-all">
-          {action.command}
-        </pre>
-      )}
-      {action.details && (
-        <pre className="mt-2 text-[10px] text-forge-text-dim whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
-          {action.details}
-        </pre>
-      )}
-    </div>
-  );
-}
+// Inline action rows shown in the conversation flow
 
-function ToolCallRow({ toolCall }: { toolCall: CodexToolCall }) {
+function InlineToolCall({ toolCall }: { toolCall: CodexToolCall }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetails = Boolean(toolCall.details);
+  const isInProgress = toolCall.status === "inProgress";
+
   return (
-    <div className="forge-surface p-2.5">
-      <div className="flex items-center gap-2">
-        <Zap size={10} className="text-forge-amber flex-shrink-0" />
-        <span className="text-xs text-forge-text">
+    <div
+      className={`animate-fade-in border-l-2 ${isInProgress ? "border-l-forge-amber/50 bg-forge-amber/4" : "border-l-forge-accent/20 bg-white/[0.015]"}`}
+    >
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
+        onClick={() => hasDetails && setExpanded((e) => !e)}
+        disabled={!hasDetails}
+      >
+        <Zap
+          size={9}
+          className={`flex-shrink-0 ${isInProgress ? "text-forge-amber animate-status-blink" : "text-forge-accent/50"}`}
+        />
+        <span className="text-xs text-forge-text truncate">
           {toolCall.server ? `${toolCall.server} / ` : ""}
           {toolCall.tool}
         </span>
-        <span className="ml-auto text-[9px] uppercase tracking-widest text-forge-text-dim">
-          {toolCall.status}
-        </span>
-      </div>
-      <p className="mt-1 text-[10px] uppercase tracking-widest text-forge-text-dim">
-        {toolCall.kind} tool call
-      </p>
-      {toolCall.details && (
-        <pre className="mt-2 text-[10px] text-forge-text-dim whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
+        {hasDetails &&
+          (expanded ? (
+            <ChevronDown size={9} className="ml-auto flex-shrink-0 text-forge-text-dim" />
+          ) : (
+            <ChevronRight size={9} className="ml-auto flex-shrink-0 text-forge-text-dim" />
+          ))}
+        {!hasDetails && (
+          <span
+            className={`ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 ${isInProgress ? "text-forge-amber/70" : "text-forge-text-dim/50"}`}
+          >
+            {isInProgress ? "IN PROGRESS" : toolCall.status}
+          </span>
+        )}
+      </button>
+      {expanded && toolCall.details && (
+        <pre className="px-3 pb-2 text-[10px] text-forge-text-dim whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
           {toolCall.details}
         </pre>
       )}
@@ -400,71 +362,99 @@ function ToolCallRow({ toolCall }: { toolCall: CodexToolCall }) {
   );
 }
 
-function EditRow({ edit }: { edit: CodexEdit }) {
+function InlineEdit({ edit }: { edit: CodexEdit }) {
+  const [expanded, setExpanded] = useState(false);
+  const isInProgress = edit.status === "inProgress";
+  const hasDiff = Boolean(edit.diff);
+
   return (
-    <div className="forge-surface p-2.5">
-      <div className="flex items-center gap-2">
-        <Code2 size={10} className="text-forge-green flex-shrink-0" />
-        <span className="text-xs text-forge-text break-all">{edit.path}</span>
-        <span className="ml-auto text-[9px] uppercase tracking-widest text-forge-text-dim">
-          {edit.kind}
+    <div
+      className={`animate-fade-in border-l-2 flex flex-col ${isInProgress ? "border-l-forge-green/50 bg-forge-green/3" : "border-l-forge-green/20 bg-white/[0.01]"}`}
+    >
+      <button
+        className="flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
+        onClick={() => hasDiff && setExpanded((e) => !e)}
+        disabled={!hasDiff}
+      >
+        <FileText
+          size={9}
+          className={`flex-shrink-0 ${isInProgress ? "text-forge-green" : "text-forge-green/50"}`}
+        />
+        <span className="text-xs text-forge-text font-mono break-all flex-1 text-left">
+          {edit.path}
         </span>
-      </div>
-      {edit.status && (
-        <p className="mt-1 text-[10px] uppercase tracking-widest text-forge-text-dim">
-          {edit.status}
-        </p>
-      )}
-      {edit.diff && <DiffPreview diff={edit.diff} />}
+        <span
+          className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${isInProgress ? "text-forge-green/70" : "text-forge-text-dim/50"}`}
+        >
+          {isInProgress ? "WRITING" : (edit.kind ?? edit.status ?? "")}
+        </span>
+        {hasDiff &&
+          (expanded ? (
+            <ChevronDown size={9} className="ml-1 flex-shrink-0 text-forge-text-dim" />
+          ) : (
+            <ChevronRight size={9} className="ml-1 flex-shrink-0 text-forge-text-dim" />
+          ))}
+      </button>
+      {expanded && edit.diff && <DiffPreview diff={edit.diff} />}
     </div>
   );
 }
 
-function LiveActivityFeed({
-  edits,
-  toolCalls,
-}: {
-  edits: CodexEdit[];
-  toolCalls: CodexToolCall[];
-}) {
-  if (edits.length === 0 && toolCalls.length === 0) return null;
+function InlineAction({ action }: { action: CodexAction }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasDetails = Boolean(action.details);
 
   return (
-    <div className="flex flex-col gap-2 px-4 mt-3">
+    <div className="animate-fade-in border-l-2 border-l-forge-text-dim/20 bg-white/[0.01]">
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
+        onClick={() => hasDetails && setExpanded((e) => !e)}
+        disabled={!hasDetails}
+      >
+        <Terminal size={9} className="text-forge-text-dim/50 flex-shrink-0" />
+        <span className="text-xs text-forge-text truncate">{action.title}</span>
+        {action.status && (
+          <span className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 text-forge-text-dim/50">
+            {action.status}
+          </span>
+        )}
+        {hasDetails &&
+          (expanded ? (
+            <ChevronDown size={9} className="ml-1 flex-shrink-0 text-forge-text-dim" />
+          ) : (
+            <ChevronRight size={9} className="ml-1 flex-shrink-0 text-forge-text-dim" />
+          ))}
+      </button>
+      {expanded && action.details && (
+        <pre className="px-3 pb-2 text-[10px] text-forge-text-dim whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
+          {action.details}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function InlineActivityGroup({
+  actions,
+  toolCalls,
+  edits,
+}: {
+  actions: CodexAction[];
+  toolCalls: CodexToolCall[];
+  edits: CodexEdit[];
+}) {
+  if (actions.length === 0 && toolCalls.length === 0 && edits.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-0.5 my-1">
       {toolCalls.map((tc) => (
-        <div
-          key={tc.id}
-          className="flex items-center gap-2 px-3 py-2 animate-fade-in bg-forge-amber/4 border-l-2 border-l-forge-amber/35"
-        >
-          <Zap size={9} className="text-forge-amber flex-shrink-0 animate-status-blink" />
-          <span className="text-xs text-forge-text truncate">
-            {tc.server ? `${tc.server} / ` : ""}
-            {tc.tool}
-          </span>
-          {tc.details && (
-            <span className="text-[9px] text-forge-text-dim truncate max-w-[40%]">
-              {tc.details}
-            </span>
-          )}
-          <span className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 text-forge-amber/70">
-            IN PROGRESS
-          </span>
-        </div>
+        <InlineToolCall key={tc.id} toolCall={tc} />
       ))}
       {edits.map((edit) => (
-        <div
-          key={edit.id}
-          className="flex flex-col animate-fade-in bg-forge-green/3 border-l-2 border-l-forge-green/40"
-        >
-          <div className="flex items-center gap-2 px-3 py-2">
-            <FileText size={9} className="text-forge-green flex-shrink-0" />
-            <span className="text-xs text-forge-text font-mono break-all flex-1">{edit.path}</span>
-            <span className="ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 text-forge-green/70">
-              WRITING
-            </span>
-          </div>
-          {edit.diff && <DiffPreview diff={edit.diff} />}
-        </div>
+        <InlineEdit key={edit.id} edit={edit} />
+      ))}
+      {actions.map((action) => (
+        <InlineAction key={action.id} action={action} />
       ))}
     </div>
   );
@@ -479,6 +469,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
 
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [turns, setTurns] = useState<LocalTurn[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -574,6 +565,17 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
     }
   }, [agentId, input, allMessages.length, addNotification]);
 
+  const handleStop = useCallback(async () => {
+    setIsStopping(true);
+    try {
+      await api.agents.interrupt(agentId);
+    } catch (err) {
+      addNotification({ type: "error", message: (err as Error).message });
+    } finally {
+      setIsStopping(false);
+    }
+  }, [agentId, addNotification]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -613,6 +615,16 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
             {codexState.threadId.slice(0, 8)}…
           </span>
         )}
+        {isRunning && (
+          <button
+            className="flex items-center gap-1 px-2 py-1 text-[9px] uppercase tracking-widest border border-forge-red/40 text-forge-red hover:bg-forge-red/10 transition-colors disabled:opacity-50"
+            onClick={handleStop}
+            disabled={isStopping}
+          >
+            {isStopping ? <RefreshCw size={8} className="animate-spin" /> : <Square size={8} />}
+            STOP
+          </button>
+        )}
       </div>
 
       {/* Unified scrollable area */}
@@ -620,26 +632,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
         {/* Plan */}
         {codexState?.plan && codexState.plan.length > 0 && <PlanSection steps={codexState.plan} />}
 
-        {/* Completed activity summary */}
-        <ActivitySection title="AGENT ACTIONS" count={actions.length}>
-          {actions.map((action) => (
-            <ActionRow key={action.id} action={action} />
-          ))}
-        </ActivitySection>
-
-        <ActivitySection title="TOOL CALLS" count={completedToolCalls.length}>
-          {completedToolCalls.map((toolCall) => (
-            <ToolCallRow key={toolCall.id} toolCall={toolCall} />
-          ))}
-        </ActivitySection>
-
-        <ActivitySection title="CODE CHANGES" count={completedEdits.length}>
-          {completedEdits.map((edit) => (
-            <EditRow key={edit.id} edit={edit} />
-          ))}
-        </ActivitySection>
-
-        {/* Message feed */}
+        {/* Initial messages */}
         {conversationBlocks.initialMessages.length > 0 && (
           <div className="flex flex-col gap-3 pt-4 px-4">
             {renderAgentMessages(
@@ -649,6 +642,7 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
           </div>
         )}
 
+        {/* Turn blocks */}
         {conversationBlocks.userBlocks.map((block, bi) => {
           const isLast = bi === conversationBlocks.userBlocks.length - 1;
           return (
@@ -672,12 +666,18 @@ export function AgentCodexPanel({ agentId }: AgentCodexPanelProps) {
             </div>
           )}
 
-        {/* Live in-progress activity */}
-        <LiveActivityFeed edits={inProgressEdits} toolCalls={inProgressToolCalls} />
+        {/* Inline activity — completed and in-progress together, in the flow */}
+        <div className="px-4 mt-2">
+          <InlineActivityGroup
+            actions={actions}
+            toolCalls={[...completedToolCalls, ...inProgressToolCalls]}
+            edits={[...completedEdits, ...inProgressEdits]}
+          />
+        </div>
 
         {/* Thinking indicator */}
         {isRunning && (
-          <div className="px-4 pt-3">
+          <div className="px-4 pt-2">
             <ThinkingIndicator hasMessages={lastMessageIsForCurrentTurn} />
           </div>
         )}

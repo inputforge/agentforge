@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import type { IAgentManager } from "./AgentManager.ts";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 import type { CodexAgentState, Agent } from "../../common/types.ts";
@@ -37,7 +38,7 @@ function initialState(agentId: string): CodexAgentState {
   };
 }
 
-export class CodexAppServerManager {
+export class CodexAppServerManager implements IAgentManager {
   spawn(
     agentId: string,
     prompt: string,
@@ -274,6 +275,18 @@ export class CodexAppServerManager {
         id: 1,
         params: { threadId: agent.sessionId, includeTurns: true },
       });
+    });
+  }
+
+  interrupt(agentId: string): void {
+    const session = sessions.get(agentId);
+    if (!session?.activeTurnId || !session.threadId) return;
+    const id = session.nextRequestId;
+    session.nextRequestId += 1;
+    sendToSession(session, {
+      method: "turn/interrupt",
+      id,
+      params: { threadId: session.threadId, turnId: session.activeTurnId },
     });
   }
 

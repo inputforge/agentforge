@@ -65,6 +65,7 @@ export const api = {
         `/agents/${id}/rebase`,
         { method: "POST" },
       ),
+    interrupt: (id: string) => request<void>(`/agents/${id}/interrupt`, { method: "POST" }),
     kill: (id: string) => request<void>(`/agents/${id}/kill`, { method: "POST" }),
     restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
     commit: (id: string, message?: string) =>

@@ -189,6 +189,16 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     }
   });
 
+  app.post("/:id/interrupt", (c) => {
+    const id = c.req.param("id");
+    const agent = agentStmts.get.get(id);
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (agent.type === "codex") {
+      codexAppServerManager.interrupt(id);
+    }
+    return c.body(null, 204);
+  });
+
   app.post("/:id/kill", (c) => {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
