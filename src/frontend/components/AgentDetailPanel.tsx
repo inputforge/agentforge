@@ -13,6 +13,7 @@ import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "reac
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type { AgentType } from "../types";
+import { AgentClaudePanel } from "./AgentClaudePanel";
 import { AgentCodexPanel } from "./AgentCodexPanel";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
@@ -349,6 +350,8 @@ export function AgentDetailPanel() {
               <div className={`absolute inset-0 ${activeTab === "agent" ? "" : "invisible"}`}>
                 {agent.type === "codex" ? (
                   <AgentCodexPanel agentId={agentId!} />
+                ) : agent.type === "claude-code" ? (
+                  <AgentClaudePanel agentId={agentId!} />
                 ) : (
                   <AgentTerminalPanel agentId={agentId!} />
                 )}

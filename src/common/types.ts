@@ -114,6 +114,49 @@ export interface IntegrationConfig {
   teamId?: string;
 }
 
+// ─── Claude JSON streaming types ──────────────────────────────────────────────
+
+export type ClaudeTurnStatus = "idle" | "running" | "completed" | "failed";
+
+export interface ClaudeMessage {
+  id: string;
+  text: string;
+}
+
+export interface ClaudeUserMessage {
+  id: string;
+  userText: string;
+  agentStartIndex: number;
+  clientId?: string;
+}
+
+export interface ClaudeToolCall {
+  id: string;
+  name: string;
+  status: "running" | "completed" | "error";
+  inputSummary?: string | null;
+  resultSummary?: string | null;
+}
+
+export interface ClaudeEdit {
+  id: string;
+  path: string;
+  kind: string;
+  status?: string | null;
+}
+
+export interface ClaudeAgentState {
+  agentId: string;
+  sessionId: string | null;
+  status: ClaudeTurnStatus;
+  userMessages: ClaudeUserMessage[];
+  messages: ClaudeMessage[];
+  toolCalls: ClaudeToolCall[];
+  edits: ClaudeEdit[];
+  lastError: string | null;
+  updatedAt: number;
+}
+
 export interface CodexStatus {
   installed: boolean;
   authenticated: boolean;

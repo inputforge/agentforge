@@ -7,7 +7,14 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { Agent, AppNotification, CodexAgentState, DiffResult, Ticket } from "../types";
+import type {
+  Agent,
+  AppNotification,
+  ClaudeAgentState,
+  CodexAgentState,
+  DiffResult,
+  Ticket,
+} from "../types";
 import { useStore } from "../store";
 
 type IncomingEvent =
@@ -18,6 +25,7 @@ type IncomingEvent =
   | { type: "branch-updated"; branch: string | null }
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
   | { type: "codex-state-updated"; agentId: string; state: CodexAgentState }
+  | { type: "claude-state-updated"; agentId: string; state: ClaudeAgentState }
   | { type: "branches-updated" };
 
 interface SessionSocketContextValue {
@@ -35,6 +43,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setCurrentBranch,
     setAgentDiff,
     setCodexState,
+    setClaudeState,
     fetchBranches,
   } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
@@ -79,6 +88,9 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
             case "codex-state-updated":
               setCodexState(event.agentId, event.state);
               break;
+            case "claude-state-updated":
+              setClaudeState(event.agentId, event.state);
+              break;
             case "branches-updated":
               fetchBranches();
               break;
@@ -115,6 +127,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setCurrentBranch,
     setAgentDiff,
     setCodexState,
+    setClaudeState,
     fetchBranches,
   ]);
 

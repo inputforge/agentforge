@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Agent,
+  ClaudeAgentState,
   CodexAgentState,
   AppNotification,
   DiffResult,
@@ -27,6 +28,7 @@ interface AppState {
   agentDiffs: Record<string, DiffResult>;
   branches: GitBranchInfo[];
   codexStates: Record<string, CodexAgentState>;
+  claudeStates: Record<string, ClaudeAgentState>;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -59,6 +61,7 @@ interface AppState {
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
   setCodexState: (agentId: string, state: CodexAgentState) => void;
+  setClaudeState: (agentId: string, state: ClaudeAgentState) => void;
 
   // Branch actions
   fetchBranches: () => Promise<void>;
@@ -84,6 +87,7 @@ export const useStore = create<AppState>((set, get) => ({
   agentDiffs: {},
   branches: [],
   codexStates: {},
+  claudeStates: {},
   activeTicketId: null,
   isCreateModalOpen: false,
   isConnected: false,
@@ -243,6 +247,12 @@ export const useStore = create<AppState>((set, get) => ({
       const current = s.codexStates[agentId];
       if (current && current.updatedAt > state.updatedAt) return s;
       return { codexStates: { ...s.codexStates, [agentId]: state } };
+    }),
+  setClaudeState: (agentId, state) =>
+    set((s) => {
+      const current = s.claudeStates[agentId];
+      if (current && current.updatedAt > state.updatedAt) return s;
+      return { claudeStates: { ...s.claudeStates, [agentId]: state } };
     }),
 }));
 

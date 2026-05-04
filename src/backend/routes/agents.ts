@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
+import { claudeJsonManager } from "../services/ClaudeJsonManager.ts";
 import { codexAppServerManager } from "../services/CodexAppServerManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
@@ -55,6 +56,13 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       log.error("failed to load codex state", { agentId: agent.id, ...errorMeta(err) });
       return c.json({ error: (err as Error).message }, 500);
     }
+  });
+
+  app.get("/:id/claude-state", (c) => {
+    const agent = agentStmts.get.get(c.req.param("id"));
+    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (agent.type !== "claude-code") return c.json({ error: "agent is not a claude agent" }, 400);
+    return c.json(claudeJsonManager.getState(agent));
   });
 
   app.post("/:id/merge", async (c) => {
@@ -114,7 +122,9 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const isRunning =
       agent.type === "codex"
         ? codexAppServerManager.isRunning(agent.id)
-        : agentProcessManager.isRunning(agent.id);
+        : agent.type === "claude-code"
+          ? claudeJsonManager.isRunning(agent.id)
+          : agentProcessManager.isRunning(agent.id);
 
     if (!isRunning) {
       log.info("spawning agent for commit", { agentId: agent.id, ticketId: agent.ticketId });
@@ -128,6 +138,13 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       const targetAgent = agentStmts.get.get(targetAgentId);
       if (!targetAgent) return c.json({ error: "agent not found" }, 404);
       await codexAppServerManager.writeToAgent(
+        targetAgent,
+        "Please commit all current changes with a descriptive commit message.",
+      );
+    } else if (agent.type === "claude-code") {
+      const targetAgent = agentStmts.get.get(targetAgentId);
+      if (!targetAgent) return c.json({ error: "agent not found" }, 404);
+      await claudeJsonManager.writeToAgent(
         targetAgent,
         "Please commit all current changes with a descriptive commit message.",
       );
@@ -152,7 +169,9 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const isRunning =
       agent.type === "codex"
         ? codexAppServerManager.isRunning(agent.id)
-        : agentProcessManager.isRunning(agent.id);
+        : agent.type === "claude-code"
+          ? claudeJsonManager.isRunning(agent.id)
+          : agentProcessManager.isRunning(agent.id);
     // Only abort on conflict when the agent isn't running — if it is running,
     // leave the worktree in the conflicted state so the agent can resolve it.
     log.info("rebase requested", {
@@ -172,6 +191,8 @@ export function agentsRouter(orchestrator: OrchestratorService) {
             "There are conflicts when rebasing onto the base branch. Please resolve the conflicts, complete the rebase, and commit.";
           if (agent.type === "codex") {
             await codexAppServerManager.writeToAgent(agent, prompt);
+          } else if (agent.type === "claude-code") {
+            await claudeJsonManager.writeToAgent(agent, prompt);
           } else {
             agentProcessManager.write(agent.id, prompt);
             await Bun.sleep(100);
@@ -193,10 +214,13 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
     if (!agent) return c.json({ error: "agent not found" }, 404);
-    if (agent.type !== "codex") {
+    if (agent.type === "codex") {
+      codexAppServerManager.interrupt(id);
+    } else if (agent.type === "claude-code") {
+      claudeJsonManager.interrupt(id);
+    } else {
       return c.json({ error: "interrupt unsupported for agent type" }, 400);
     }
-    codexAppServerManager.interrupt(id);
     return c.body(null, 204);
   });
 
@@ -208,6 +232,8 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     log.info("killing agent", { agentId: id });
     if (agent.type === "codex") {
       codexAppServerManager.kill(id);
+    } else if (agent.type === "claude-code") {
+      claudeJsonManager.kill(id);
     } else {
       agentProcessManager.kill(id);
     }
@@ -223,6 +249,8 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     log.info("restarting agent", { agentId: id });
     if (agent.type === "codex") {
       await codexAppServerManager.killAndWait(id);
+    } else if (agent.type === "claude-code") {
+      await claudeJsonManager.killAndWait(id);
     } else {
       await agentProcessManager.killAndWait(id);
     }
@@ -245,6 +273,8 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       if (!agent) return c.json({ error: "agent not found" }, 404);
       if (agent.type === "codex") {
         await codexAppServerManager.writeToAgent(agent, body.input, body.clientId);
+      } else if (agent.type === "claude-code") {
+        await claudeJsonManager.writeToAgent(agent, body.input, body.clientId);
       } else {
         agentProcessManager.write(id, body.input);
       }

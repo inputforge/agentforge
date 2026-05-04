@@ -1,7 +1,8 @@
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
-import { agentStmts, ticketStmts } from "../db/index.ts";
+import { agentStmts } from "../db/index.ts";
 import { agentProcessManager } from "../services/AgentProcessManager.ts";
+import { claudeJsonManager } from "../services/ClaudeJsonManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
@@ -87,72 +88,42 @@ export const wsHandlers = {
 
     if (channel !== "agent" || !agentId) return;
 
-    // Subscribe to live PTY output if the process is still running
-    const emitter = agentProcessManager.subscribe(agentId);
+    const agent = agentStmts.get.get(agentId);
     const scrollback = agentScrollback.get(agentId) ?? [];
 
-    if (emitter) {
-      // Replay buffered output first so the reconnecting terminal isn't blank
-      // while the agent is idle or waiting for input, then attach the live handler
-      // so future PTY chunks continue to stream.
+    // For claude-code JSON agents, subscribe to the JSON manager's emitter (if a turn
+    // is active); otherwise just replay the text-delta scrollback. No PTY auto-restart.
+    if (agent?.type === "claude-code") {
+      const emitter = claudeJsonManager.subscribe(agentId);
       for (const chunk of scrollback) {
         if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
       }
+      if (emitter) {
+        const handler = (data: string) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(data);
+        };
+        emitter.on("data", handler);
+        (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
+        (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
+      }
+      return;
+    }
+
+    // Subscribe to live PTY output if the process is still running
+    const emitter = agentProcessManager.subscribe(agentId);
+
+    // Replay buffered output so the reconnecting terminal isn't blank, then
+    // attach the live handler if the process is still running.
+    for (const chunk of scrollback) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+    }
+    if (emitter) {
       const handler = (data: string) => {
         if (ws.readyState === WebSocket.OPEN) ws.send(data);
       };
       emitter.on("data", handler);
       (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
       (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
-    } else {
-      // Completed agent: replay scrollback so the user can read the output.
-      for (const chunk of scrollback) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
-      }
-    }
-
-    if (!emitter && scrollback.length === 0) {
-      const agent = agentStmts.get.get(agentId);
-      const status = agent?.status;
-      const ticket = agent ? ticketStmts.get.get(agent.ticketId) : null;
-      const ticketDone = ticket?.status === "done";
-      if (agent && (status === "done" || status === "error") && !ticketDone) {
-        if (agent.sessionId) {
-          const command = `claude --resume ${agent.sessionId} --enable-auto-mode`;
-          const { emitter: replayEmitter } = agentProcessManager.spawn(
-            agentId,
-            command,
-            agent.worktreePath,
-            () => {},
-          );
-          const handler = (data: string) => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(data);
-          };
-          replayEmitter.on("data", handler);
-          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
-          (ws as unknown as Record<string, unknown>)["_emitter"] = replayEmitter;
-        } else {
-          const { emitter: fallbackEmitter } = agentProcessManager.spawn(
-            agentId,
-            agent.command,
-            agent.worktreePath,
-            () => {},
-          );
-          ws.send("\x1b[33m[could not restore previous session — starting a new agent]\x1b[0m\r\n");
-          const handler = (data: string) => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(data);
-          };
-          fallbackEmitter.on("data", handler);
-          (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
-          (ws as unknown as Record<string, unknown>)["_emitter"] = fallbackEmitter;
-        }
-      } else if (status === "running") {
-        // Process should be running but isn't in the process map — spawn failed
-        ws.send(
-          "\x1b[31m[agent failed to start — check that the agent command is in your PATH]\x1b[0m\r\n",
-        );
-      }
-      // No message for unknown/null status (e.g. agent record not found)
     }
   },
 

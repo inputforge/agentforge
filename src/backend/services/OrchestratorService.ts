@@ -4,6 +4,7 @@ import { join } from "path";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import type { Agent, AgentType } from "../../common/types.ts";
 import { agentProcessManager } from "./AgentProcessManager.ts";
+import { claudeJsonManager } from "./ClaudeJsonManager.ts";
 import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
 import { appendScrollback } from "../ws/hub.ts";
@@ -39,18 +40,13 @@ function shellQuote(s: string): string {
 function buildCommand(
   agentType: AgentType,
   customCommand: string | undefined,
-  description: string,
   sessionId?: string | null,
 ): string {
-  const prompt = description.trim();
   switch (agentType) {
     case "claude-code":
-      if (sessionId) {
-        return `claude --resume ${shellQuote(sessionId)} --enable-auto-mode`;
-      }
-      return prompt
-        ? `claude --enable-auto-mode -- ${shellQuote(prompt)}`
-        : "claude --enable-auto-mode";
+      // claude-code now uses ClaudeJsonManager; this command is only stored in
+      // Agent.command for display purposes. The manager builds its own invocation.
+      return `claude -p --output-format stream-json${sessionId ? ` --resume ${shellQuote(sessionId)}` : ""}`;
     case "codex":
       return codexService.buildAppServerCommand();
     case "custom":
@@ -58,7 +54,10 @@ function buildCommand(
   }
 }
 
-/** Write .claude/settings.local.json into the worktree so Claude HTTP hooks post back to us. */
+/**
+ * Write .claude/settings.local.json for custom/legacy PTY agents so their
+ * lifecycle hooks POST back to us.
+ */
 function writeHookSettings(worktreePath: string, agentId: string): void {
   const port = process.env.PORT ?? "3001";
   const base = `http://localhost:${port}/api/hooks/${agentId}`;
@@ -73,6 +72,26 @@ function writeHookSettings(worktreePath: string, agentId: string): void {
       Stop: [hookEntry("Stop")],
       Notification: [hookEntry("Notification")],
       TaskCreated: [hookEntry("TaskCreated")],
+    },
+  };
+
+  const claudeDir = join(worktreePath, ".claude");
+  mkdirSync(claudeDir, { recursive: true });
+  writeFileSync(join(claudeDir, "settings.local.json"), JSON.stringify(settings, null, 2));
+}
+
+/**
+ * For claude-code JSON mode: only write the PermissionRequest hook so all
+ * tool permissions are auto-approved. Lifecycle events come from the JSON
+ * stream instead.
+ */
+function writePermissionHookSettings(worktreePath: string, agentId: string): void {
+  const port = process.env.PORT ?? "3001";
+  const base = `http://localhost:${port}/api/hooks/${agentId}`;
+
+  const settings = {
+    hooks: {
+      PermissionRequest: [{ hooks: [{ type: "http", url: `${base}/PermissionRequest` }] }],
     },
   };
 
@@ -109,7 +128,7 @@ export class OrchestratorService {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket) throw new Error("ticket not found");
 
-    const command = buildCommand(agentType, customCommand, ticket.description);
+    const command = buildCommand(agentType, customCommand);
 
     const config = remoteStmts.get.get();
     const git = config ? new GitWorktreeManager(config.localPath) : null;
@@ -144,7 +163,9 @@ export class OrchestratorService {
     }
 
     if (agentType === "claude-code") {
-      // Inject Claude hook settings so lifecycle events POST back to us
+      // Only inject the PermissionRequest hook — lifecycle events come from the JSON stream
+      writePermissionHookSettings(worktreePath, agentId);
+    } else if (agentType === "custom") {
       writeHookSettings(worktreePath, agentId);
     }
 
@@ -181,6 +202,10 @@ export class OrchestratorService {
     try {
       if (agentType === "codex") {
         codexAppServerManager.spawn(agentId, ticket.description, worktreePath, (id, exitCode) => {
+          void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
+        });
+      } else if (agentType === "claude-code") {
+        claudeJsonManager.spawn(agentId, ticket.description, worktreePath, (id, exitCode) => {
           void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
         });
       } else {
@@ -261,6 +286,27 @@ export class OrchestratorService {
       return;
     }
 
+    if (agent.type === "claude-code") {
+      // Restore as an idle session so the user can send follow-up input
+      if (!agent.sessionId) {
+        agentStmts.updateStatus.run({ $id: agent.id, $status: "error", $endedAt: Date.now() });
+        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
+        return;
+      }
+      writePermissionHookSettings(agent.worktreePath, agent.id);
+      claudeJsonManager.restore(agent, (id, exitCode) => {
+        void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
+      });
+      gitWatcher.watchWorktree(agent.id, agent.worktreePath, agent.baseBranch);
+      appendScrollback(
+        agent.id,
+        `\r\n\x1b[33m[restored claude session ${agent.sessionId}]\x1b[0m\r\n`,
+      );
+      const updatedAgent = agentStmts.get.get(agent.id);
+      if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
+      return;
+    }
+
     if (!agent.sessionId) {
       // No session to resume — mark as error so the UI shows a clear state
       agentStmts.updateStatus.run({
@@ -272,7 +318,7 @@ export class OrchestratorService {
       return;
     }
 
-    const command = buildCommand(agent.type, undefined, ticket.description, agent.sessionId);
+    const command = buildCommand(agent.type, undefined, agent.sessionId);
 
     // Reset to running before re-spawning
     agentStmts.updateStatus.run({
@@ -307,6 +353,8 @@ export class OrchestratorService {
     const agent = agentStmts.get.get(ticket.agentId);
     if (agent?.type === "codex") {
       codexAppServerManager.kill(ticket.agentId);
+    } else if (agent?.type === "claude-code") {
+      claudeJsonManager.kill(ticket.agentId);
     } else {
       agentProcessManager.kill(ticket.agentId);
     }

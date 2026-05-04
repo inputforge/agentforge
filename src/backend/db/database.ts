@@ -233,6 +233,21 @@ export const agentStmts = {
       db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
     },
   },
+  saveClaudeState: {
+    run: (args: { $id: string; $claudeState: string }): void => {
+      db.query("UPDATE agents SET claude_state = $claudeState WHERE id = $id").run(args);
+    },
+  },
+  loadClaudeState: {
+    get: (id: string): string | null => {
+      const row = db
+        .query<{ claude_state: string | null }, [string]>(
+          "SELECT claude_state FROM agents WHERE id = ?",
+        )
+        .get(id);
+      return row?.claude_state ?? null;
+    },
+  },
 };
 
 export const integrationStmts = {
