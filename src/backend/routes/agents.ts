@@ -5,7 +5,6 @@ import { errorMeta, logger } from "../lib/logger.ts";
 import { acpClientManager } from "../services/AcpClientManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
-import type { AgentType } from "../../common/types.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { broadcastNotification, clearShellScrollback } from "../ws/hub.ts";
 
@@ -81,20 +80,14 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     const agent = agentStmts.get.get(c.req.param("id"));
     if (!agent) return c.json({ error: "agent not found" }, 404);
 
-    let targetAgentId = agent.id;
-
-    if (!acpClientManager.isRunning(agent.id)) {
-      await orchestrator.spawnAgent(agent.ticketId, agent.type as AgentType);
-      const ticket = ticketStmts.get.get(agent.ticketId);
-      if (ticket?.agentId) targetAgentId = ticket.agentId;
+    try {
+      await acpClientManager.writeToAgent(
+        agent,
+        "Please commit all current changes with a descriptive commit message.",
+      );
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
     }
-
-    const targetAgent = agentStmts.get.get(targetAgentId);
-    if (!targetAgent) return c.json({ error: "agent not found" }, 404);
-    await acpClientManager.writeToAgent(
-      targetAgent,
-      "Please commit all current changes with a descriptive commit message.",
-    );
     return c.json({ ok: true });
   });
 

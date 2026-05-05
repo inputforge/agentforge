@@ -42,6 +42,7 @@ interface AcpSession {
   activeMessageId: string | null;
   activeMessageText: string;
   messageSeq: number;
+  eventSeq: number;
   activePromise: Promise<void> | null;
 }
 
@@ -117,7 +118,7 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
         session.activeMessageText = "";
         session.state.messages = [
           ...session.state.messages,
-          { id: session.activeMessageId, text: "" },
+          { id: session.activeMessageId, text: "", seq: session.eventSeq++ },
         ];
       }
       if (update.content.type === "text") {
@@ -137,6 +138,7 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       // Close current text chunk so tool calls appear inline
       session.activeMessageId = null;
       session.activeMessageText = "";
+      const existingTc = session.state.toolCalls.find((t) => t.id === update.toolCallId);
       const tc: AcpToolCall = {
         id: update.toolCallId,
         title: update.title,
@@ -145,6 +147,7 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
         location: update.locations?.[0]?.path ?? null,
         inputSummary: null,
         resultSummary: null,
+        seq: existingTc?.seq ?? session.eventSeq++,
       };
       session.state.toolCalls = upsertById(session.state.toolCalls, tc);
       break;
@@ -382,6 +385,7 @@ export class AcpClientManager implements IAgentManager {
       activeMessageId: null,
       activeMessageText: "",
       messageSeq: 0,
+      eventSeq: 0,
       activePromise: null,
     };
 
@@ -483,6 +487,7 @@ export class AcpClientManager implements IAgentManager {
         activeMessageId: null,
         activeMessageText: "",
         messageSeq: prior?.messages.length ?? 0,
+        eventSeq: (prior?.messages.length ?? 0) + (prior?.toolCalls.length ?? 0),
         activePromise: null,
       };
 

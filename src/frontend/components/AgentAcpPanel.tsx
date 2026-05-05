@@ -13,7 +13,7 @@ import {
   Terminal,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ComponentProps, KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -326,19 +326,6 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
   const status = acpState?.status ?? "idle";
   const isRunning = status === "running";
 
-  const conversationBlocks = useMemo(() => {
-    const initialMessages = allMessages.slice(0, turns[0]?.agentStartIndex ?? allMessages.length);
-    const userBlocks = turns.map((turn, i) => {
-      const nextStart = turns[i + 1]?.agentStartIndex ?? allMessages.length;
-      return {
-        id: turn.id,
-        userText: turn.userText,
-        agentMessages: allMessages.slice(turn.agentStartIndex, nextStart),
-      };
-    });
-    return { initialMessages, userBlocks };
-  }, [allMessages, turns]);
-
   useEffect(() => {
     setTurns([]);
     let cancelled = false;
@@ -360,10 +347,9 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     setTurns((existing) => mergeTurns(acpState.userMessages, existing));
   }, [acpState?.userMessages]);
 
-  const lastMessageIsForCurrentTurn = useMemo(() => {
-    if (!isRunning) return false;
-    const lastTurnStart = turns.length > 0 ? turns[turns.length - 1].agentStartIndex : 0;
-    return allMessages.length > lastTurnStart;
+  const hasCurrentTurnMessages = useMemo(() => {
+    if (!isRunning || turns.length === 0) return false;
+    return allMessages.length > turns[turns.length - 1].agentStartIndex;
   }, [isRunning, turns, allMessages.length]);
 
   useEffect(() => {
@@ -420,25 +406,39 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     [],
   );
 
-  const renderAgentMessages = (messages: AcpMessage[], isFinalBlock: boolean) => {
-    if (messages.length === 0) return null;
-    return messages.map((msg, i) => {
-      const isFinal = isFinalBlock && i === messages.length - 1 && !isRunning;
-      return <AgentMessageBlock key={msg.id} message={msg} isFinal={isFinal} />;
-    });
-  };
+  const lastMessageId = allMessages[allMessages.length - 1]?.id;
 
-  const inProgressToolCalls = useMemo(
-    () => toolCalls.filter((tc) => tc.status === "running" || tc.status === "pending"),
-    [toolCalls],
-  );
-  const completedToolCalls = useMemo(
-    () => toolCalls.filter((tc) => tc.status !== "running" && tc.status !== "pending"),
-    [toolCalls],
-  );
-  const allToolCalls = useMemo(
-    () => [...completedToolCalls, ...inProgressToolCalls],
-    [completedToolCalls, inProgressToolCalls],
+  type TimelineItem =
+    | { kind: "message"; data: AcpMessage; seq: number }
+    | { kind: "toolCall"; data: AcpToolCall; seq: number };
+
+  const timeline = useMemo((): TimelineItem[] => {
+    const items: TimelineItem[] = [
+      ...allMessages.map((m, i) => ({ kind: "message" as const, data: m, seq: m.seq ?? i * 2 })),
+      ...toolCalls.map((tc, i) => ({
+        kind: "toolCall" as const,
+        data: tc,
+        seq: tc.seq ?? allMessages.length * 2 + i * 2 + 1,
+      })),
+    ];
+    items.sort((a, b) => a.seq - b.seq);
+    return items;
+  }, [allMessages, toolCalls]);
+
+  // Map message id → user text to insert as a divider before that message
+  const userDividers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const turn of turns) {
+      const boundary = allMessages[turn.agentStartIndex];
+      if (boundary) map.set(boundary.id, turn.userText);
+    }
+    return map;
+  }, [turns, allMessages]);
+
+  // Turns whose first agent message hasn't arrived yet (optimistic UI)
+  const pendingTurns = useMemo(
+    () => turns.filter((turn) => !allMessages[turn.agentStartIndex]),
+    [turns, allMessages],
   );
 
   return (
@@ -474,53 +474,49 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
         {/* Plan */}
         <PlanPanel plan={plan} />
 
-        {/* Initial messages */}
-        {conversationBlocks.initialMessages.length > 0 && (
+        {/* Interleaved timeline */}
+        {timeline.length > 0 || pendingTurns.length > 0 ? (
           <div className="flex flex-col gap-3 pt-4 px-4">
-            {renderAgentMessages(
-              conversationBlocks.initialMessages,
-              conversationBlocks.userBlocks.length === 0,
-            )}
-          </div>
-        )}
-
-        {/* Turn blocks */}
-        {conversationBlocks.userBlocks.map((block, bi) => {
-          const isLast = bi === conversationBlocks.userBlocks.length - 1;
-          return (
-            <div key={block.id} className="flex flex-col gap-3 pt-4 px-4">
-              <UserMessage text={block.userText} />
-              {renderAgentMessages(block.agentMessages, isLast)}
-            </div>
-          );
-        })}
-
-        {/* Empty state */}
-        {conversationBlocks.initialMessages.length === 0 &&
-          conversationBlocks.userBlocks.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-32 gap-3 px-4 mt-4">
-              <div className="w-8 h-8 flex items-center justify-center border border-forge-accent/15 bg-forge-accent/3">
-                <Bot size={14} className="text-forge-accent/40" />
-              </div>
-              <p className="text-[10px] uppercase tracking-widest text-center text-forge-text-muted">
-                {isRunning ? "Agent is starting…" : "No messages yet"}
-              </p>
-            </div>
-          )}
-
-        {/* Tool calls */}
-        {allToolCalls.length > 0 && (
-          <div className="flex flex-col gap-0.5 mt-2 px-4">
-            {allToolCalls.map((tc) => (
-              <ToolCallItem key={tc.id} toolCall={tc} />
+            {timeline.map((item) => {
+              const dividerText =
+                item.kind === "message" ? userDividers.get(item.data.id) : undefined;
+              return (
+                <Fragment key={`${item.kind}-${item.data.id}`}>
+                  {dividerText !== undefined && (
+                    <div className="mt-1">
+                      <UserMessage text={dividerText} />
+                    </div>
+                  )}
+                  {item.kind === "message" ? (
+                    <AgentMessageBlock
+                      message={item.data}
+                      isFinal={item.data.id === lastMessageId && !isRunning}
+                    />
+                  ) : (
+                    <ToolCallItem toolCall={item.data} />
+                  )}
+                </Fragment>
+              );
+            })}
+            {pendingTurns.map((turn) => (
+              <UserMessage key={turn.id} text={turn.userText} />
             ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-32 gap-3 px-4 mt-4">
+            <div className="w-8 h-8 flex items-center justify-center border border-forge-accent/15 bg-forge-accent/3">
+              <Bot size={14} className="text-forge-accent/40" />
+            </div>
+            <p className="text-[10px] uppercase tracking-widest text-center text-forge-text-muted">
+              {isRunning ? "Agent is starting…" : "No messages yet"}
+            </p>
           </div>
         )}
 
         {/* Thinking indicator */}
         {isRunning && (
           <div className="px-4 pt-2">
-            <ThinkingIndicator hasMessages={lastMessageIsForCurrentTurn} />
+            <ThinkingIndicator hasMessages={hasCurrentTurnMessages} />
           </div>
         )}
 

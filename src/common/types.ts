@@ -9,6 +9,7 @@ export type AcpTurnStatus = "idle" | "running" | "completed" | "failed";
 export interface AcpMessage {
   id: string;
   text: string;
+  seq?: number;
 }
 
 export interface AcpUserMessage {
@@ -26,6 +27,7 @@ export interface AcpToolCall {
   location?: string | null;
   inputSummary?: string | null;
   resultSummary?: string | null;
+  seq?: number;
 }
 
 export interface AcpPlanStep {
