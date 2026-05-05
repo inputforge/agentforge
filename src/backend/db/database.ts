@@ -248,6 +248,19 @@ export const agentStmts = {
       return row?.claude_state ?? null;
     },
   },
+  saveAcpState: {
+    run: (args: { $id: string; $acpState: string }): void => {
+      db.query("UPDATE agents SET acp_state = $acpState WHERE id = $id").run(args);
+    },
+  },
+  loadAcpState: {
+    get: (id: string): string | null => {
+      const row = db
+        .query<{ acp_state: string | null }, [string]>("SELECT acp_state FROM agents WHERE id = ?")
+        .get(id);
+      return row?.acp_state ?? null;
+    },
+  },
 };
 
 export const integrationStmts = {

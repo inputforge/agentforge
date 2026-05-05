@@ -6,4 +6,5 @@ import m004 from "./004_add_agent_base_branch.ts";
 import m005 from "./005_add_integrations.ts";
 import m006 from "./006_add_ticket_base_branch.ts";
 import m007 from "./007_add_claude_state.ts";
-export const migrations: Migration[] = [m001, m002, m003, m004, m005, m006, m007];
+import m008 from "./008_add_acp_state.ts";
+export const migrations: Migration[] = [m001, m002, m003, m004, m005, m006, m007, m008];

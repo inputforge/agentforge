@@ -1,8 +1,7 @@
 import { create } from "zustand";
 import type {
   Agent,
-  ClaudeAgentState,
-  CodexAgentState,
+  AcpAgentState,
   AppNotification,
   DiffResult,
   GitBranchInfo,
@@ -27,8 +26,7 @@ interface AppState {
   currentBranch: string | null;
   agentDiffs: Record<string, DiffResult>;
   branches: GitBranchInfo[];
-  codexStates: Record<string, CodexAgentState>;
-  claudeStates: Record<string, ClaudeAgentState>;
+  acpStates: Record<string, AcpAgentState>;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -60,8 +58,7 @@ interface AppState {
   // Git state actions
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
-  setCodexState: (agentId: string, state: CodexAgentState) => void;
-  setClaudeState: (agentId: string, state: ClaudeAgentState) => void;
+  setAcpState: (agentId: string, state: AcpAgentState) => void;
 
   // Branch actions
   fetchBranches: () => Promise<void>;
@@ -86,8 +83,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentBranch: null,
   agentDiffs: {},
   branches: [],
-  codexStates: {},
-  claudeStates: {},
+  acpStates: {},
   activeTicketId: null,
   isCreateModalOpen: false,
   isConnected: false,
@@ -242,17 +238,11 @@ export const useStore = create<AppState>((set, get) => ({
   setCurrentBranch: (currentBranch) => set({ currentBranch }),
   setAgentDiff: (agentId, diff) =>
     set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
-  setCodexState: (agentId, state) =>
+  setAcpState: (agentId, state) =>
     set((s) => {
-      const current = s.codexStates[agentId];
+      const current = s.acpStates[agentId];
       if (current && current.updatedAt > state.updatedAt) return s;
-      return { codexStates: { ...s.codexStates, [agentId]: state } };
-    }),
-  setClaudeState: (agentId, state) =>
-    set((s) => {
-      const current = s.claudeStates[agentId];
-      if (current && current.updatedAt > state.updatedAt) return s;
-      return { claudeStates: { ...s.claudeStates, [agentId]: state } };
+      return { acpStates: { ...s.acpStates, [agentId]: state } };
     }),
 }));
 

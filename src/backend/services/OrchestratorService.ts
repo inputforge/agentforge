@@ -1,16 +1,12 @@
 import { randomUUID } from "crypto";
-import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { mkdirSync } from "fs";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import type { Agent, AgentType } from "../../common/types.ts";
-import { agentProcessManager } from "./AgentProcessManager.ts";
-import { claudeJsonManager } from "./ClaudeJsonManager.ts";
+import { acpClientManager } from "./AcpClientManager.ts";
 import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
-import { appendScrollback } from "../ws/hub.ts";
+import { broadcastNotification } from "../ws/hub.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-import { codexService } from "./CodexService.ts";
-import { codexAppServerManager } from "./CodexAppServerManager.ts";
 
 const log = logger.child("orchestrator");
 
@@ -19,11 +15,9 @@ function normalizedBranchName(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** Derive a concise title from the description — first sentence, capped at 72 chars. */
 function titleFromDescription(description: string): string | null {
   const trimmed = description.trim();
   if (!trimmed) return null;
-  // Take the first sentence (split on . ! ?) or the first line, whichever is shorter
   const firstSentence = trimmed.split(/(?<=[.!?])\s+/)[0] ?? trimmed;
   const firstLine = trimmed.split(/\r?\n/)[0] ?? trimmed;
   const candidate = firstSentence.length <= firstLine.length ? firstSentence : firstLine;
@@ -32,72 +26,15 @@ function titleFromDescription(description: string): string | null {
 
 type BroadcastFn = (event: object) => void;
 
-/** Wrap a string in single quotes, escaping any embedded single quotes. */
-function shellQuote(s: string): string {
-  return "'" + s.replace(/'/g, "'\\''") + "'";
-}
-
-function buildCommand(
-  agentType: AgentType,
-  customCommand: string | undefined,
-  sessionId?: string | null,
-): string {
+function buildCommand(agentType: AgentType, customCommand?: string): string {
   switch (agentType) {
     case "claude-code":
-      // claude-code now uses ClaudeJsonManager; this command is only stored in
-      // Agent.command for display purposes. The manager builds its own invocation.
-      return `claude -p --output-format stream-json${sessionId ? ` --resume ${shellQuote(sessionId)}` : ""}`;
+      return "claude-agent-acp";
     case "codex":
-      return codexService.buildAppServerCommand();
+      return "codex-acp";
     case "custom":
-      return customCommand?.trim() || "claude --enable-auto-mode";
+      return customCommand?.trim() || "claude-agent-acp";
   }
-}
-
-/**
- * Write .claude/settings.local.json for custom/legacy PTY agents so their
- * lifecycle hooks POST back to us.
- */
-function writeHookSettings(worktreePath: string, agentId: string): void {
-  const port = process.env.PORT ?? "3001";
-  const base = `http://localhost:${port}/api/hooks/${agentId}`;
-
-  const hookEntry = (event: string) => ({
-    hooks: [{ type: "http", url: `${base}/${event}` }],
-  });
-
-  const settings = {
-    hooks: {
-      SessionStart: [hookEntry("SessionStart")],
-      Stop: [hookEntry("Stop")],
-      Notification: [hookEntry("Notification")],
-      TaskCreated: [hookEntry("TaskCreated")],
-    },
-  };
-
-  const claudeDir = join(worktreePath, ".claude");
-  mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(join(claudeDir, "settings.local.json"), JSON.stringify(settings, null, 2));
-}
-
-/**
- * For claude-code JSON mode: only write the PermissionRequest hook so all
- * tool permissions are auto-approved. Lifecycle events come from the JSON
- * stream instead.
- */
-function writePermissionHookSettings(worktreePath: string, agentId: string): void {
-  const port = process.env.PORT ?? "3001";
-  const base = `http://localhost:${port}/api/hooks/${agentId}`;
-
-  const settings = {
-    hooks: {
-      PermissionRequest: [{ hooks: [{ type: "http", url: `${base}/PermissionRequest` }] }],
-    },
-  };
-
-  const claudeDir = join(worktreePath, ".claude");
-  mkdirSync(claudeDir, { recursive: true });
-  writeFileSync(join(claudeDir, "settings.local.json"), JSON.stringify(settings, null, 2));
 }
 
 export class OrchestratorService {
@@ -114,12 +51,9 @@ export class OrchestratorService {
   }
 
   async onTicketMoved(ticketId: string, newStatus: string): Promise<void> {
-    // No longer auto-spawns on in-progress — the frontend picks the agent first.
-    // Only handle cleanup on done.
     if (newStatus === "done") {
       await this.cleanupTicket(ticketId);
     }
-
     const tickets = ticketStmts.list.all();
     this.broadcast({ type: "kanban-sync", tickets });
   }
@@ -129,7 +63,6 @@ export class OrchestratorService {
     if (!ticket) throw new Error("ticket not found");
 
     const command = buildCommand(agentType, customCommand);
-
     const config = remoteStmts.get.get();
     const git = config ? new GitWorktreeManager(config.localPath) : null;
     const agentId = randomUUID();
@@ -162,13 +95,6 @@ export class OrchestratorService {
       }
     }
 
-    if (agentType === "claude-code") {
-      // Only inject the PermissionRequest hook — lifecycle events come from the JSON stream
-      writePermissionHookSettings(worktreePath, agentId);
-    } else if (agentType === "custom") {
-      writeHookSettings(worktreePath, agentId);
-    }
-
     agentStmts.insert.run({
       $id: agentId,
       $ticketId: ticketId,
@@ -189,7 +115,6 @@ export class OrchestratorService {
       $ticketId: ticketId,
     });
 
-    // Derive title from description the moment the agent starts working
     const derivedTitle = titleFromDescription(ticket.description);
     if (derivedTitle && derivedTitle !== ticket.title) {
       ticketStmts.updateTitle.run({
@@ -200,33 +125,27 @@ export class OrchestratorService {
     }
 
     try {
-      if (agentType === "codex") {
-        codexAppServerManager.spawn(agentId, ticket.description, worktreePath, (id, exitCode) => {
+      acpClientManager.spawn(
+        agentId,
+        ticket.description,
+        worktreePath,
+        (id, exitCode) => {
           void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
-        });
-      } else if (agentType === "claude-code") {
-        claudeJsonManager.spawn(agentId, ticket.description, worktreePath, (id, exitCode) => {
-          void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
-        });
-      } else {
-        agentProcessManager.spawn(agentId, command, worktreePath, (id, exitCode) => {
-          void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
-        });
-      }
+        },
+        agentType,
+        customCommand,
+      );
 
-      // Broadcast only after the process is registered so WS clients connecting
-      // immediately on agent-updated find a live emitter and non-empty scrollback.
       const agent = agentStmts.get.get(agentId);
       if (!agent) throw new Error("agent record was not created");
       gitWatcher.watchWorktree(agentId, worktreePath, baseBranch);
-      this.broadcast({ type: "agent-updated", agent: agent });
+      this.broadcast({ type: "agent-updated", agent });
       const updatedTicket = ticketStmts.get.get(ticketId);
       if (updatedTicket) this.broadcast({ type: "ticket-updated", ticket: updatedTicket });
       this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
     } catch (err) {
       const msg = (err as Error).message;
-      log.error("failed to spawn agent process", { agentId, ticketId, ...errorMeta(err) });
-      appendScrollback(agentId, `\x1b[31m[spawn failed] ${msg}\x1b[0m\r\n`);
+      log.error("failed to spawn ACP agent", { agentId, ticketId, ...errorMeta(err) });
       agentStmts.updateStatus.run({
         $id: agentId,
         $status: "error",
@@ -245,119 +164,22 @@ export class OrchestratorService {
     }
   }
 
-  /** Re-attach to a previously running agent after a server restart. */
   async resumeAgent(agent: Agent): Promise<void> {
     const ticket = ticketStmts.get.get(agent.ticketId);
     if (!ticket) return;
 
-    if (agent.type === "codex") {
-      if (!agent.sessionId) {
-        agentStmts.updateStatus.run({
-          $id: agent.id,
-          $status: "error",
-          $endedAt: Date.now(),
-        });
-        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
-        return;
-      }
-
-      try {
-        await codexAppServerManager.restore(agent, (id, exitCode) => {
-          void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
-        });
-        gitWatcher.watchWorktree(agent.id, agent.worktreePath, agent.baseBranch);
-        appendScrollback(
-          agent.id,
-          `\r\n\x1b[33m[restored codex thread ${agent.sessionId}]\x1b[0m\r\n`,
-        );
-        const updatedAgent = agentStmts.get.get(agent.id);
-        if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
-      } catch (err) {
-        const msg = (err as Error).message;
-        log.error("failed to restore codex app-server", { agentId: agent.id, ...errorMeta(err) });
-        appendScrollback(agent.id, `\x1b[31m[codex restore failed] ${msg}\x1b[0m\r\n`);
-        agentStmts.updateStatus.run({
-          $id: agent.id,
-          $status: "error",
-          $endedAt: Date.now(),
-        });
-        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
-      }
-      return;
-    }
-
-    if (agent.type === "claude-code") {
-      // Restore as an idle session so the user can send follow-up input
-      if (!agent.sessionId) {
-        agentStmts.updateStatus.run({ $id: agent.id, $status: "error", $endedAt: Date.now() });
-        this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
-        return;
-      }
-      writePermissionHookSettings(agent.worktreePath, agent.id);
-      claudeJsonManager.restore(agent, (id, exitCode) => {
-        void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
-      });
-      gitWatcher.watchWorktree(agent.id, agent.worktreePath, agent.baseBranch);
-      appendScrollback(
-        agent.id,
-        `\r\n\x1b[33m[restored claude session ${agent.sessionId}]\x1b[0m\r\n`,
-      );
-      const updatedAgent = agentStmts.get.get(agent.id);
-      if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
-      return;
-    }
-
-    if (!agent.sessionId) {
-      // No session to resume — mark as error so the UI shows a clear state
-      agentStmts.updateStatus.run({
-        $id: agent.id,
-        $status: "error",
-        $endedAt: Date.now(),
-      });
-      this.broadcast({ type: "agent-updated", agent: { ...agent, status: "error" } });
-      return;
-    }
-
-    const command = buildCommand(agent.type, undefined, agent.sessionId);
-
-    // Reset to running before re-spawning
-    agentStmts.updateStatus.run({
-      $id: agent.id,
-      $status: "running",
-      $endedAt: null,
+    acpClientManager.restore(agent, (id, exitCode) => {
+      void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
     });
-
-    writeHookSettings(agent.worktreePath, agent.id);
-
-    try {
-      agentProcessManager.spawn(agent.id, command, agent.worktreePath, (id, exitCode) => {
-        void this.handleAgentExit(id, exitCode ?? 1, ticket.id, ticket.title);
-      });
-
-      appendScrollback(agent.id, `\r\n\x1b[33m[resuming session ${agent.sessionId}]\x1b[0m\r\n`);
-    } catch (err) {
-      const msg = (err as Error).message;
-      log.error("failed to resume agent process", { agentId: agent.id, ...errorMeta(err) });
-      appendScrollback(agent.id, `\x1b[31m[resume failed] ${msg}\x1b[0m\r\n`);
-      agentStmts.updateStatus.run({
-        $id: agent.id,
-        $status: "error",
-        $endedAt: Date.now(),
-      });
-    }
+    gitWatcher.watchWorktree(agent.id, agent.worktreePath, agent.baseBranch);
+    const updatedAgent = agentStmts.get.get(agent.id);
+    if (updatedAgent) this.broadcast({ type: "agent-updated", agent: updatedAgent });
   }
 
   private cleanupTicket(ticketId: string): void {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) return;
-    const agent = agentStmts.get.get(ticket.agentId);
-    if (agent?.type === "codex") {
-      codexAppServerManager.kill(ticket.agentId);
-    } else if (agent?.type === "claude-code") {
-      claudeJsonManager.kill(ticket.agentId);
-    } else {
-      agentProcessManager.kill(ticket.agentId);
-    }
+    acpClientManager.kill(ticket.agentId);
     gitWatcher.unwatchWorktree(ticket.agentId);
   }
 
@@ -370,7 +192,7 @@ export class OrchestratorService {
     gitWatcher.unwatchWorktree(agentId);
     const updatedAgent = agentStmts.get.get(agentId);
     if (updatedAgent) {
-      this.broadcast({ type: "agent-updated", agent: updatedAgent });
+      broadcastNotification({ type: "agent-updated", agent: updatedAgent });
     }
 
     const currentTicket = ticketStmts.get.get(ticketId);
@@ -381,8 +203,8 @@ export class OrchestratorService {
         $id: ticketId,
       });
       const ticket = ticketStmts.get.get(ticketId);
-      if (ticket) this.broadcast({ type: "ticket-updated", ticket });
-      this.broadcast({
+      if (ticket) broadcastNotification({ type: "ticket-updated", ticket });
+      broadcastNotification({
         type: "notification",
         notification: {
           type: "agent-done",
@@ -393,6 +215,6 @@ export class OrchestratorService {
       });
     }
 
-    this.broadcast({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+    broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });
   }
 }

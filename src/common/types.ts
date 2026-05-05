@@ -2,6 +2,51 @@ export type TicketStatus = "backlog" | "in-progress" | "review" | "done";
 export type AgentStatus = "running" | "done" | "error";
 export type AgentType = "claude-code" | "codex" | "custom";
 
+// ─── ACP agent state ─────────────────────────────────────────────────────────
+
+export type AcpTurnStatus = "idle" | "running" | "completed" | "failed";
+
+export interface AcpMessage {
+  id: string;
+  text: string;
+}
+
+export interface AcpUserMessage {
+  id: string;
+  userText: string;
+  agentStartIndex: number;
+  clientId?: string;
+}
+
+export interface AcpToolCall {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  location?: string | null;
+  inputSummary?: string | null;
+  resultSummary?: string | null;
+}
+
+export interface AcpPlanStep {
+  id: string;
+  title: string;
+  priority?: string | null;
+  status: string;
+}
+
+export interface AcpAgentState {
+  agentId: string;
+  sessionId: string | null;
+  status: AcpTurnStatus;
+  userMessages: AcpUserMessage[];
+  messages: AcpMessage[];
+  toolCalls: AcpToolCall[];
+  plan: AcpPlanStep[];
+  lastError: string | null;
+  updatedAt: number;
+}
+
 export interface Ticket {
   id: string;
   title: string;

@@ -1,10 +1,13 @@
 import {
   AlertTriangle,
   Bot,
-  ChevronDown,
-  ChevronRight,
+  CheckCircle,
+  Circle,
+  Clock,
   FileText,
+  Globe,
   RefreshCw,
+  Search,
   Send,
   Square,
   Terminal,
@@ -16,9 +19,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { ClaudeEdit, ClaudeMessage, ClaudeTurnStatus, ClaudeToolCall } from "../types";
+import type { AcpMessage, AcpToolCall, AcpTurnStatus, AcpPlanStep } from "../types";
 
-interface AgentClaudePanelProps {
+interface AgentAcpPanelProps {
   agentId: string;
 }
 
@@ -122,13 +125,13 @@ function UserMessage({ text }: { text: string }) {
   );
 }
 
-function AgentMessageBlock({ message, isFinal }: { message: ClaudeMessage; isFinal: boolean }) {
+function AgentMessageBlock({ message, isFinal }: { message: AcpMessage; isFinal: boolean }) {
   if (isFinal) {
     return (
       <div className="px-4 py-3 animate-fade-in border-l-2 border-l-forge-accent bg-gradient-to-br from-forge-accent/7 to-forge-accent/2 border-t border-t-forge-accent/15 border-r border-r-forge-accent/6 border-b border-b-forge-accent/6">
         <div className="flex items-center gap-1.5 mb-2.5">
           <Zap size={9} className="text-forge-accent flex-shrink-0" />
-          <span className="text-[9px] uppercase tracking-widest text-forge-accent">CLAUDE</span>
+          <span className="text-[9px] uppercase tracking-widest text-forge-accent">AGENT</span>
         </div>
         <MarkdownContent text={message.text} />
       </div>
@@ -138,7 +141,7 @@ function AgentMessageBlock({ message, isFinal }: { message: ClaudeMessage; isFin
     <div className="px-3 py-2 animate-fade-in border-l border-l-forge-accent/12">
       <div className="flex items-center gap-1.5 mb-1.5 opacity-40">
         <Bot size={8} className="text-forge-accent flex-shrink-0" />
-        <span className="text-[9px] uppercase tracking-widest text-forge-accent">CLAUDE</span>
+        <span className="text-[9px] uppercase tracking-widest text-forge-accent">AGENT</span>
       </div>
       <div className="opacity-[0.72]">
         <MarkdownContent text={message.text} />
@@ -167,9 +170,9 @@ function ThinkingIndicator({ hasMessages }: { hasMessages: boolean }) {
   );
 }
 
-function StatusBadge({ status }: { status: ClaudeTurnStatus }) {
+function StatusBadge({ status }: { status: AcpTurnStatus }) {
   const config: Record<
-    ClaudeTurnStatus,
+    AcpTurnStatus,
     { label: string; dotClass: string; labelClass: string; dot?: string }
   > = {
     idle: { label: "IDLE", dotClass: "bg-forge-text-dim", labelClass: "text-forge-text-dim" },
@@ -191,107 +194,122 @@ function StatusBadge({ status }: { status: ClaudeTurnStatus }) {
   );
 }
 
-function InlineToolCall({ toolCall }: { toolCall: ClaudeToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  const isRunning = toolCall.status === "running";
-  const hasDetails = Boolean(toolCall.inputSummary ?? toolCall.resultSummary);
-  const details = toolCall.resultSummary ?? toolCall.inputSummary;
-  const handleClick = useCallback(() => {
-    if (hasDetails) setExpanded((e) => !e);
-  }, [hasDetails]);
+function toolKindIcon(kind: string) {
+  switch (kind) {
+    case "edit":
+    case "delete":
+    case "move":
+      return FileText;
+    case "execute":
+      return Terminal;
+    case "search":
+      return Search;
+    case "fetch":
+      return Globe;
+    default:
+      return Terminal;
+  }
+}
+
+function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
+  const isRunning = toolCall.status === "running" || toolCall.status === "pending";
+  const isError = toolCall.status === "error";
+  const Icon = toolKindIcon(toolCall.kind);
 
   return (
     <div
-      className={`animate-fade-in border-l-2 ${isRunning ? "border-l-forge-amber/50 bg-forge-amber/4" : toolCall.status === "error" ? "border-l-forge-red/40 bg-forge-red/3" : "border-l-forge-accent/20 bg-white/[0.015]"}`}
+      className={`animate-fade-in border-l-2 px-3 py-1.5 flex items-center gap-2 ${
+        isRunning
+          ? "border-l-forge-amber/50 bg-forge-amber/4"
+          : isError
+            ? "border-l-forge-red/40 bg-forge-red/3"
+            : "border-l-forge-accent/20 bg-white/[0.015]"
+      }`}
     >
-      <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-left bg-transparent cursor-pointer border-0 disabled:cursor-default"
-        onClick={handleClick}
-        disabled={!hasDetails}
-      >
-        <Terminal
-          size={9}
-          className={`flex-shrink-0 ${isRunning ? "text-forge-amber animate-status-blink" : toolCall.status === "error" ? "text-forge-red/60" : "text-forge-accent/50"}`}
-        />
-        <span className="text-xs text-forge-text truncate">{toolCall.name}</span>
-        {toolCall.inputSummary && !expanded && (
-          <span className="text-[10px] text-forge-text-dim/70 font-mono truncate flex-1 text-left ml-1">
-            {toolCall.inputSummary}
-          </span>
-        )}
-        {hasDetails &&
-          (expanded ? (
-            <ChevronDown size={9} className="ml-auto flex-shrink-0 text-forge-text-dim" />
-          ) : (
-            <ChevronRight size={9} className="ml-auto flex-shrink-0 text-forge-text-dim" />
-          ))}
-        {!hasDetails && (
-          <span
-            className={`ml-auto text-[9px] uppercase tracking-widest flex-shrink-0 ${isRunning ? "text-forge-amber/70" : "text-forge-text-dim/50"}`}
-          >
-            {isRunning ? "RUNNING" : toolCall.status}
-          </span>
-        )}
-      </button>
-      {expanded && details && (
-        <pre className="px-3 pb-2 text-[10px] text-forge-text-dim whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto">
-          {details}
-        </pre>
+      <Icon
+        size={9}
+        className={`flex-shrink-0 ${
+          isRunning
+            ? "text-forge-amber animate-status-blink"
+            : isError
+              ? "text-forge-red/60"
+              : "text-forge-accent/50"
+        }`}
+      />
+      <span className="text-xs text-forge-text truncate flex-1">{toolCall.title}</span>
+      {toolCall.location && (
+        <span className="text-[10px] text-forge-text-dim/70 font-mono truncate max-w-[160px]">
+          {toolCall.location.split("/").slice(-2).join("/")}
+        </span>
       )}
+      <span
+        className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${
+          isRunning
+            ? "text-forge-amber/70"
+            : isError
+              ? "text-forge-red/60"
+              : "text-forge-text-dim/50"
+        }`}
+      >
+        {isRunning ? "RUNNING" : toolCall.status}
+      </span>
     </div>
   );
 }
 
-function InlineEdit({ edit }: { edit: ClaudeEdit }) {
-  const isInProgress = edit.status === "inProgress";
+function PlanPanel({ plan }: { plan: AcpPlanStep[] }) {
+  if (plan.length === 0) return null;
   return (
-    <div
-      className={`animate-fade-in border-l-2 flex flex-col ${isInProgress ? "border-l-forge-green/50 bg-forge-green/3" : "border-l-forge-green/20 bg-white/[0.01]"}`}
-    >
-      <div className="flex items-center gap-2 px-3 py-1.5">
-        <FileText
-          size={9}
-          className={`flex-shrink-0 ${isInProgress ? "text-forge-green" : "text-forge-green/50"}`}
-        />
-        <span className="text-xs text-forge-text font-mono break-all flex-1 text-left">
-          {edit.path}
-        </span>
-        <span
-          className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${isInProgress ? "text-forge-green/70" : "text-forge-text-dim/50"}`}
-        >
-          {isInProgress ? "WRITING" : (edit.kind ?? edit.status ?? "")}
-        </span>
+    <div className="mx-4 mt-3 mb-1 border border-forge-border bg-forge-panel/50">
+      <div className="px-3 py-1.5 border-b border-forge-border">
+        <span className="text-[9px] uppercase tracking-widest text-forge-text-dim">PLAN</span>
       </div>
-    </div>
-  );
-}
-
-function InlineActivityGroup({
-  toolCalls,
-  edits,
-}: {
-  toolCalls: ClaudeToolCall[];
-  edits: ClaudeEdit[];
-}) {
-  if (toolCalls.length === 0 && edits.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-0.5 my-1">
-      {toolCalls.map((tc) => (
-        <InlineToolCall key={tc.id} toolCall={tc} />
-      ))}
-      {edits.map((edit) => (
-        <InlineEdit key={edit.id} edit={edit} />
-      ))}
+      <div className="flex flex-col">
+        {plan.map((step) => {
+          const StatusIcon =
+            step.status === "completed"
+              ? CheckCircle
+              : step.status === "in_progress"
+                ? Clock
+                : Circle;
+          return (
+            <div
+              key={step.id}
+              className="flex items-start gap-2 px-3 py-1.5 border-b border-forge-border/50 last:border-b-0"
+            >
+              <StatusIcon
+                size={10}
+                className={`flex-shrink-0 mt-0.5 ${
+                  step.status === "completed"
+                    ? "text-forge-green"
+                    : step.status === "in_progress"
+                      ? "text-forge-amber animate-status-blink"
+                      : "text-forge-text-dim/40"
+                }`}
+              />
+              <span
+                className={`text-xs leading-relaxed ${
+                  step.status === "completed"
+                    ? "text-forge-text-dim/60 line-through"
+                    : "text-forge-text"
+                }`}
+              >
+                {step.title}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
-  const claudeState = useStore((s) => s.claudeStates[agentId] ?? null);
+export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
+  const acpState = useStore((s) => s.acpStates[agentId] ?? null);
   const addNotification = useStore((s) => s.addNotification);
-  const setClaudeState = useStore((s) => s.setClaudeState);
+  const setAcpState = useStore((s) => s.setAcpState);
 
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -301,18 +319,12 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const allMessages = useMemo<ClaudeMessage[]>(
-    () => claudeState?.messages ?? [],
-    [claudeState?.messages],
-  );
-  const toolCalls = useMemo(() => claudeState?.toolCalls ?? [], [claudeState?.toolCalls]);
-  const edits = useMemo(() => claudeState?.edits ?? [], [claudeState?.edits]);
+  const allMessages = useMemo<AcpMessage[]>(() => acpState?.messages ?? [], [acpState?.messages]);
+  const toolCalls = useMemo(() => acpState?.toolCalls ?? [], [acpState?.toolCalls]);
+  const plan = useMemo(() => acpState?.plan ?? [], [acpState?.plan]);
 
-  const inProgressEdits = useMemo(() => edits.filter((e) => e.status === "inProgress"), [edits]);
-  const inProgressToolCalls = useMemo(
-    () => toolCalls.filter((tc) => tc.status === "running"),
-    [toolCalls],
-  );
+  const status = acpState?.status ?? "idle";
+  const isRunning = status === "running";
 
   const conversationBlocks = useMemo(() => {
     const initialMessages = allMessages.slice(0, turns[0]?.agentStartIndex ?? allMessages.length);
@@ -327,29 +339,26 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
     return { initialMessages, userBlocks };
   }, [allMessages, turns]);
 
-  const status = claudeState?.status ?? "idle";
-  const isRunning = status === "running";
-
   useEffect(() => {
     setTurns([]);
     let cancelled = false;
     api.agents
-      .getClaudeState(agentId)
+      .getAcpState(agentId)
       .then((state) => {
         if (cancelled) return;
-        setClaudeState(agentId, state);
+        setAcpState(agentId, state);
         setTurns((existing) => mergeTurns(state.userMessages, existing));
       })
       .catch((err: Error) => addNotification({ type: "error", message: err.message }));
     return () => {
       cancelled = true;
     };
-  }, [agentId, setClaudeState, addNotification]);
+  }, [agentId, setAcpState, addNotification]);
 
   useEffect(() => {
-    if (!claudeState?.userMessages.length) return;
-    setTurns((existing) => mergeTurns(claudeState.userMessages, existing));
-  }, [claudeState?.userMessages]);
+    if (!acpState?.userMessages.length) return;
+    setTurns((existing) => mergeTurns(acpState.userMessages, existing));
+  }, [acpState?.userMessages]);
 
   const lastMessageIsForCurrentTurn = useMemo(() => {
     if (!isRunning) return false;
@@ -361,7 +370,7 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [allMessages, isRunning, inProgressEdits.length, inProgressToolCalls.length]);
+  }, [allMessages, isRunning, toolCalls.length]);
 
   const handleSend = useCallback(async () => {
     const value = input.trim();
@@ -411,7 +420,7 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
     [],
   );
 
-  const renderAgentMessages = (messages: ClaudeMessage[], isFinalBlock: boolean) => {
+  const renderAgentMessages = (messages: AcpMessage[], isFinalBlock: boolean) => {
     if (messages.length === 0) return null;
     return messages.map((msg, i) => {
       const isFinal = isFinalBlock && i === messages.length - 1 && !isRunning;
@@ -419,13 +428,12 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
     });
   };
 
-  const completedEdits = useMemo(() => edits.filter((e) => e.status !== "inProgress"), [edits]);
-  const allEdits = useMemo(
-    () => [...completedEdits, ...inProgressEdits],
-    [completedEdits, inProgressEdits],
+  const inProgressToolCalls = useMemo(
+    () => toolCalls.filter((tc) => tc.status === "running" || tc.status === "pending"),
+    [toolCalls],
   );
   const completedToolCalls = useMemo(
-    () => toolCalls.filter((tc) => tc.status !== "running"),
+    () => toolCalls.filter((tc) => tc.status !== "running" && tc.status !== "pending"),
     [toolCalls],
   );
   const allToolCalls = useMemo(
@@ -438,15 +446,15 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
       {/* Header */}
       <div className="px-3 py-2 border-b border-forge-border flex items-center gap-2 flex-shrink-0 bg-forge-panel">
         <Bot size={11} className="text-forge-text-muted" />
-        <span className="text-forge-text-muted text-[10px] uppercase tracking-widest">CLAUDE</span>
+        <span className="text-forge-text-muted text-[10px] uppercase tracking-widest">AGENT</span>
         <div className="h-3 w-px mx-1 bg-forge-text-dim/30" />
         <StatusBadge status={status} />
-        {claudeState?.sessionId && (
+        {acpState?.sessionId && (
           <span
             className="ml-auto text-[9px] font-mono truncate text-forge-text-dim/50 max-w-[120px]"
-            title={claudeState.sessionId}
+            title={acpState.sessionId}
           >
-            {claudeState.sessionId.slice(0, 8)}…
+            {acpState.sessionId.slice(0, 8)}…
           </span>
         )}
         {isRunning && (
@@ -461,8 +469,11 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
         )}
       </div>
 
-      {/* Unified scrollable area */}
+      {/* Scrollable area */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto bg-forge-black pb-2">
+        {/* Plan */}
+        <PlanPanel plan={plan} />
+
         {/* Initial messages */}
         {conversationBlocks.initialMessages.length > 0 && (
           <div className="flex flex-col gap-3 pt-4 px-4">
@@ -492,15 +503,19 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
                 <Bot size={14} className="text-forge-accent/40" />
               </div>
               <p className="text-[10px] uppercase tracking-widest text-center text-forge-text-muted">
-                {isRunning ? "Claude is starting…" : "No messages yet"}
+                {isRunning ? "Agent is starting…" : "No messages yet"}
               </p>
             </div>
           )}
 
-        {/* Inline activity */}
-        <div className="px-4 mt-2">
-          <InlineActivityGroup toolCalls={allToolCalls} edits={allEdits} />
-        </div>
+        {/* Tool calls */}
+        {allToolCalls.length > 0 && (
+          <div className="flex flex-col gap-0.5 mt-2 px-4">
+            {allToolCalls.map((tc) => (
+              <ToolCallItem key={tc.id} toolCall={tc} />
+            ))}
+          </div>
+        )}
 
         {/* Thinking indicator */}
         {isRunning && (
@@ -510,11 +525,11 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
         )}
 
         {/* Error */}
-        {claudeState?.lastError && (
+        {acpState?.lastError && (
           <div className="mx-4 mt-3 px-3 py-2.5 flex items-start gap-2 border border-forge-red/30 bg-forge-red/4">
             <AlertTriangle size={11} className="text-forge-red flex-shrink-0 mt-0.5" />
             <pre className="text-xs text-forge-red whitespace-pre-wrap leading-relaxed">
-              {claudeState.lastError}
+              {acpState.lastError}
             </pre>
           </div>
         )}
@@ -524,7 +539,7 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
       <div className="border-t border-forge-border flex flex-col gap-2 p-3 flex-shrink-0 bg-forge-panel">
         <div className="flex items-center justify-between mb-0.5">
           <label className="text-[9px] uppercase tracking-widest text-forge-text-muted">
-            SEND TO CLAUDE
+            SEND TO AGENT
           </label>
           {input.trim().length > 0 && (
             <span className="text-[9px] font-mono text-forge-text-muted">⌘↵ to send</span>
@@ -534,7 +549,7 @@ export function AgentClaudePanel({ agentId }: AgentClaudePanelProps) {
           ref={textareaRef}
           className="forge-input resize-none min-h-[72px]"
           placeholder={
-            isRunning ? "Wait for the current turn to finish…" : "Start a new turn with Claude…"
+            isRunning ? "Wait for the current turn to finish…" : "Start a new turn with the agent…"
           }
           value={input}
           onChange={handleInputChange}

@@ -1,8 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
-import { agentStmts } from "../db/index.ts";
-import { agentProcessManager } from "../services/AgentProcessManager.ts";
-import { claudeJsonManager } from "../services/ClaudeJsonManager.ts";
+import { acpClientManager } from "../services/AcpClientManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
@@ -88,32 +86,10 @@ export const wsHandlers = {
 
     if (channel !== "agent" || !agentId) return;
 
-    const agent = agentStmts.get.get(agentId);
     const scrollback = agentScrollback.get(agentId) ?? [];
 
-    // For claude-code JSON agents, subscribe to the JSON manager's emitter (if a turn
-    // is active); otherwise just replay the text-delta scrollback. No PTY auto-restart.
-    if (agent?.type === "claude-code") {
-      const emitter = claudeJsonManager.subscribe(agentId);
-      for (const chunk of scrollback) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
-      }
-      if (emitter) {
-        const handler = (data: string) => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(data);
-        };
-        emitter.on("data", handler);
-        (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
-        (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
-      }
-      return;
-    }
-
-    // Subscribe to live PTY output if the process is still running
-    const emitter = agentProcessManager.subscribe(agentId);
-
-    // Replay buffered output so the reconnecting terminal isn't blank, then
-    // attach the live handler if the process is still running.
+    // All agent types now use ACP — subscribe to the ACP manager's emitter (stderr/debug).
+    const emitter = acpClientManager.subscribe(agentId);
     for (const chunk of scrollback) {
       if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
     }
@@ -130,9 +106,7 @@ export const wsHandlers = {
   message(ws: ServerWebSocket<{ channel: string; agentId?: string }>, raw: string | Buffer) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "agent" && agentId) {
-      agentProcessManager.tryWrite(agentId, raw);
-    } else if (channel === "shell" && agentId) {
+    if (channel === "shell" && agentId) {
       shellSessionManager.write(agentId, raw);
     } else if (channel === "session") {
       let parsed: unknown;
@@ -151,7 +125,6 @@ export const wsHandlers = {
         return;
       }
       const { agentId: targetId, cols, rows } = result.data;
-      agentProcessManager.resize(targetId, cols, rows);
       shellSessionManager.resize(targetId, cols, rows);
     }
   },

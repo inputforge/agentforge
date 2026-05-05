@@ -1,9 +1,7 @@
 import { Hono } from "hono";
 import { randomUUID } from "crypto";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
-import { agentProcessManager } from "../services/AgentProcessManager.ts";
-import { claudeJsonManager } from "../services/ClaudeJsonManager.ts";
-import { codexAppServerManager } from "../services/CodexAppServerManager.ts";
+import { acpClientManager } from "../services/AcpClientManager.ts";
 import type { AgentType, Ticket, TicketStatus } from "../../common/types.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 import type { OrchestratorService } from "../services/OrchestratorService.ts";
@@ -91,15 +89,8 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
 
     const ticket = ticketStmts.get.get(id);
     if (!ticket) return c.json({ error: "ticket not found" }, 404);
-    if (ticket.agentId) {
-      const existingAgent = agentStmts.get.get(ticket.agentId);
-      const isRunning =
-        existingAgent?.type === "claude-code"
-          ? claudeJsonManager.isRunning(ticket.agentId)
-          : existingAgent?.type === "codex"
-            ? codexAppServerManager.isRunning(ticket.agentId)
-            : agentProcessManager.isRunning(ticket.agentId);
-      if (isRunning) return c.json({ error: "agent already running for this ticket" }, 409);
+    if (ticket.agentId && acpClientManager.isRunning(ticket.agentId)) {
+      return c.json({ error: "agent already running for this ticket" }, 409);
     }
 
     try {
