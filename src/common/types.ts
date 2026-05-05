@@ -161,49 +161,6 @@ export interface IntegrationConfig {
   teamId?: string;
 }
 
-// ─── Claude JSON streaming types ──────────────────────────────────────────────
-
-export type ClaudeTurnStatus = "idle" | "running" | "completed" | "failed";
-
-export interface ClaudeMessage {
-  id: string;
-  text: string;
-}
-
-export interface ClaudeUserMessage {
-  id: string;
-  userText: string;
-  agentStartIndex: number;
-  clientId?: string;
-}
-
-export interface ClaudeToolCall {
-  id: string;
-  name: string;
-  status: "running" | "completed" | "error";
-  inputSummary?: string | null;
-  resultSummary?: string | null;
-}
-
-export interface ClaudeEdit {
-  id: string;
-  path: string;
-  kind: string;
-  status?: string | null;
-}
-
-export interface ClaudeAgentState {
-  agentId: string;
-  sessionId: string | null;
-  status: ClaudeTurnStatus;
-  userMessages: ClaudeUserMessage[];
-  messages: ClaudeMessage[];
-  toolCalls: ClaudeToolCall[];
-  edits: ClaudeEdit[];
-  lastError: string | null;
-  updatedAt: number;
-}
-
 export interface CodexStatus {
   installed: boolean;
   authenticated: boolean;
@@ -214,65 +171,4 @@ export interface CodexStatus {
   authMethod: "apikey" | "chatgpt" | "agentIdentity" | "unknown" | null;
   loginStatusText: string | null;
   error: string | null;
-}
-
-export type CodexTurnStatus = "idle" | "running" | "completed" | "failed" | "interrupted";
-export type CodexPlanStepStatus = "pending" | "inProgress" | "completed";
-
-export interface CodexPlanStep {
-  step: string;
-  status: CodexPlanStepStatus;
-}
-
-export interface CodexMessage {
-  id: string;
-  text: string;
-}
-
-export interface CodexUserMessage {
-  id: string;
-  userText: string;
-  agentStartIndex: number;
-  clientId?: string;
-}
-
-export interface CodexAction {
-  id: string;
-  kind: string;
-  title: string;
-  command?: string | null;
-  status?: string | null;
-  details?: string | null;
-}
-
-export interface CodexToolCall {
-  id: string;
-  kind: "mcp" | "dynamic" | "collab";
-  tool: string;
-  server?: string | null;
-  status: string;
-  details?: string | null;
-}
-
-export interface CodexEdit {
-  id: string;
-  path: string;
-  kind: string;
-  diff: string;
-  status?: string | null;
-}
-
-export interface CodexAgentState {
-  agentId: string;
-  threadId: string | null;
-  turnId: string | null;
-  status: CodexTurnStatus;
-  userMessages: CodexUserMessage[];
-  messages: CodexMessage[];
-  plan: CodexPlanStep[];
-  actions: CodexAction[];
-  toolCalls: CodexToolCall[];
-  edits: CodexEdit[];
-  lastError: string | null;
-  updatedAt: number;
 }

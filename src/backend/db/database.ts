@@ -233,32 +233,19 @@ export const agentStmts = {
       db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
     },
   },
-  saveClaudeState: {
-    run: (args: { $id: string; $claudeState: string }): void => {
-      db.query("UPDATE agents SET claude_state = $claudeState WHERE id = $id").run(args);
+  saveAgentState: {
+    run: (args: { $id: string; $agentState: string }): void => {
+      db.query("UPDATE agents SET agent_state = $agentState WHERE id = $id").run(args);
     },
   },
-  loadClaudeState: {
+  loadAgentState: {
     get: (id: string): string | null => {
       const row = db
-        .query<{ claude_state: string | null }, [string]>(
-          "SELECT claude_state FROM agents WHERE id = ?",
+        .query<{ agent_state: string | null }, [string]>(
+          "SELECT agent_state FROM agents WHERE id = ?",
         )
         .get(id);
-      return row?.claude_state ?? null;
-    },
-  },
-  saveAcpState: {
-    run: (args: { $id: string; $acpState: string }): void => {
-      db.query("UPDATE agents SET acp_state = $acpState WHERE id = $id").run(args);
-    },
-  },
-  loadAcpState: {
-    get: (id: string): string | null => {
-      const row = db
-        .query<{ acp_state: string | null }, [string]>("SELECT acp_state FROM agents WHERE id = ?")
-        .get(id);
-      return row?.acp_state ?? null;
+      return row?.agent_state ?? null;
     },
   },
 };

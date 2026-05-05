@@ -86,11 +86,11 @@ function upsertById<T extends { id: string }>(arr: T[], next: T): T[] {
 
 function persistState(agentId: string, state: AcpAgentState): void {
   stateCache.set(agentId, state);
-  agentStmts.saveAcpState.run({ $id: agentId, $acpState: JSON.stringify(state) });
+  agentStmts.saveAgentState.run({ $id: agentId, $agentState: JSON.stringify(state) });
 }
 
 function loadPersistedState(agentId: string): AcpAgentState | null {
-  const raw = agentStmts.loadAcpState.get(agentId);
+  const raw = agentStmts.loadAgentState.get(agentId);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as AcpAgentState;

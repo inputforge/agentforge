@@ -105,10 +105,8 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const tickets = await api.tickets.list();
       set({ tickets });
-      // Also load agents for any in-progress or review tickets
-      const needAgents = tickets.filter(
-        (t) => t.agentId && (t.status === "in-progress" || t.status === "review"),
-      );
+      // Also load agents for every ticket with history so older review/done tickets hydrate.
+      const needAgents = tickets.filter((t) => t.agentId);
       await Promise.all(needAgents.map((t) => get().fetchAgentForTicket(t.id)));
     } catch (err) {
       get().addNotification({
