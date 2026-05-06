@@ -3,15 +3,23 @@ import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { existsSync } from "fs";
 import { join } from "path";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import {
+  AgentSideConnection,
+  ClientSideConnection,
+  ndJsonStream,
+  PROTOCOL_VERSION,
+} from "@agentclientprotocol/sdk";
 import type {
+  AnyMessage,
   SessionNotification,
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionUpdate,
   Client,
   Agent as AcpAgent,
+  Stream,
 } from "@agentclientprotocol/sdk";
+import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
 import type { ChildProcess } from "node:child_process";
 import type {
   Agent,
@@ -32,7 +40,10 @@ const log = logger.child("acp");
 interface AcpSession {
   agentId: string;
   cwd: string;
-  proc: ChildProcess;
+  /** null for in-process (claude-code) agents */
+  proc: ChildProcess | null;
+  /** non-null for in-process agents; kept alive to prevent GC of stream listeners */
+  agentSideConn: AgentSideConnection | null;
   connection: ClientSideConnection;
   emitter: EventEmitter;
   sessionId: string | null;
@@ -199,36 +210,52 @@ function extractResultSummary(update: {
   return null;
 }
 
-// ─── Binary resolution ────────────────────────────────────────────────────────
+// ─── Channel builders ─────────────────────────────────────────────────────────
 
-function resolveAcpBinary(agentType: AgentType): string | null {
-  if (agentType === "custom") return null;
-  const name = agentType === "claude-code" ? "claude-agent-acp" : "codex-acp";
-  const localBin = join(process.cwd(), "node_modules/.bin", name);
-  return existsSync(localBin) ? localBin : null;
+/**
+ * Wires ClaudeAcpAgent in-process via a paired TransformStream, avoiding any
+ * subprocess. Returns the client-facing Stream and the AgentSideConnection
+ * reference (must be kept alive to prevent GC of its stream listeners).
+ */
+function buildClaudeInProcessChannel(): {
+  stream: Stream;
+  agentSideConn: AgentSideConnection;
+} {
+  const clientToAgent = new TransformStream<AnyMessage, AnyMessage>();
+  const agentToClient = new TransformStream<AnyMessage, AnyMessage>();
+
+  const clientStream: Stream = {
+    readable: agentToClient.readable,
+    writable: clientToAgent.writable,
+  };
+  const agentStream: Stream = {
+    readable: clientToAgent.readable,
+    writable: agentToClient.writable,
+  };
+
+  const agentSideConn = new AgentSideConnection((conn) => new ClaudeAcpAgent(conn), agentStream);
+
+  return { stream: clientStream, agentSideConn };
 }
 
 function spawnProcess(
-  agentType: AgentType,
+  agentType: "codex" | "custom",
   customCommand: string | undefined,
   worktreePath: string,
 ): ChildProcess {
-  const binary = resolveAcpBinary(agentType);
-  if (binary) {
-    return spawn(binary, [], {
-      cwd: worktreePath,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, TERM: "xterm-256color" },
-    });
+  if (agentType === "codex") {
+    const localBin = join(process.cwd(), "node_modules/.bin/codex-acp");
+    if (existsSync(localBin)) {
+      return spawn(localBin, [], {
+        cwd: worktreePath,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, TERM: "xterm-256color" },
+      });
+    }
   }
   const shell = process.env.SHELL ?? "/bin/zsh";
   const loginFlag = shell.endsWith("zsh") ? "--login" : "-l";
-  const cmd =
-    agentType === "custom"
-      ? (customCommand ?? "")
-      : agentType === "claude-code"
-        ? "claude-agent-acp"
-        : "codex-acp";
+  const cmd = agentType === "custom" ? (customCommand ?? "") : "codex-acp";
   return spawn(shell, [loginFlag, "-c", cmd], {
     cwd: worktreePath,
     stdio: ["pipe", "pipe", "pipe"],
@@ -372,7 +399,19 @@ export class AcpClientManager implements IAgentManager {
   ): void {
     exitCallbacks.set(agentId, onExit);
 
-    const proc = spawnProcess(agentType, customCommand, worktreePath);
+    let proc: ChildProcess | null = null;
+    let agentSideConn: AgentSideConnection | null = null;
+    let stream: Stream;
+
+    if (agentType === "claude-code") {
+      const channel = buildClaudeInProcessChannel();
+      stream = channel.stream;
+      agentSideConn = channel.agentSideConn;
+    } else {
+      proc = spawnProcess(agentType as "codex" | "custom", customCommand, worktreePath);
+      stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
+    }
+
     const emitter = new EventEmitter();
     const state = initialState(agentId);
 
@@ -380,7 +419,8 @@ export class AcpClientManager implements IAgentManager {
       agentId,
       cwd: worktreePath,
       proc,
-      connection: null as unknown as ClientSideConnection, // set below
+      agentSideConn,
+      connection: null as unknown as ClientSideConnection,
       emitter,
       sessionId: null,
       state,
@@ -394,7 +434,6 @@ export class AcpClientManager implements IAgentManager {
       canceledForHandoff: false,
     };
 
-    const stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
     session.connection = new ClientSideConnection(
       (_agent: AcpAgent) => makeClient(session),
       stream,
@@ -402,37 +441,39 @@ export class AcpClientManager implements IAgentManager {
 
     sessions.set(agentId, session);
 
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      emitter.emit("data", chunk.toString("utf-8"));
-    });
+    if (proc) {
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        emitter.emit("data", chunk.toString("utf-8"));
+      });
 
-    proc.on("error", (err) => {
-      log.error("ACP process spawn error", { agentId, ...errorMeta(err) });
-      if (!session.finalized) {
-        session.finalized = true;
-        session.state.status = "failed";
-        session.state.lastError = err.message;
-        persistState(agentId, cloneState(session.state));
-        agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
-        sessions.delete(agentId);
-        onExit(agentId, 1);
-      }
-    });
+      proc.on("error", (err) => {
+        log.error("ACP process spawn error", { agentId, ...errorMeta(err) });
+        if (!session.finalized) {
+          session.finalized = true;
+          session.state.status = "failed";
+          session.state.lastError = err.message;
+          persistState(agentId, cloneState(session.state));
+          agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
+          sessions.delete(agentId);
+          onExit(agentId, 1);
+        }
+      });
 
-    proc.on("close", (code) => {
-      if (!session.finalized) {
-        session.finalized = true;
-        const exitCode = code ?? 1;
-        persistState(agentId, cloneState(session.state));
-        agentStmts.updateStatus.run({
-          $id: agentId,
-          $status: exitCode === 0 ? "done" : "error",
-          $endedAt: Date.now(),
-        });
-        sessions.delete(agentId);
-        onExit(agentId, exitCode);
-      }
-    });
+      proc.on("close", (code) => {
+        if (!session.finalized) {
+          session.finalized = true;
+          const exitCode = code ?? 1;
+          persistState(agentId, cloneState(session.state));
+          agentStmts.updateStatus.run({
+            $id: agentId,
+            $status: exitCode === 0 ? "done" : "error",
+            $endedAt: Date.now(),
+          });
+          sessions.delete(agentId);
+          onExit(agentId, exitCode);
+        }
+      });
+    }
 
     initSession(session, prompt, null).catch((err: Error) => {
       log.error("ACP session init failed", { agentId, ...errorMeta(err) });
@@ -444,7 +485,7 @@ export class AcpClientManager implements IAgentManager {
         persistState(agentId, cloneState(session.state));
         agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
         sessions.delete(agentId);
-        proc.kill();
+        proc?.kill();
         onExit(agentId, 1);
       }
     });
@@ -466,9 +507,6 @@ export class AcpClientManager implements IAgentManager {
       const agentType = (agentRecord?.type ?? "custom") as AgentType;
       const customCmd = agentRecord?.command;
 
-      const proc = spawnProcess(agentType, customCmd, agent.worktreePath);
-      const emitter = new EventEmitter();
-
       const prior = stateCache.get(agent.id) ?? loadPersistedState(agent.id);
       const state = initialState(agent.id);
       state.sessionId = agent.sessionId;
@@ -479,10 +517,26 @@ export class AcpClientManager implements IAgentManager {
         state.plan = [...prior.plan];
       }
 
+      let proc: ChildProcess | null = null;
+      let agentSideConn: AgentSideConnection | null = null;
+      let stream: Stream;
+
+      if (agentType === "claude-code") {
+        const channel = buildClaudeInProcessChannel();
+        stream = channel.stream;
+        agentSideConn = channel.agentSideConn;
+      } else {
+        proc = spawnProcess(agentType as "codex" | "custom", customCmd, agent.worktreePath);
+        stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
+      }
+
+      const emitter = new EventEmitter();
+
       const newSession: AcpSession = {
         agentId: agent.id,
         cwd: agent.worktreePath,
         proc,
+        agentSideConn,
         connection: null as unknown as ClientSideConnection,
         emitter,
         sessionId: agent.sessionId,
@@ -497,7 +551,6 @@ export class AcpClientManager implements IAgentManager {
         canceledForHandoff: false,
       };
 
-      const stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
       newSession.connection = new ClientSideConnection(
         (_agent: AcpAgent) => makeClient(newSession),
         stream,
@@ -505,15 +558,17 @@ export class AcpClientManager implements IAgentManager {
       sessions.set(agent.id, newSession);
       session = newSession;
 
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        newSession.emitter.emit("data", chunk.toString("utf-8"));
-      });
-      proc.on("close", () => {
-        if (!newSession.finalized) {
-          newSession.finalized = true;
-          sessions.delete(agent.id);
-        }
-      });
+      if (proc) {
+        proc.stderr?.on("data", (chunk: Buffer) => {
+          newSession.emitter.emit("data", chunk.toString("utf-8"));
+        });
+        proc.on("close", () => {
+          if (!newSession.finalized) {
+            newSession.finalized = true;
+            sessions.delete(agent.id);
+          }
+        });
+      }
 
       await newSession.connection.initialize({
         protocolVersion: PROTOCOL_VERSION,
@@ -565,7 +620,7 @@ export class AcpClientManager implements IAgentManager {
     session.finalized = true;
     session.state.status = "failed";
     persistState(agentId, cloneState(session.state));
-    session.proc.kill();
+    session.proc?.kill();
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
     agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
@@ -579,14 +634,18 @@ export class AcpClientManager implements IAgentManager {
       exitCallbacks.delete(agentId);
       return Promise.resolve();
     }
+    if (!session.proc) {
+      this.kill(agentId);
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
       const timer = setTimeout(resolve, 2000);
       const finish = () => {
         clearTimeout(timer);
         resolve();
       };
-      session.proc.once("close", finish);
-      session.proc.once("error", finish);
+      session.proc!.once("close", finish);
+      session.proc!.once("error", finish);
       this.kill(agentId);
     });
   }
