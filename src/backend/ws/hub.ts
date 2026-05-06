@@ -1,6 +1,5 @@
 import type { ServerWebSocket } from "bun";
 import { z } from "zod";
-import { acpClientManager } from "../services/AcpClientManager.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
@@ -19,18 +18,8 @@ const notificationClients = new Set<ServerWebSocket<{ channel: string; agentId?:
 // Per-shell terminal subscribers
 const shellClients = new Map<string, Set<ServerWebSocket<{ channel: string; agentId?: string }>>>();
 
-// Scrollback buffer — keeps the last N chunks per agent so late-connecting clients
-// see existing output instead of a blank screen.
 const SCROLLBACK_LIMIT = 600;
-const agentScrollback = new Map<string, string[]>();
 const shellScrollback = new Map<string, string[]>();
-
-export function appendScrollback(agentId: string, data: string): void {
-  if (!agentScrollback.has(agentId)) agentScrollback.set(agentId, []);
-  const buf = agentScrollback.get(agentId)!;
-  buf.push(data);
-  if (buf.length > SCROLLBACK_LIMIT) buf.splice(0, buf.length - SCROLLBACK_LIMIT);
-}
 
 export function appendShellScrollback(sessionId: string, data: string): void {
   if (!shellScrollback.has(sessionId)) shellScrollback.set(sessionId, []);
@@ -83,25 +72,6 @@ export const wsHandlers = {
       }
       return;
     }
-
-    if (channel !== "agent" || !agentId) return;
-
-    const scrollback = agentScrollback.get(agentId) ?? [];
-
-    // All agent types now use ACP — subscribe to the ACP manager's emitter (stderr/debug).
-    const emitter = acpClientManager.subscribe(agentId);
-    for (const chunk of scrollback) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
-    }
-    if (emitter) {
-      const handler = (data: string) => {
-        appendScrollback(agentId, data);
-        if (ws.readyState === WebSocket.OPEN) ws.send(data);
-      };
-      emitter.on("data", handler);
-      (ws as unknown as Record<string, unknown>)["_ptyHandler"] = handler;
-      (ws as unknown as Record<string, unknown>)["_emitter"] = emitter;
-    }
   },
 
   message(ws: ServerWebSocket<{ channel: string; agentId?: string }>, raw: string | Buffer) {
@@ -144,12 +114,6 @@ export const wsHandlers = {
       const emitter = rec["_emitter"] as { off(e: string, fn: unknown): void } | undefined;
       if (emitter && rec["_ptyHandler"]) emitter.off("data", rec["_ptyHandler"]);
       return;
-    }
-
-    if (channel === "agent" && agentId) {
-      const rec = ws as unknown as Record<string, unknown>;
-      const emitter = rec["_emitter"] as { off(e: string, fn: unknown): void } | undefined;
-      if (emitter && rec["_ptyHandler"]) emitter.off("data", rec["_ptyHandler"]);
     }
   },
 
