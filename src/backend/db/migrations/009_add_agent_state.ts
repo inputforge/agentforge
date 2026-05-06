@@ -10,9 +10,11 @@ export default {
       db.run("ALTER TABLE agents ADD COLUMN agent_state TEXT");
     }
     if (colNames.has("claude_state")) {
+      db.run("UPDATE agents SET agent_state = COALESCE(agent_state, claude_state)");
       db.run("ALTER TABLE agents DROP COLUMN claude_state");
     }
     if (colNames.has("acp_state")) {
+      db.run("UPDATE agents SET agent_state = COALESCE(agent_state, acp_state)");
       db.run("ALTER TABLE agents DROP COLUMN acp_state");
     }
   },

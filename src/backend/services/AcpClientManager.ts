@@ -238,29 +238,49 @@ function buildClaudeInProcessChannel(): {
   return { stream: clientStream, agentSideConn };
 }
 
+function parseCommand(cmd: string): { executable: string; args: string[] } | null {
+  const parts: string[] = [];
+  let current = "";
+  let inSingle = false;
+  let inDouble = false;
+  for (const ch of cmd) {
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    } else if (ch === " " && !inSingle && !inDouble) {
+      if (current) {
+        parts.push(current);
+        current = "";
+      }
+    } else {
+      current += ch;
+    }
+  }
+  if (current) parts.push(current);
+  return parts.length === 0 ? null : { executable: parts[0], args: parts.slice(1) };
+}
+
 function spawnProcess(
   agentType: "codex" | "custom",
   customCommand: string | undefined,
   worktreePath: string,
 ): ChildProcess {
+  const spawnOpts = {
+    cwd: worktreePath,
+    stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
+    env: { ...process.env, TERM: "xterm-256color" },
+  };
+
   if (agentType === "codex") {
     const localBin = join(process.cwd(), "node_modules/.bin/codex-acp");
-    if (existsSync(localBin)) {
-      return spawn(localBin, [], {
-        cwd: worktreePath,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, TERM: "xterm-256color" },
-      });
-    }
+    const executable = existsSync(localBin) ? localBin : "codex-acp";
+    return spawn(executable, [], spawnOpts);
   }
-  const shell = process.env.SHELL ?? "/bin/zsh";
-  const loginFlag = shell.endsWith("zsh") ? "--login" : "-l";
-  const cmd = agentType === "custom" ? (customCommand ?? "") : "codex-acp";
-  return spawn(shell, [loginFlag, "-c", cmd], {
-    cwd: worktreePath,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, TERM: "xterm-256color" },
-  });
+
+  const parsed = parseCommand(customCommand ?? "");
+  if (!parsed) throw new Error("Invalid or empty custom command");
+  return spawn(parsed.executable, parsed.args, spawnOpts);
 }
 
 // ─── ACP client factory ───────────────────────────────────────────────────────
@@ -342,6 +362,9 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
       session.state.lastError = err.message;
       pushState(session);
       persistState(session.agentId, cloneState(session.state));
+      agentStmts.updateStatus.run({ $id: session.agentId, $status: "error", $endedAt: Date.now() });
+      const updatedAgent = agentStmts.get.get(session.agentId);
+      if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
       session.activePromise = null;
       if (!session.finalized) {
         const cb = exitCallbacks.get(session.agentId);
@@ -601,8 +624,11 @@ export class AcpClientManager implements IAgentManager {
   private _cancelAndPrompt(session: AcpSession, input: string, clientId?: string): void {
     if (session.activePromise && session.sessionId) {
       session.canceledForHandoff = true;
-      session.connection.cancel({ sessionId: session.sessionId });
-      session.activePromise.finally(() => startPrompt(session, input, clientId));
+      const sid = session.sessionId;
+      session.activePromise = null;
+      session.connection
+        .cancel({ sessionId: sid })
+        .then(() => startPrompt(session, input, clientId));
     } else {
       startPrompt(session, input, clientId);
     }
@@ -619,6 +645,7 @@ export class AcpClientManager implements IAgentManager {
     if (!session) return;
     session.finalized = true;
     session.state.status = "failed";
+    pushState(session);
     persistState(agentId, cloneState(session.state));
     session.proc?.kill();
     sessions.delete(agentId);
