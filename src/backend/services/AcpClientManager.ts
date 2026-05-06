@@ -44,6 +44,7 @@ interface AcpSession {
   messageSeq: number;
   eventSeq: number;
   activePromise: Promise<void> | null;
+  canceledForHandoff: boolean;
 }
 
 const sessions = new Map<string, AcpSession>();
@@ -257,6 +258,7 @@ function makeClient(session: AcpSession): Client {
 // ─── Prompt lifecycle ─────────────────────────────────────────────────────────
 
 function startPrompt(session: AcpSession, text: string, clientId?: string): void {
+  session.canceledForHandoff = false;
   if (!session.sessionId) {
     log.error("startPrompt called without sessionId", { agentId: session.agentId });
     return;
@@ -283,6 +285,7 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
     .prompt({ sessionId: sid, prompt: [{ type: "text", text }] })
     .then((result) => {
       if (session.finalized) return;
+      if (session.canceledForHandoff) return;
       const success = result.stopReason === "end_turn" || result.stopReason === "max_tokens";
       session.state.status = success ? "completed" : "failed";
       session.activeMessageId = null;
@@ -306,6 +309,7 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
     })
     .catch((err: Error) => {
       if (session.finalized) return;
+      if (session.canceledForHandoff) return;
       log.error("ACP prompt error", { agentId: session.agentId, ...errorMeta(err) });
       session.state.status = "failed";
       session.state.lastError = err.message;
@@ -387,6 +391,7 @@ export class AcpClientManager implements IAgentManager {
       messageSeq: 0,
       eventSeq: 0,
       activePromise: null,
+      canceledForHandoff: false,
     };
 
     const stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
@@ -489,6 +494,7 @@ export class AcpClientManager implements IAgentManager {
         messageSeq: prior?.messages.length ?? 0,
         eventSeq: (prior?.messages.length ?? 0) + (prior?.toolCalls.length ?? 0),
         activePromise: null,
+        canceledForHandoff: false,
       };
 
       const stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
@@ -526,6 +532,7 @@ export class AcpClientManager implements IAgentManager {
         });
         newSession.sessionId = r.sessionId;
         newSession.state.sessionId = r.sessionId;
+        agentStmts.updateSessionId.run({ $sessionId: r.sessionId, $id: agent.id });
       }
     }
 
@@ -538,6 +545,7 @@ export class AcpClientManager implements IAgentManager {
 
   private _cancelAndPrompt(session: AcpSession, input: string, clientId?: string): void {
     if (session.activePromise && session.sessionId) {
+      session.canceledForHandoff = true;
       session.connection.cancel({ sessionId: session.sessionId });
       session.activePromise.finally(() => startPrompt(session, input, clientId));
     } else {
@@ -555,9 +563,14 @@ export class AcpClientManager implements IAgentManager {
     const session = sessions.get(agentId);
     if (!session) return;
     session.finalized = true;
+    session.state.status = "failed";
+    persistState(agentId, cloneState(session.state));
     session.proc.kill();
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
+    agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
+    const updatedAgent = agentStmts.get.get(agentId);
+    if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
   }
 
   killAndWait(agentId: string): Promise<void> {

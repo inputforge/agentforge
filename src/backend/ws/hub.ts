@@ -95,6 +95,7 @@ export const wsHandlers = {
     }
     if (emitter) {
       const handler = (data: string) => {
+        appendScrollback(agentId, data);
         if (ws.readyState === WebSocket.OPEN) ws.send(data);
       };
       emitter.on("data", handler);

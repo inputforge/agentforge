@@ -133,7 +133,7 @@ export class OrchestratorService {
           void this.handleAgentExit(id, exitCode ?? 1, ticketId, ticket.title);
         },
         agentType,
-        customCommand,
+        command,
       );
 
       const agent = agentStmts.get.get(agentId);

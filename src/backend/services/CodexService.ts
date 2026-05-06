@@ -13,14 +13,24 @@ export class CodexService {
 
   async getStatus(): Promise<CodexStatus> {
     const command = this.resolveBinaryPath();
-    const installed = existsSync(command) || command === "codex-acp";
+    let installed: boolean;
+    let binaryPath: string | null;
+
+    if (command === "codex-acp") {
+      const which = Bun.which("codex-acp");
+      installed = which !== null;
+      binaryPath = which;
+    } else {
+      installed = existsSync(command);
+      binaryPath = installed ? command : null;
+    }
 
     return {
       installed,
       authenticated: installed,
       ready: installed,
       command,
-      binaryPath: installed ? command : null,
+      binaryPath,
       version: null,
       authMethod: null,
       loginStatusText: null,
