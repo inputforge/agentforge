@@ -43,7 +43,7 @@ export const wsHandlers = {
   open(ws: ServerWebSocket<{ channel: string; agentId?: string }>) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "notifications" || channel === "kanban" || channel === "session") {
+    if (channel === "notifications" || channel === "kanban") {
       notificationClients.add(ws);
       return;
     }
@@ -103,7 +103,7 @@ export const wsHandlers = {
   close(ws: ServerWebSocket<{ channel: string; agentId?: string }>) {
     const { channel, agentId } = ws.data;
 
-    if (channel === "notifications" || channel === "kanban" || channel === "session") {
+    if (channel === "notifications" || channel === "kanban") {
       notificationClients.delete(ws);
       return;
     }
