@@ -486,6 +486,7 @@ export class AcpClientManager implements IAgentManager {
         if (!session.finalized) {
           session.finalized = true;
           const exitCode = code ?? 1;
+          session.state.status = exitCode === 0 ? "completed" : "failed";
           persistState(agentId, cloneState(session.state));
           agentStmts.updateStatus.run({
             $id: agentId,
@@ -585,10 +586,30 @@ export class AcpClientManager implements IAgentManager {
         proc.stderr?.on("data", (chunk: Buffer) => {
           newSession.emitter.emit("data", chunk.toString("utf-8"));
         });
-        proc.on("close", () => {
+        proc.on("error", (err) => {
+          log.error("ACP process spawn error", { agentId: agent.id, ...errorMeta(err) });
           if (!newSession.finalized) {
             newSession.finalized = true;
+            newSession.state.status = "failed";
+            newSession.state.lastError = err.message;
+            persistState(agent.id, cloneState(newSession.state));
+            agentStmts.updateStatus.run({ $id: agent.id, $status: "error", $endedAt: Date.now() });
             sessions.delete(agent.id);
+            newSession.onExit(agent.id, 1);
+          }
+        });
+        proc.on("close", (code) => {
+          if (!newSession.finalized) {
+            newSession.finalized = true;
+            const exitCode = code ?? 1;
+            persistState(agent.id, cloneState(newSession.state));
+            agentStmts.updateStatus.run({
+              $id: agent.id,
+              $status: exitCode === 0 ? "done" : "error",
+              $endedAt: Date.now(),
+            });
+            sessions.delete(agent.id);
+            newSession.onExit(agent.id, exitCode);
           }
         });
       }
@@ -647,6 +668,9 @@ export class AcpClientManager implements IAgentManager {
     session.state.status = "failed";
     pushState(session);
     persistState(agentId, cloneState(session.state));
+    if (!session.proc && session.sessionId) {
+      session.connection.cancel({ sessionId: session.sessionId }).catch(() => {});
+    }
     session.proc?.kill();
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
@@ -662,7 +686,15 @@ export class AcpClientManager implements IAgentManager {
       return Promise.resolve();
     }
     if (!session.proc) {
+      // Capture before kill() deletes the session entry.
+      const activePromise = session.activePromise;
       this.kill(agentId);
+      if (activePromise) {
+        return Promise.race([
+          activePromise.catch(() => {}),
+          new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+        ]);
+      }
       return Promise.resolve();
     }
     return new Promise((resolve) => {

@@ -84,13 +84,13 @@ export const wsHandlers = {
       try {
         parsed = JSON.parse(String(raw));
       } catch {
-        log.warn("session: invalid JSON in message", { raw: String(raw) });
+        log.warn("session: invalid JSON in message", { payloadSize: String(raw).length });
         return;
       }
       const result = sessionResizeSchema.safeParse(parsed);
       if (!result.success) {
         log.warn("session: invalid resize payload", {
-          raw: String(raw),
+          payloadSize: String(raw).length,
           errors: result.error.issues,
         });
         return;
