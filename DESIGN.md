@@ -1,204 +1,284 @@
 # Design Guidelines
 
+## Product Direction
+
+**AgentForge** is a local control surface for spawning AI coding agents in isolated git worktrees. The interface should feel like an operations console: dense, direct, terminal-native, and built for repeated use while agents run.
+
+The design avoids marketing-page patterns, decorative hero sections, rounded cards, large illustrative art, purple gradients, and generic SaaS softness. The first screen is the working kanban board.
+
+---
+
 ## Aesthetic Direction
 
-**Terminal Forge** — a dark, industrial aesthetic built entirely on monospace type. Every element reinforces precision and intentionality: bitmap display type at large sizes, fixed-width body text, sharp rectangular UI, and a cold arc of ice blue on near-black.
+**Terminal Forge**: a dark industrial monospace UI with sharp rectangular panels, compact controls, cold cyan highlights, and semantic status colors. The product is a tool, not a landing page.
 
-The design avoids: rounded corners, purple gradients, Inter/system fonts, generic "developer tool" aesthetics.
+Core principles:
+
+- Keep information dense but scannable.
+- Prefer explicit panel boundaries over spacious page sections.
+- Use icons for compact actions and text labels for commands that need clarity.
+- Make running state, branch context, and agent output visible without navigation friction.
+- Preserve the terminal feel across board, modals, agent views, and diff views.
 
 ---
 
 ## Color
 
-Defined in `src/app/globals.css` under `@theme inline`. Reference via Tailwind utilities (`bg-background`, `text-accent`, `border-border`) or CSS variables (`var(--color-accent)`).
+Design tokens live in `src/frontend/index.css` under `@theme`. Use Tailwind utilities generated from these tokens (`bg-forge-black`, `text-forge-accent`, `border-forge-border`, etc.) instead of hard-coded colors in components.
 
-| Token                | Hex       | Use                                                  |
-| -------------------- | --------- | ---------------------------------------------------- |
-| `--color-background` | `#080706` | Page background — warm near-black                    |
-| `--color-surface`    | `#0f0e0c` | Elevated surfaces (sections, cards)                  |
-| `--color-foreground` | `#ede8df` | Primary text — warm off-white                        |
-| `--color-muted`      | `#6e6860` | Secondary text, labels, inactive states              |
-| `--color-border`     | `#1f1e1c` | Borders, dividers, decorative elements               |
-| `--color-accent`     | `#67e8f9` | Ice blue — interactive elements, highlights, cursors |
+| Token                          | Hex       | Use                                      |
+| ------------------------------ | --------- | ---------------------------------------- |
+| `--color-forge-black`          | `#080706` | App background and deep terminal areas   |
+| `--color-forge-dark`           | `#0f0e0c` | Column drop zones and dark containers    |
+| `--color-forge-panel`          | `#0f0e0c` | Headers, fixed bars, modal shells        |
+| `--color-forge-surface`        | `#1a1918` | Cards, inputs, selectable blocks         |
+| `--color-forge-surface-bright` | `#201f1d` | Hover and active surface states          |
+| `--color-forge-border`         | `#1f1e1c` | Standard borders and dividers            |
+| `--color-forge-border-bright`  | `#2e2d2b` | Higher-emphasis borders                  |
+| `--color-forge-accent`         | `#67e8f9` | Brand, primary actions, focus, selection |
+| `--color-forge-accent-dim`     | `#0e3a40` | Dim accent backgrounds                   |
+| `--color-forge-text`           | `#ede8df` | Primary text                             |
+| `--color-forge-text-bright`    | `#f5f0e8` | High-emphasis text                       |
+| `--color-forge-text-dim`       | `#6e6860` | Secondary labels and metadata            |
+| `--color-forge-text-muted`     | `#3d3a36` | Disabled, empty, and low-emphasis text   |
 
-**Background vs Surface**: `background` is the page base; `surface` is used for alternating sections and card interiors to create subtle depth without contrast shifts.
+Semantic colors:
+
+| Token                 | Use                       |
+| --------------------- | ------------------------- |
+| `--color-forge-blue`  | Running agents            |
+| `--color-forge-amber` | Waiting, setup, attention |
+| `--color-forge-green` | Done, live, additions     |
+| `--color-forge-red`   | Error, offline, deletions |
+
+Do not substitute similar Tailwind palette utilities (`text-blue-400`, `bg-red-500`) unless a third-party renderer requires it and no token hook exists.
 
 ---
 
 ## Typography
 
-All type is monospace. No serif or sans-serif fonts.
+All interface text uses JetBrains Mono from `@fontsource/jetbrains-mono`. The app does not use separate display, serif, or proportional UI fonts.
 
-| Role      | Font           | Tailwind class | Use                                                       |
-| --------- | -------------- | -------------- | --------------------------------------------------------- |
-| Display   | Departure Mono | `font-display` | Section headings, hero headlines — **4xl and above only** |
-| Body / UI | JetBrains Mono | `font-mono`    | All body copy, labels, nav, buttons, captions             |
+| Role             | Class pattern                                    | Use                                  |
+| ---------------- | ------------------------------------------------ | ------------------------------------ |
+| Product wordmark | `text-[13px] uppercase tracking-tight font-mono` | Header brand                         |
+| Panel labels     | `text-xs uppercase tracking-widest`              | Headers, metadata, tabs, status      |
+| Body/UI text     | `text-xs` or `text-sm`                           | Cards, modal content, controls       |
+| Descriptions     | `text-xs leading-relaxed text-forge-text-dim`    | Ticket descriptions and setup detail |
+| Button text      | `text-xs uppercase tracking-widest`              | Command buttons                      |
 
-**Font loading**: Departure Mono is a local font (`public/fonts/DepartureMono-Regular.woff2`) loaded via `next/font/local`. JetBrains Mono is loaded from Google Fonts via `next/font/google`. Both inject CSS variables (`--font-departure-mono`, `--font-jetbrains-mono`) referenced in `@theme inline`.
-
-**Why `font-display` works**: `@theme inline { --font-display: ... }` causes Tailwind to inline the font stack directly into the generated utility class, avoiding a runtime CSS variable lookup that would fail since `@theme inline` doesn't emit `:root` custom properties.
-
-### Type scale
-
-- **Hero headline**: `text-[clamp(3rem,8vw,7rem)]` — fluid, fills available width
-- **Section heading**: `text-4xl` to `text-5xl` — Departure Mono, uppercase
-- **Decorative number**: `text-[7rem]` — faded section counter, `text-[var(--color-border)]`
-- **Body**: `text-sm` (0.875rem) — JetBrains Mono, `leading-relaxed`
-- **Labels / caps**: `text-[10px] uppercase tracking-[0.25em]` — prefixed with `//`
-- **Buttons**: `text-xs uppercase tracking-[0.12em]`
+Keep type compact. Do not introduce hero-scale type inside the app shell. Avoid negative letter spacing.
 
 ---
 
 ## Layout
 
-- Max content width: `max-w-6xl` with `px-6` horizontal padding
-- Section vertical rhythm: `py-24` standard, `py-28 md:py-40` for hero
-- Grid system: Tailwind grid utilities; cards use `md:grid-cols-2`, kanban uses `lg:grid-cols-4`
+The app is full-height and panel-based:
 
-### Section structure
+- Root app: `h-full flex flex-col bg-forge-black overflow-hidden`
+- Header: fixed `h-10`, `bg-forge-panel`, bottom border
+- Kanban board: horizontal scroll, `flex gap-3`, `px-4 py-3`
+- Kanban columns: `min-w-[280px] max-w-[320px]`, bordered header plus bordered drop zone
+- Agent detail route: full-height split workbench with fixed top command bar
+- Modals: centered fixed overlay with `bg-black/70`, compact max width, no rounded corners
 
-Every section follows the same header pattern:
-
-```
-// label text          ← font-mono, 10px, uppercase, tracked, muted, prefixed //
-SECTION HEADING        ← font-display, 4xl+, uppercase
-```
-
-The decorative section counter (`01`, `02`, …) sits at the far right of the header row — `text-[7rem]`, `text-[var(--color-border)]`, `aria-hidden`, hidden on mobile.
+Prefer fixed, stable dimensions for operational surfaces. Hover states must not resize cards, buttons, columns, terminals, or headers.
 
 ---
 
 ## Logo
 
-The wordmark is `src/components/logo.tsx` — a shared component used in Nav and Footer.
+The wordmark is typographic in `src/frontend/components/layout/Header.tsx`.
 
+```text
+AGENT  -> forge text
+FORGE  -> forge accent
+▍      -> forge accent, blink animation
 ```
-INPUT  ← Departure Mono, foreground (#ede8df)
-FORGE  ← Departure Mono, accent (#67e8f9)
-▍      ← Departure Mono, accent, .cursor-blink animation
-```
 
-All caps, `font-display`, `text-[13px]`, `tracking-tight`. No image — purely typographic.
-
-The SVG logo asset lives at `public/logo.svg` (svgo-optimized). The source with Inkscape metadata is at `../logo.svg` (repo root, one level up from the website).
+Use all caps, JetBrains Mono, `text-[13px]`, `tracking-tight`. Do not replace it with an image unless the entire brand system changes.
 
 ---
 
-## Components
+## Core Components
+
+Shared component classes live in `src/frontend/index.css`.
+
+### Panels
+
+Use `.forge-panel` for fixed bars and modal shells:
+
+```css
+bg-forge-panel border border-forge-border
+```
+
+Use `.forge-surface` for cards, launcher options, inputs grouped as blocks, and selected content surfaces:
+
+```css
+bg-forge-surface border border-forge-border
+```
 
 ### Buttons
 
-Two variants, both rectangular (no border-radius):
+All buttons are rectangular, monospace, uppercase, and compact.
 
-**Primary** — accent fill, inverts on hover:
+| Class                | Use                                      |
+| -------------------- | ---------------------------------------- |
+| `.forge-btn-primary` | Primary creation or confirmation actions |
+| `.forge-btn-ghost`   | Header controls and secondary commands   |
+| `.forge-btn-danger`  | Destructive or kill/discard actions      |
 
-```
-border border-accent bg-accent text-background
-hover: bg-transparent text-accent
-```
+Button icons should come from `lucide-react` when available. Keep icon sizes around `10-15px` in dense controls.
 
-**Secondary** — subtle border:
+### Inputs
 
-```
-border border-border text-muted
-hover: border-foreground/20 text-foreground
-```
+Use `.forge-input` for text inputs, selects, and terminal-adjacent form controls:
 
-### Cards
-
-```
-border border-border bg-background p-8
-hover: border-accent/40
+```css
+bg-forge-surface border border-forge-border text-forge-text
+focus:border-forge-accent
 ```
 
-Accent corner on hover — two absolute elements (1px horizontal line + 1px vertical line) at top-left, `opacity-0 → opacity-100` on `group-hover`.
+Inputs should be full-width by default. Use explicit compact widths only in headers or branch selectors.
 
-### Section labels
+### Labels
 
-Always `// label text` — lowercase, `text-[10px] uppercase tracking-[0.25em] text-[var(--color-muted)]`.
+Use `.forge-label` for small uppercase panel labels. Labels should be terse: `CREATE TICKET`, `SELECT AGENT`, `DIFF`, `TERMINAL`, `TICKET`.
 
-### Code blocks / install commands
+---
 
-```
-border border-border bg-surface px-4 py-3 font-mono text-xs
-```
+## Kanban Board
 
-Prefix with `$ ` in accent color, `select-none`.
+The board is the primary workspace. It should remain visible and usable as the first screen.
 
-### Feature lists
+Columns:
 
-Bullet character: `→` in accent color. No checkmarks, no dots.
+- Order is defined by `COLUMN_ORDER`.
+- Column metadata is defined by `COLUMN_META`.
+- Each column header uses an icon, uppercase label, count, and dashed divider.
+- Empty columns display `EMPTY` centered in muted text.
+
+Ticket cards:
+
+- Use `.forge-surface`, no rounded corners.
+- Title is bright, description is dim, IDs are muted.
+- Card actions appear on hover to reduce noise.
+- Running tickets require a confirm step before discard.
+- Agent status badges use semantic border/text color plus a status dot.
+
+Drag behavior:
+
+- Mouse drag activates after 8px movement.
+- Touch drag uses a short hold.
+- Drag overlays may rotate slightly, but should keep the same card proportions.
+
+---
+
+## Agent Workbench
+
+The agent detail view is a full-screen workbench, not a drawer layered over the board.
+
+Header requirements:
+
+- Show `AGENT`, branch or ticket title, and status badge.
+- Keep branch selector, commit/rebase/merge/relaunch/close actions compact.
+- Use semantic status colors consistently.
+
+Content requirements:
+
+- Agent output and shell tabs should preserve terminal readability.
+- Diff panel should use the dark renderer theme and file-level collapses for large diffs.
+- Generated-file diffs should remain visually distinct from normal source diffs.
+- Resizable panels must preserve stable minimum sizes and avoid overlap.
+
+Agent launcher:
+
+- Center the ticket context and agent choices in a narrow column.
+- Show Codex setup state before enabling Codex launch.
+- Custom commands should be explicit and compact.
+
+---
+
+## Terminal And Diff
+
+Terminal surfaces use `xterm.js`. Global scrollbars are 6px, but `.xterm .xterm-viewport` overrides its scrollbar width to avoid terminal measurement drift.
+
+Diff rendering uses `@pierre/diffs` with:
+
+- `theme: "pierre-dark"`
+- `diffStyle: "unified"`
+- file headers supplied by AgentForge, not the renderer
+- lazy expansion for large files
+
+Use green for additions and red for deletions. Keep file paths monospace, truncated when needed.
 
 ---
 
 ## Motion
 
-All animations are CSS-only (no JS animation libraries). React Compiler is enabled — keep components free of manual memoization.
+Animations are CSS-only and defined in `src/frontend/index.css`.
 
-| Class              | Effect                                 | Use                               |
-| ------------------ | -------------------------------------- | --------------------------------- |
-| `.hero-label`      | fade-up, 0.5s, delay 0s                | Section label above hero headline |
-| `.hero-line-1/2/3` | fade-up, 0.65s, delays 0.05/0.15/0.25s | Three staggered headline lines    |
-| `.hero-sub`        | fade-up, 0.65s, delay 0.4s             | Divider + description paragraph   |
-| `.hero-cta`        | fade-up, 0.65s, delay 0.55s            | CTA buttons                       |
-| `.cursor-blink`    | step-end blink, 1.1s, infinite         | Nav logo cursor `▍`               |
+| Animation                 | Use                                 |
+| ------------------------- | ----------------------------------- |
+| `animate-blink`           | Header cursor and offline indicator |
+| `animate-fade-in`         | Modal/overlay entry                 |
+| `animate-slide-in-right`  | Agent launcher/workbench entry      |
+| `animate-slide-in-bottom` | Bottom sheets or terminal overlays  |
+| `animate-status-blink`    | Running and waiting status dots     |
+| `.codex-*` keyframes      | Codex panel thinking/final states   |
 
-Hover transitions: `transition-colors` or `transition-all duration-300` — no spring animations.
+Keep transitions short: `duration-100` for controls, `duration-300` only where a larger panel state benefits from it.
 
 ---
 
 ## Texture
 
-A fixed SVG fractal noise grain overlay sits at `z-index: 9999`, `pointer-events: none`, `opacity: 0.04`. Applied via `body::after`.
+The app uses a fixed SVG grain overlay in `body::after`:
 
-Hero sections also use a radial dot grid background:
+- `position: fixed`
+- `pointer-events: none`
+- `opacity: 0.04`
+- `z-index: 9999`
 
-```css
-background-image: radial-gradient(circle, #1f1e1c 1px, transparent 1px);
-background-size: 28px 28px;
-```
-
-And a soft accent glow in the top-left corner:
-
-```css
-radial-gradient(circle, rgba(103,232,249,0.06) 0%, transparent 70%)
-```
+Do not add decorative orbs, bokeh blobs, gradients, or background illustrations. The visual texture should stay subtle and should never interfere with terminal text.
 
 ---
 
-## Favicon
+## Icons
 
-`src/app/icon.svg` — SVG favicon derived from `public/logo.svg`. Contains a `#080706` background rect so it renders correctly on both light and dark browser chrome. Next.js App Router serves this automatically as the primary favicon.
+Use `lucide-react` for interface icons:
 
-`src/app/favicon.ico` — multi-size ICO fallback (16×16, 32×32, 48×48), generated via Inkscape + ImageMagick from `../logo.svg` with `#080706` background.
+- Header: `Plug`, `TerminalSquare`, `Plus`
+- Columns: `Inbox`, `CirclePlay`, `Eye`, `Check`
+- Cards/actions: `Play`, `Trash2`, `ChevronRight`
+- Agent workbench: branch, commit, merge, terminal, refresh, close
 
-To regenerate after logo changes:
-
-```bash
-inkscape --export-type=png --export-width=N --export-height=N --export-background='#080706' \
-  --export-filename=/tmp/icon-N.png ../logo.svg   # repeat for 16, 32, 48
-magick /tmp/icon-16.png /tmp/icon-32.png /tmp/icon-48.png src/app/favicon.ico
-```
-
-## Open Graph Images
-
-Static image routes at `src/app/og/`, one per page:
-
-| Route            | Page                    |
-| ---------------- | ----------------------- |
-| `/og/home`       | Input Forge homepage    |
-| `/og/agentforge` | AgentForge product page |
-
-Built with `ImageResponse` from `next/og`. All routes export `dynamic = "force-static"` — images are pre-rendered at build time. Rendered at 2400×1260 (2x) for retina sharpness; `OG_SIZE` export declares the meta tag dimensions as 1200×630.
-
-Shared image builder: `src/lib/og.tsx`. Uses Departure Mono loaded via `fs.readFileSync` (not `fetch` — file URL fetching is not supported in Next.js build workers).
-
-Layout per card: `INPUTFORGE▍` logo top-left · page name + label top-right · three-line headline centered · cyan divider + tagline at bottom.
+Use `@icons-pack/react-simple-icons` only for brand/integration marks such as GitHub and Linear.
 
 ---
 
 ## Architecture Notes
 
-- Route group `(site)` contains all public pages. The shared layout at `src/app/(site)/layout.tsx` wraps every page with `<Nav>`, `<main>`, and `<Footer>` — pages export content only.
-- Design tokens are in `globals.css` under `@theme inline` — edit there, not in component files.
-- Tailwind v4: no `tailwind.config.*`. Use `bg-background`, `text-accent`, `border-border` etc. directly.
+- Frontend entry: `src/frontend/main.tsx`
+- App routes: `src/frontend/App.tsx`
+- Board components: `src/frontend/components/kanban-board/`
+- Agent route: `src/frontend/pages/AgentPage.tsx`
+- Agent workbench: `src/frontend/components/AgentDetailPanel.tsx`
+- Global styles and Tailwind v4 theme: `src/frontend/index.css`
+- Shared state: `src/frontend/store/`
+- API client: `src/frontend/lib/api.ts`
+
+Tailwind v4 is configured through CSS, not a `tailwind.config.*` file. Add or modify design tokens in `src/frontend/index.css`; do not scatter local color constants through components.
+
+---
+
+## Implementation Rules
+
+- Maintain rectangular geometry: no rounded cards, pills, or soft containers.
+- Keep the palette dark and warm with cyan as the only brand accent.
+- Use semantic colors only for state, risk, and diffs.
+- Prefer compact icon buttons for obvious actions and text+icon buttons for commands.
+- Keep UI text short and operational.
+- Do not add explanatory feature copy inside the app shell.
+- Preserve keyboard/terminal ergonomics when changing panels or overlays.
+- Verify dense views at narrow widths before shipping changes to headers, cards, modals, or split panels.
