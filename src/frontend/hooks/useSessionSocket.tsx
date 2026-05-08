@@ -7,7 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { Agent, AppNotification, CodexAgentState, DiffResult, Ticket } from "../types";
+import type { Agent, AcpAgentState, AppNotification, DiffResult, Ticket } from "../types";
 import { useStore } from "../store";
 
 type IncomingEvent =
@@ -17,7 +17,7 @@ type IncomingEvent =
   | { type: "kanban-sync"; tickets: Ticket[] }
   | { type: "branch-updated"; branch: string | null }
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
-  | { type: "codex-state-updated"; agentId: string; state: CodexAgentState }
+  | { type: "acp-state-updated"; agentId: string; state: AcpAgentState }
   | { type: "branches-updated" };
 
 interface SessionSocketContextValue {
@@ -34,7 +34,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgent,
     setCurrentBranch,
     setAgentDiff,
-    setCodexState,
+    setAcpState,
     fetchBranches,
   } = useStore();
   const wsRef = useRef<WebSocket | null>(null);
@@ -76,8 +76,8 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
             case "diff-updated":
               setAgentDiff(event.agentId, event.diff);
               break;
-            case "codex-state-updated":
-              setCodexState(event.agentId, event.state);
+            case "acp-state-updated":
+              setAcpState(event.agentId, event.state);
               break;
             case "branches-updated":
               fetchBranches();
@@ -114,7 +114,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgent,
     setCurrentBranch,
     setAgentDiff,
-    setCodexState,
+    setAcpState,
     fetchBranches,
   ]);
 

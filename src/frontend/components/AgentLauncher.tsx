@@ -1,35 +1,23 @@
-import { ChevronRight, GitBranch, Plus, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronRight, GitBranch, Plus, X } from "lucide-react";
+import { useCallback, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, CodexStatus, Ticket } from "../types";
+import type { AgentType, Ticket } from "../types";
 
 const AGENTS: { type: AgentType; label: string; sub: string; command: string }[] = [
   {
     type: "claude-code",
     label: "CLAUDE",
-    sub: "Anthropic · claude --dangerously-skip-permissions",
-    command: "claude --dangerously-skip-permissions",
+    sub: "Anthropic · claude-agent-acp",
+    command: "claude-agent-acp",
   },
   {
     type: "codex",
     label: "CODEX",
-    sub: "OpenAI · local codex",
-    command: "codex",
+    sub: "OpenAI · codex-acp",
+    command: "codex-acp",
   },
 ];
-
-const CODEX_STATUS_UNAVAILABLE: CodexStatus = {
-  installed: false,
-  authenticated: false,
-  ready: false,
-  command: null,
-  binaryPath: null,
-  version: null,
-  authMethod: null,
-  loginStatusText: null,
-  error: "Couldn't verify local Codex. Refresh and try again.",
-};
 
 interface AgentButtonProps {
   a: (typeof AGENTS)[number];
@@ -67,78 +55,12 @@ function AgentButton({ a, launching, disabled, reason, onLaunch }: AgentButtonPr
   );
 }
 
-function CodexSetupCard({
-  status,
-  loading,
-  onRefresh,
-}: {
-  status: CodexStatus | null;
-  loading: boolean;
-  onRefresh: () => void;
-}) {
-  if (!loading && status?.ready) return null;
-
-  const headline = loading
-    ? "Checking local Codex..."
-    : "Codex needs to be signed in before you can launch it.";
-
-  const detail = loading
-    ? "AgentForge verifies the bundled local Codex CLI when you open this launcher."
-    : (status?.error ??
-      "Run `./node_modules/.bin/codex login` or open `codex app`, then refresh here.");
-
-  return (
-    <div className="w-full max-w-md forge-surface border border-forge-border-bright p-4 flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="forge-label mb-1">CODEX SETUP</p>
-          <p className="text-forge-text-bright text-sm leading-relaxed">{headline}</p>
-        </div>
-        <button className="forge-btn-ghost py-1 px-2 shrink-0" onClick={onRefresh}>
-          {loading ? (
-            "CHECKING..."
-          ) : (
-            <span className="inline-flex items-center gap-1">
-              <RefreshCw size={10} />
-              REFRESH
-            </span>
-          )}
-        </button>
-      </div>
-
-      <div className="text-xs text-forge-text-dim space-y-1">
-        <p>Command: {status?.command ?? "codex"}</p>
-        <p>Version: {status?.version ?? "Unknown"}</p>
-        <p>Login: {status?.loginStatusText ?? "Not checked yet"}</p>
-      </div>
-
-      <p className="text-[10px] text-amber-300 leading-relaxed">{detail}</p>
-    </div>
-  );
-}
-
 export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: () => void }) {
   const { addNotification, remoteConfig, updateTicket, setAgent, branches } = useStore();
   const [launching, setLaunching] = useState<AgentType | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [customCmd, setCustomCmd] = useState("");
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
-  const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
-  const [isCheckingCodex, setIsCheckingCodex] = useState(true);
-  const codexReady = codexStatus?.ready === true;
-
-  const refreshCodexStatus = useCallback(() => {
-    setIsCheckingCodex(true);
-    api.integrations.codex
-      .status()
-      .then(setCodexStatus)
-      .catch(() => setCodexStatus(CODEX_STATUS_UNAVAILABLE))
-      .finally(() => setIsCheckingCodex(false));
-  }, []);
-
-  useEffect(() => {
-    refreshCodexStatus();
-  }, [refreshCodexStatus]);
 
   const launch = useCallback(
     async (type: AgentType, custom?: string) => {
@@ -234,27 +156,8 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
         <div className="w-full max-w-md flex flex-col gap-3">
           <p className="forge-label text-center">SELECT AGENT</p>
 
-          <CodexSetupCard
-            status={codexStatus}
-            loading={isCheckingCodex}
-            onRefresh={refreshCodexStatus}
-          />
-
           {AGENTS.map((a) => (
-            <AgentButton
-              key={a.type}
-              a={a}
-              launching={launching}
-              disabled={a.type === "codex" && (isCheckingCodex || !codexReady)}
-              reason={
-                a.type === "codex" && (isCheckingCodex || !codexReady)
-                  ? isCheckingCodex
-                    ? "Checking local Codex..."
-                    : (codexStatus?.error ?? "Couldn't verify local Codex. Refresh and try again.")
-                  : null
-              }
-              onLaunch={launch}
-            />
+            <AgentButton key={a.type} a={a} launching={launching} onLaunch={launch} />
           ))}
 
           {/* Custom command */}

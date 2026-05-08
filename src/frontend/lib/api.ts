@@ -1,6 +1,6 @@
 import type {
   Agent,
-  CodexAgentState,
+  AcpAgentState,
   DiffResult,
   GitBranchInfo,
   GitHubIssue,
@@ -57,7 +57,7 @@ export const api = {
 
   agents: {
     get: (id: string) => request<Agent>(`/agents/${id}`),
-    getCodexState: (id: string) => request<CodexAgentState>(`/agents/${id}/codex-state`),
+    getAcpState: (id: string) => request<AcpAgentState>(`/agents/${id}/acp-state`),
     getDiff: (id: string) => request<DiffResult>(`/agents/${id}/diff`),
     merge: (id: string) => request<MergeResult>(`/agents/${id}/merge`, { method: "POST" }),
     rebase: (id: string) =>

@@ -228,9 +228,29 @@ export const agentStmts = {
       ).run(args);
     },
   },
+  overwriteSessionId: {
+    run: (args: { $sessionId: string; $id: string }): void => {
+      db.query("UPDATE agents SET session_id = $sessionId WHERE id = $id").run(args);
+    },
+  },
   updateBaseBranch: {
     run: (args: { $baseBranch: string; $id: string }): void => {
       db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
+    },
+  },
+  saveAgentState: {
+    run: (args: { $id: string; $agentState: string }): void => {
+      db.query("UPDATE agents SET agent_state = $agentState WHERE id = $id").run(args);
+    },
+  },
+  loadAgentState: {
+    get: (id: string): string | null => {
+      const row = db
+        .query<{ agent_state: string | null }, [string]>(
+          "SELECT agent_state FROM agents WHERE id = ?",
+        )
+        .get(id);
+      return row?.agent_state ?? null;
     },
   },
 };

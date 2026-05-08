@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type {
   Agent,
-  CodexAgentState,
+  AcpAgentState,
   AppNotification,
   DiffResult,
   GitBranchInfo,
@@ -26,7 +26,7 @@ interface AppState {
   currentBranch: string | null;
   agentDiffs: Record<string, DiffResult>;
   branches: GitBranchInfo[];
-  codexStates: Record<string, CodexAgentState>;
+  acpStates: Record<string, AcpAgentState>;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -58,7 +58,7 @@ interface AppState {
   // Git state actions
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
-  setCodexState: (agentId: string, state: CodexAgentState) => void;
+  setAcpState: (agentId: string, state: AcpAgentState) => void;
 
   // Branch actions
   fetchBranches: () => Promise<void>;
@@ -83,7 +83,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentBranch: null,
   agentDiffs: {},
   branches: [],
-  codexStates: {},
+  acpStates: {},
   activeTicketId: null,
   isCreateModalOpen: false,
   isConnected: false,
@@ -105,10 +105,8 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const tickets = await api.tickets.list();
       set({ tickets });
-      // Also load agents for any in-progress or review tickets
-      const needAgents = tickets.filter(
-        (t) => t.agentId && (t.status === "in-progress" || t.status === "review"),
-      );
+      // Also load agents for every ticket with history so older review/done tickets hydrate.
+      const needAgents = tickets.filter((t) => t.agentId);
       await Promise.all(needAgents.map((t) => get().fetchAgentForTicket(t.id)));
     } catch (err) {
       get().addNotification({
@@ -238,11 +236,11 @@ export const useStore = create<AppState>((set, get) => ({
   setCurrentBranch: (currentBranch) => set({ currentBranch }),
   setAgentDiff: (agentId, diff) =>
     set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
-  setCodexState: (agentId, state) =>
+  setAcpState: (agentId, state) =>
     set((s) => {
-      const current = s.codexStates[agentId];
+      const current = s.acpStates[agentId];
       if (current && current.updatedAt > state.updatedAt) return s;
-      return { codexStates: { ...s.codexStates, [agentId]: state } };
+      return { acpStates: { ...s.acpStates, [agentId]: state } };
     }),
 }));
 
