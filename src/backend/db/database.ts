@@ -228,6 +228,11 @@ export const agentStmts = {
       ).run(args);
     },
   },
+  overwriteSessionId: {
+    run: (args: { $sessionId: string; $id: string }): void => {
+      db.query("UPDATE agents SET session_id = $sessionId WHERE id = $id").run(args);
+    },
+  },
   updateBaseBranch: {
     run: (args: { $baseBranch: string; $id: string }): void => {
       db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);

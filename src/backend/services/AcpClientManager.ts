@@ -401,7 +401,7 @@ async function initSession(
   }
 
   session.state.sessionId = session.sessionId;
-  agentStmts.updateSessionId.run({ $sessionId: session.sessionId!, $id: agentId });
+  agentStmts.overwriteSessionId.run({ $sessionId: session.sessionId!, $id: agentId });
   pushState(session);
 
   if (prompt.trim()) {
@@ -602,6 +602,7 @@ export class AcpClientManager implements IAgentManager {
           if (!newSession.finalized) {
             newSession.finalized = true;
             const exitCode = code ?? 1;
+            newSession.state.status = exitCode === 0 ? "completed" : "failed";
             persistState(agent.id, cloneState(newSession.state));
             agentStmts.updateStatus.run({
               $id: agent.id,
@@ -631,7 +632,7 @@ export class AcpClientManager implements IAgentManager {
         });
         newSession.sessionId = r.sessionId;
         newSession.state.sessionId = r.sessionId;
-        agentStmts.updateSessionId.run({ $sessionId: r.sessionId, $id: agent.id });
+        agentStmts.overwriteSessionId.run({ $sessionId: r.sessionId, $id: agent.id });
       }
     }
 
