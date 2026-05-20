@@ -1,12 +1,14 @@
+import { randomUUID } from "node:crypto";
+
 import { Hono } from "hono";
-import { randomUUID } from "crypto";
-import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
-import { acpClientManager } from "../services/AcpClientManager.ts";
+
 import type { AgentType, Ticket, TicketStatus } from "../../common/types.ts";
-import { broadcastNotification } from "../ws/hub.ts";
-import type { OrchestratorService } from "../services/OrchestratorService.ts";
+import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
+import { acpClientManager } from "../services/AcpClientManager.ts";
 import { GitWorktreeManager } from "../services/GitWorktreeManager.ts";
+import type { OrchestratorService } from "../services/OrchestratorService.ts";
+import { broadcastNotification } from "../ws/hub.ts";
 
 const VALID_STATUSES: TicketStatus[] = ["backlog", "in-progress", "review", "done"];
 const VALID_AGENT_TYPES: AgentType[] = ["claude-code", "codex", "custom"];
@@ -15,9 +17,7 @@ const log = logger.child("tickets");
 export function ticketsRouter(orchestrator: OrchestratorService) {
   const app = new Hono();
 
-  app.get("/", (c) => {
-    return c.json(ticketStmts.list.all());
-  });
+  app.get("/", (c) => c.json(ticketStmts.list.all()));
 
   app.post("/", async (c) => {
     const body = await c.req.json<{ title?: string; description?: string }>();
@@ -26,26 +26,26 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     }
 
     const ticket: Ticket = {
-      id: randomUUID(),
-      title: body.title.trim(),
-      description: body.description?.trim() ?? "",
-      status: "backlog",
       baseBranch: remoteStmts.get.get()?.baseBranch ?? null,
       createdAt: Date.now(),
+      description: body.description?.trim() ?? "",
+      id: randomUUID(),
+      status: "backlog",
+      title: body.title.trim(),
       updatedAt: Date.now(),
     };
 
     ticketStmts.insert.run({
-      $id: ticket.id,
-      $title: ticket.title,
-      $description: ticket.description,
-      $status: ticket.status,
       $baseBranch: ticket.baseBranch ?? null,
       $createdAt: ticket.createdAt,
+      $description: ticket.description,
+      $id: ticket.id,
+      $status: ticket.status,
+      $title: ticket.title,
       $updatedAt: ticket.updatedAt,
     });
 
-    broadcastNotification({ type: "ticket-updated", ticket });
+    broadcastNotification({ ticket, type: "ticket-updated" });
     return c.json(ticket, 201);
   });
 
@@ -58,19 +58,25 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     }
 
     const existing = ticketStmts.get.get(id);
-    if (!existing) return c.json({ error: "ticket not found" }, 404);
+    if (!existing) {
+      return c.json({ error: "ticket not found" }, 404);
+    }
 
     const newStatus = body.status as TicketStatus;
-    ticketStmts.updateStatus.run({ $status: newStatus, $updatedAt: Date.now(), $id: id });
+    ticketStmts.updateStatus.run({
+      $id: id,
+      $status: newStatus,
+      $updatedAt: Date.now(),
+    });
 
     const updated = ticketStmts.get.get(id);
-    broadcastNotification({ type: "ticket-updated", ticket: updated });
+    broadcastNotification({ ticket: updated, type: "ticket-updated" });
 
-    orchestrator.onTicketMoved(id, newStatus).catch((err) => {
+    orchestrator.onTicketMoved(id, newStatus).catch((error) => {
       log.error("orchestrator failed after ticket status change", {
-        ticketId: id,
         status: newStatus,
-        ...errorMeta(err),
+        ticketId: id,
+        ...errorMeta(error),
       });
     });
 
@@ -80,7 +86,10 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
   // Explicit agent launch — called after the user picks Claude or Codex in the UI
   app.post("/:id/spawn", async (c) => {
     const id = c.req.param("id");
-    const body = await c.req.json<{ agentType?: string; customCommand?: string }>();
+    const body = await c.req.json<{
+      agentType?: string;
+      customCommand?: string;
+    }>();
 
     const agentType = (body.agentType ?? "claude-code") as AgentType;
     if (!VALID_AGENT_TYPES.includes(agentType)) {
@@ -88,7 +97,9 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     }
 
     const ticket = ticketStmts.get.get(id);
-    if (!ticket) return c.json({ error: "ticket not found" }, 404);
+    if (!ticket) {
+      return c.json({ error: "ticket not found" }, 404);
+    }
     if (ticket.agentId && acpClientManager.isRunning(ticket.agentId)) {
       return c.json({ error: "agent already running for this ticket" }, 409);
     }
@@ -99,25 +110,31 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
       // without waiting for the WS agent-updated event.
       const updatedTicket = ticketStmts.get.get(id);
       const agent = updatedTicket?.agentId ? agentStmts.get.get(updatedTicket.agentId) : null;
-      return c.json({ ticket: updatedTicket, agent });
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 500);
+      return c.json({ agent, ticket: updatedTicket });
+    } catch (error) {
+      return c.json({ error: (error as Error).message }, 500);
     }
   });
 
   app.patch("/:id/base-branch", async (c) => {
     const id = c.req.param("id");
     const ticket = ticketStmts.get.get(id);
-    if (!ticket) return c.json({ error: "ticket not found" }, 404);
+    if (!ticket) {
+      return c.json({ error: "ticket not found" }, 404);
+    }
 
     const remoteConfig = remoteStmts.get.get();
-    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+    if (!remoteConfig) {
+      return c.json({ error: "no remote configured" }, 400);
+    }
 
     const body = await c.req
       .json<{ baseBranch?: string }>()
       .catch(() => ({ baseBranch: undefined }) as { baseBranch?: string });
     const baseBranch = body.baseBranch?.trim();
-    if (!baseBranch) return c.json({ error: "baseBranch is required" }, 400);
+    if (!baseBranch) {
+      return c.json({ error: "baseBranch is required" }, 400);
+    }
 
     try {
       const git = new GitWorktreeManager(remoteConfig.localPath);
@@ -128,30 +145,42 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
 
       ticketStmts.updateBaseBranch.run({
         $baseBranch: baseBranch,
-        $updatedAt: Date.now(),
         $id: id,
+        $updatedAt: Date.now(),
       });
 
       if (ticket.agentId) {
-        agentStmts.updateBaseBranch.run({ $baseBranch: baseBranch, $id: ticket.agentId });
+        agentStmts.updateBaseBranch.run({
+          $baseBranch: baseBranch,
+          $id: ticket.agentId,
+        });
       }
 
       const updatedTicket = ticketStmts.get.get(id);
       const updatedAgent = updatedTicket?.agentId
         ? agentStmts.get.get(updatedTicket.agentId)
         : null;
-      if (updatedTicket) broadcastNotification({ type: "ticket-updated", ticket: updatedTicket });
-      if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
-      return c.json({ ticket: updatedTicket, agent: updatedAgent });
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 500);
+      if (updatedTicket) {
+        broadcastNotification({
+          ticket: updatedTicket,
+          type: "ticket-updated",
+        });
+      }
+      if (updatedAgent) {
+        broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+      }
+      return c.json({ agent: updatedAgent, ticket: updatedTicket });
+    } catch (error) {
+      return c.json({ error: (error as Error).message }, 500);
     }
   });
 
   app.delete("/:id", async (c) => {
     const id = c.req.param("id");
     const existing = ticketStmts.get.get(id);
-    if (!existing) return c.json({ error: "ticket not found" }, 404);
+    if (!existing) {
+      return c.json({ error: "ticket not found" }, 404);
+    }
 
     if (existing.worktree) {
       const remoteConfig = remoteStmts.get.get();
@@ -162,7 +191,10 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
     }
 
     ticketStmts.delete.run(id);
-    broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+    broadcastNotification({
+      tickets: ticketStmts.list.all(),
+      type: "kanban-sync",
+    });
     return c.body(null, 204);
   });
 

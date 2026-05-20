@@ -2,6 +2,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { clsx } from "clsx";
 import { Check, CirclePlay, Eye, Inbox } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
 import { COLUMN_META } from "../../types";
@@ -9,9 +10,9 @@ import { TicketCard } from "./TicketCard";
 
 const COLUMN_ICONS: Record<TicketStatus, LucideIcon> = {
   backlog: Inbox,
+  done: Check,
   "in-progress": CirclePlay,
   review: Eye,
-  done: Check,
 };
 
 interface Props {

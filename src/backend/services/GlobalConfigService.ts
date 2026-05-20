@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const CONFIG_DIR = join(homedir(), ".agentforge");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
@@ -13,7 +13,9 @@ interface GlobalConfig {
 }
 
 function read(): GlobalConfig {
-  if (!existsSync(CONFIG_PATH)) return {};
+  if (!existsSync(CONFIG_PATH)) {
+    return {};
+  }
   try {
     return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as GlobalConfig;
   } catch {
@@ -23,10 +25,18 @@ function read(): GlobalConfig {
 
 function write(config: GlobalConfig): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 }
 
 export const globalConfig = {
+  deletePat(provider: "github" | "linear"): void {
+    const config = read();
+    if (config.integrations?.[provider]) {
+      delete config.integrations[provider]!.pat;
+    }
+    write(config);
+  },
+
   getPat(provider: "github" | "linear"): string | null {
     return read().integrations?.[provider]?.pat ?? null;
   },
@@ -36,14 +46,6 @@ export const globalConfig = {
     config.integrations ??= {};
     config.integrations[provider] ??= {};
     config.integrations[provider]!.pat = pat;
-    write(config);
-  },
-
-  deletePat(provider: "github" | "linear"): void {
-    const config = read();
-    if (config.integrations?.[provider]) {
-      delete config.integrations[provider]!.pat;
-    }
     write(config);
   },
 };

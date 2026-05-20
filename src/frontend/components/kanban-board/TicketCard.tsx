@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
 import { ChevronRight, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+
 import { useStore } from "../../store";
 import type { Agent, Ticket } from "../../types";
 
@@ -12,21 +13,21 @@ interface Props {
 }
 
 const AGENT_STATUS_CLASSES: Record<string, string> = {
-  running: "text-forge-blue border-forge-blue",
   done: "text-forge-green border-forge-green",
   error: "text-forge-red border-forge-red",
+  running: "text-forge-blue border-forge-blue",
 };
 
 const AGENT_STATUS_DOT: Record<string, string> = {
-  running: "status-dot-running",
   done: "status-dot-done",
   error: "status-dot-error",
+  running: "status-dot-running",
 };
 
 const AGENT_STATUS_LABEL: Record<string, string> = {
-  running: "RUNNING",
   done: "DONE",
   error: "ERROR",
+  running: "RUNNING",
 };
 
 export function TicketCard({ ticket, agent }: Props) {
@@ -52,7 +53,9 @@ export function TicketCard({ ticket, agent }: Props) {
       setConfirmDiscard(false);
       return;
     }
-    if (hasAgent || ticket.status === "in-progress") openTicket(ticket.id);
+    if (hasAgent || ticket.status === "in-progress") {
+      openTicket(ticket.id);
+    }
   }, [confirmDiscard, hasAgent, ticket.id, ticket.status, openTicket]);
 
   const handleTrashClick = useCallback(

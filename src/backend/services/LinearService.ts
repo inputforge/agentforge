@@ -27,12 +27,12 @@ export class LinearService {
 
   private async graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
     const res = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
+      body: JSON.stringify({ query, variables }),
       headers: {
         Authorization: this.pat,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query, variables }),
+      method: "POST",
     });
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
@@ -54,7 +54,9 @@ export class LinearService {
 
   async listIssues(teamId?: string, limit = 100): Promise<LinearIssue[]> {
     const filterArg = teamId ? `, filter: { team: { id: { eq: "${teamId}" } } }` : "";
-    const data = await this.graphql<{ issues: { nodes: Record<string, unknown>[] } }>(`
+    const data = await this.graphql<{
+      issues: { nodes: Record<string, unknown>[] };
+    }>(`
       query {
         issues(first: ${limit}${filterArg}, orderBy: updatedAt) {
           nodes {
@@ -73,22 +75,24 @@ export class LinearService {
       }
     `);
     return data.issues.nodes.map((issue) => ({
+      createdAt: issue.createdAt as string,
+      description: (issue.description as string | null) ?? "",
       id: issue.id as string,
       identifier: issue.identifier as string,
-      title: issue.title as string,
-      description: (issue.description as string | null) ?? "",
-      state: (issue.state as { name: string }).name,
-      url: issue.url as string,
-      priority: issue.priority as number,
       labels: (issue.labels as { nodes: { name: string }[] }).nodes.map((l) => l.name),
-      createdAt: issue.createdAt as string,
+      priority: issue.priority as number,
+      state: (issue.state as { name: string }).name,
+      title: issue.title as string,
       updatedAt: issue.updatedAt as string,
+      url: issue.url as string,
     }));
   }
 
   async getIssue(id: string): Promise<LinearIssue | null> {
     try {
-      const data = await this.graphql<{ issue: Record<string, unknown> | null }>(`
+      const data = await this.graphql<{
+        issue: Record<string, unknown> | null;
+      }>(`
         query {
           issue(id: "${id}") {
             id identifier title description url priority createdAt updatedAt
@@ -97,19 +101,21 @@ export class LinearService {
           }
         }
       `);
-      const issue = data.issue;
-      if (!issue) return null;
+      const { issue } = data;
+      if (!issue) {
+        return null;
+      }
       return {
+        createdAt: issue.createdAt as string,
+        description: (issue.description as string | null) ?? "",
         id: issue.id as string,
         identifier: issue.identifier as string,
-        title: issue.title as string,
-        description: (issue.description as string | null) ?? "",
-        state: (issue.state as { name: string }).name,
-        url: issue.url as string,
-        priority: issue.priority as number,
         labels: (issue.labels as { nodes: { name: string }[] }).nodes.map((l) => l.name),
-        createdAt: issue.createdAt as string,
+        priority: issue.priority as number,
+        state: (issue.state as { name: string }).name,
+        title: issue.title as string,
         updatedAt: issue.updatedAt as string,
+        url: issue.url as string,
       };
     } catch {
       return null;

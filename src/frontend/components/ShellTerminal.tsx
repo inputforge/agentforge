@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
 import { X, TerminalSquare, FolderOpen } from "lucide-react";
-import { api } from "../lib/api";
+import { useEffect, useState } from "react";
+
 import { useForgeTerminal } from "../hooks/useForgeTerminal";
+import { api } from "../lib/api";
 
 interface ShellTerminalProps {
   onClose: () => void;
@@ -20,7 +21,9 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
       .create()
       .then(({ id, cwd: dir }) => {
         if (cancelled) {
-          api.shell.kill(id).catch(() => {});
+          api.shell.kill(id).catch(() => {
+            /* empty */
+          });
           return;
         }
         sessionId = id;
@@ -31,7 +34,11 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
 
     return () => {
       cancelled = true;
-      if (sessionId) api.shell.kill(sessionId).catch(() => {});
+      if (sessionId) {
+        api.shell.kill(sessionId).catch(() => {
+          /* empty */
+        });
+      }
     };
   }, []);
 

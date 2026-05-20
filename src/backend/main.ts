@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+
 import { assets, index } from "./assets.ts";
 import { agentStmts, initDb, remoteStmts } from "./db/index.ts";
 import { errorMeta, logger, requestLogger, wasErrorLogged } from "./lib/logger.ts";
@@ -8,12 +9,12 @@ import { integrationsRouter } from "./routes/integrations.ts";
 import { remoteRouter } from "./routes/remote.ts";
 import { shellRouter } from "./routes/shell.ts";
 import { ticketsRouter } from "./routes/tickets.ts";
-import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
 import { gitWatcher } from "./services/GitWatcher.ts";
+import { detectLocalRepo } from "./services/GitWorktreeManager.ts";
 import { OrchestratorService } from "./services/OrchestratorService.ts";
 import { broadcastNotification, wsHandlers } from "./ws/hub.ts";
 
-const PORT = parseInt(process.env.PORT ?? "3001", 10);
+const PORT = Number.parseInt(process.env.PORT ?? "3001", 10);
 
 const log = logger.child("server");
 const orchestrator = new OrchestratorService(broadcastNotification);
@@ -23,7 +24,9 @@ initDb();
 // Auto-detect local git repo on startup — only seeds if no config saved yet
 async function seedRemoteConfigIfEmpty() {
   const existing = remoteStmts.get.get();
-  if (existing) return; // user already configured one, don't overwrite
+  if (existing) {
+    return;
+  } // user already configured one, don't overwrite
 
   const searchPath = process.env.REPO_PATH ?? process.cwd();
   const detected = await detectLocalRepo(searchPath);
@@ -33,14 +36,14 @@ async function seedRemoteConfigIfEmpty() {
   }
 
   remoteStmts.upsert.run({
-    $repoUrl: detected.repoUrl,
     $baseBranch: detected.baseBranch,
     $localPath: detected.localPath,
+    $repoUrl: detected.repoUrl,
   });
   log.info("auto-detected repo", {
-    repoUrl: detected.repoUrl,
     baseBranch: detected.baseBranch,
     localPath: detected.localPath,
+    repoUrl: detected.repoUrl,
   });
 }
 
@@ -61,11 +64,12 @@ startGitWatcherIfConfigured();
   if (runningAgents.length > 0) {
     log.info("resuming interrupted agents", { count: runningAgents.length });
     for (const agent of runningAgents) {
-      orchestrator
-        .resumeAgent(agent)
-        .catch((err: Error) =>
-          log.error("failed to resume agent", { agentId: agent.id, ...errorMeta(err) }),
-        );
+      orchestrator.resumeAgent(agent).catch((error: Error) =>
+        log.error("failed to resume agent", {
+          agentId: agent.id,
+          ...errorMeta(error),
+        }),
+      );
     }
   }
 }
@@ -118,8 +122,10 @@ if (index) {
 }
 
 Bun.serve({
-  port: PORT,
-  routes: Object.fromEntries(routes),
+  development: process.env.NODE_ENV !== "production" && {
+    console: true,
+    hmr: true,
+  },
   fetch(req, server) {
     const url = new URL(req.url);
 
@@ -129,10 +135,12 @@ Bun.serve({
       const channel = parts[1] ?? "unknown";
       const agentId = parts[2];
 
-      const upgraded = server.upgrade(req, { data: { channel, agentId } });
-      if (upgraded) return new Response();
+      const upgraded = server.upgrade(req, { data: { agentId, channel } });
+      if (upgraded) {
+        return new Response();
+      }
 
-      log.warn("websocket upgrade failed", { channel, agentId });
+      log.warn("websocket upgrade failed", { agentId, channel });
       return new Response("WebSocket upgrade failed", { status: 426 });
     }
 
@@ -146,9 +154,7 @@ Bun.serve({
 
     return app.fetch(req, { server });
   },
+  port: PORT,
+  routes: Object.fromEntries(routes),
   websocket: wsHandlers,
-  development: process.env.NODE_ENV !== "production" && {
-    hmr: true,
-    console: true,
-  },
 });

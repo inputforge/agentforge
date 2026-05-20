@@ -1,17 +1,11 @@
 import { SiGithub, SiLinear } from "@icons-pack/react-simple-icons";
 import { CheckCircle, XCircle, X } from "lucide-react";
-import {
-  type ChangeEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+
 import { api } from "../lib/api";
-import type { LinearTeam } from "../types";
 import { useStore } from "../store";
+import type { LinearTeam } from "../types";
 
 type Tab = "github" | "linear";
 
@@ -60,10 +54,16 @@ function GitHubTab() {
       .getConfig("github")
       .then((cfg) => {
         setHasPat(cfg.hasPat);
-        if (cfg.owner) setOwner(cfg.owner);
-        if (cfg.repo) setRepo(cfg.repo);
+        if (cfg.owner) {
+          setOwner(cfg.owner);
+        }
+        if (cfg.repo) {
+          setRepo(cfg.repo);
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        /* empty */
+      });
   }, []);
 
   const handlePatChange = useCallback(
@@ -80,41 +80,47 @@ function GitHubTab() {
   );
   const handlePatKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") void handleConnectAccount();
+      if (e.key === "Enter") {
+        void handleConnectAccount();
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pat],
   );
 
   const handleConnectAccount = useCallback(async () => {
-    if (!pat) return;
+    if (!pat) {
+      return;
+    }
     setSavingAccount(true);
     try {
       await api.integrations.saveConfig("github", { pat });
       setHasPat(true);
       setPat("");
-      addNotification({ type: "info", message: "GitHub account connected" });
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+      addNotification({ message: "GitHub account connected", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setSavingAccount(false);
     }
   }, [pat, addNotification]);
 
   const handleDisconnectAccount = useCallback(async () => {
-    await api.integrations.disconnectAccount("github").catch(() => {});
+    await api.integrations.disconnectAccount("github").catch(() => {
+      /* empty */
+    });
     setHasPat(false);
     setPat("");
-    addNotification({ type: "info", message: "GitHub account disconnected" });
+    addNotification({ message: "GitHub account disconnected", type: "info" });
   }, [addNotification]);
 
   const handleSaveRepo = useCallback(async () => {
     setSavingRepo(true);
     try {
       await api.integrations.saveConfig("github", { owner, repo });
-      addNotification({ type: "info", message: "Repository config saved" });
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+      addNotification({ message: "Repository config saved", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setSavingRepo(false);
     }
@@ -230,7 +236,9 @@ function LinearTab() {
           setSavedTeamId(cfg.teamId);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        /* empty */
+      });
   }, []);
 
   const handlePatChange = useCallback(
@@ -243,33 +251,39 @@ function LinearTab() {
   );
   const handlePatKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") void handleConnectAccount();
+      if (e.key === "Enter") {
+        void handleConnectAccount();
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pat],
   );
 
   const handleConnectAccount = useCallback(async () => {
-    if (!pat) return;
+    if (!pat) {
+      return;
+    }
     setSavingAccount(true);
     try {
       await api.integrations.saveConfig("linear", { pat });
       setHasPat(true);
       setPat("");
-      addNotification({ type: "info", message: "Linear account connected" });
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+      addNotification({ message: "Linear account connected", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setSavingAccount(false);
     }
   }, [pat, addNotification]);
 
   const handleDisconnectAccount = useCallback(async () => {
-    await api.integrations.disconnectAccount("linear").catch(() => {});
+    await api.integrations.disconnectAccount("linear").catch(() => {
+      /* empty */
+    });
     setHasPat(false);
     setPat("");
     setTeams([]);
-    addNotification({ type: "info", message: "Linear account disconnected" });
+    addNotification({ message: "Linear account disconnected", type: "info" });
   }, [addNotification]);
 
   const handleLoadTeams = useCallback(async () => {
@@ -277,8 +291,8 @@ function LinearTab() {
     try {
       const data = await api.integrations.linear.listTeams();
       setTeams(data);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setLoadingTeams(false);
     }
@@ -289,9 +303,9 @@ function LinearTab() {
     try {
       await api.integrations.saveConfig("linear", { teamId: selectedTeamId });
       setSavedTeamId(selectedTeamId);
-      addNotification({ type: "info", message: "Project config saved" });
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+      addNotification({ message: "Project config saved", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setSavingProject(false);
     }
@@ -398,14 +412,18 @@ export function IntegrationsModal({ open, onClose }: IntegrationsModalProps) {
 
   const handleBackdrop = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) onClose();
+      if (e.target === e.currentTarget) {
+        onClose();
+      }
     },
     [onClose],
   );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+      }
     },
     [onClose],
   );
@@ -413,7 +431,9 @@ export function IntegrationsModal({ open, onClose }: IntegrationsModalProps) {
   const setGitHub = useCallback(() => setTab("github"), []);
   const setLinear = useCallback(() => setTab("linear"), []);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   return (
     <div

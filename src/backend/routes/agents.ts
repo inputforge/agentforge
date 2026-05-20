@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { Hono } from "hono";
-import { randomUUID } from "crypto";
+
 import { agentStmts, diffCommentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { acpClientManager } from "../services/AcpClientManager.ts";
@@ -15,39 +17,54 @@ export function agentsRouter(orchestrator: OrchestratorService) {
 
   app.get("/:id", (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     return c.json(agent);
   });
 
   app.get("/:id/diff", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     const remoteConfig = remoteStmts.get.get();
-    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+    if (!remoteConfig) {
+      return c.json({ error: "no remote configured" }, 400);
+    }
 
     try {
       const git = new GitWorktreeManager(remoteConfig.localPath);
       const diff = await git.getDiff(agent.worktreePath, agent.baseBranch);
       return c.json(diff);
-    } catch (err) {
-      log.error("failed to fetch diff", { agentId: agent.id, ...errorMeta(err) });
-      return c.json({ error: (err as Error).message }, 500);
+    } catch (error) {
+      log.error("failed to fetch diff", {
+        agentId: agent.id,
+        ...errorMeta(error),
+      });
+      return c.json({ error: (error as Error).message }, 500);
     }
   });
 
   app.get("/:id/acp-state", (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     return c.json(acpClientManager.getState(agent.id));
   });
 
   app.post("/:id/merge", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     const remoteConfig = remoteStmts.get.get();
-    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+    if (!remoteConfig) {
+      return c.json({ error: "no remote configured" }, 400);
+    }
 
     try {
       const git = new GitWorktreeManager(remoteConfig.localPath);
@@ -56,47 +73,64 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       if (result.success) {
         const ticket = ticketStmts.get.get(agent.ticketId);
         if (ticket) {
-          ticketStmts.updateStatus.run({ $status: "done", $updatedAt: Date.now(), $id: ticket.id });
+          ticketStmts.updateStatus.run({
+            $id: ticket.id,
+            $status: "done",
+            $updatedAt: Date.now(),
+          });
           const updatedTicket = ticketStmts.get.get(ticket.id);
-          if (updatedTicket)
-            broadcastNotification({ type: "ticket-updated", ticket: updatedTicket });
-          orchestrator.onTicketMoved(ticket.id, "done").catch((err) => {
+          if (updatedTicket) {
+            broadcastNotification({
+              ticket: updatedTicket,
+              type: "ticket-updated",
+            });
+          }
+          orchestrator.onTicketMoved(ticket.id, "done").catch((error) => {
             log.error("orchestrator cleanup failed after merge", {
               agentId: agent.id,
-              ...errorMeta(err),
+              ...errorMeta(error),
             });
           });
         }
       }
 
       return c.json(result);
-    } catch (err) {
-      log.error("merge threw unexpected error", { agentId: agent.id, ...errorMeta(err) });
-      return c.json({ success: false, conflicted: false, error: (err as Error).message }, 500);
+    } catch (error) {
+      log.error("merge threw unexpected error", {
+        agentId: agent.id,
+        ...errorMeta(error),
+      });
+      return c.json({ conflicted: false, error: (error as Error).message, success: false }, 500);
     }
   });
 
   app.post("/:id/commit", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     try {
       await acpClientManager.writeToAgent(
         agent,
         "Please commit all current changes with a descriptive commit message.",
       );
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 400);
+    } catch (error) {
+      return c.json({ error: (error as Error).message }, 400);
     }
     return c.json({ ok: true });
   });
 
   app.post("/:id/rebase", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     const remoteConfig = remoteStmts.get.get();
-    if (!remoteConfig) return c.json({ error: "no remote configured" }, 400);
+    if (!remoteConfig) {
+      return c.json({ error: "no remote configured" }, 400);
+    }
 
     const isRunning = acpClientManager.isRunning(agent.id);
 
@@ -110,10 +144,18 @@ export function agentsRouter(orchestrator: OrchestratorService) {
         );
       }
       return c.json({ ...result, resolving: result.conflicted && isRunning });
-    } catch (err) {
-      log.error("rebase threw unexpected error", { agentId: agent.id, ...errorMeta(err) });
+    } catch (error) {
+      log.error("rebase threw unexpected error", {
+        agentId: agent.id,
+        ...errorMeta(error),
+      });
       return c.json(
-        { success: false, conflicted: false, resolving: false, error: (err as Error).message },
+        {
+          conflicted: false,
+          error: (error as Error).message,
+          resolving: false,
+          success: false,
+        },
         500,
       );
     }
@@ -122,7 +164,9 @@ export function agentsRouter(orchestrator: OrchestratorService) {
   app.post("/:id/interrupt", (c) => {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     acpClientManager.interrupt(id);
     return c.body(null, 204);
   });
@@ -130,16 +174,24 @@ export function agentsRouter(orchestrator: OrchestratorService) {
   app.post("/:id/kill", (c) => {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     acpClientManager.kill(id);
-    agentStmts.updateStatus.run({ $id: id, $status: "error", $endedAt: Date.now() });
+    agentStmts.updateStatus.run({
+      $endedAt: Date.now(),
+      $id: id,
+      $status: "error",
+    });
     return c.body(null, 204);
   });
 
   app.post("/:id/restart", async (c) => {
     const id = c.req.param("id");
     const agent = agentStmts.get.get(id);
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     await acpClientManager.killAndWait(id);
     await orchestrator.resumeAgent(agent);
     return c.body(null, 204);
@@ -153,73 +205,100 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     } catch {
       return c.json({ error: "invalid JSON" }, 400);
     }
-    if (!body.input) return c.json({ error: "input is required" }, 400);
+    if (!body.input) {
+      return c.json({ error: "input is required" }, 400);
+    }
 
     try {
       const agent = agentStmts.get.get(id);
-      if (!agent) return c.json({ error: "agent not found" }, 404);
+      if (!agent) {
+        return c.json({ error: "agent not found" }, 404);
+      }
       await acpClientManager.writeToAgent(agent, body.input, body.clientId);
       return c.json({ ok: true });
-    } catch (err) {
-      log.error("failed to write input to agent", { agentId: id, ...errorMeta(err) });
-      return c.json({ error: (err as Error).message }, 500);
+    } catch (error) {
+      log.error("failed to write input to agent", {
+        agentId: id,
+        ...errorMeta(error),
+      });
+      return c.json({ error: (error as Error).message }, 500);
     }
   });
 
   app.post("/:id/shell", (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     const sessionId = randomUUID();
     shellSessionManager.spawn(sessionId, agent.worktreePath, (id) => {
       clearShellScrollback(id);
     });
-    return c.json({ id: sessionId, cwd: agent.worktreePath });
+    return c.json({ cwd: agent.worktreePath, id: sessionId });
   });
 
   // ── Diff comments ─────────────────────────────────────────────────────────────
 
   app.get("/:id/comments", (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     return c.json(diffCommentStmts.listByAgent.all(agent.id));
   });
 
   app.post("/:id/comments", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
-    const body = await c.req.json<{ filePath?: string; lineNumber?: number; content?: string }>();
-    if (!body.filePath || body.lineNumber == null || !body.content?.trim()) {
-      return c.json({ error: "filePath, lineNumber, and content are required" }, 400);
+    const body = await c.req.json<{
+      filePath?: string;
+      side?: string;
+      startLine?: number;
+      endLine?: number;
+      content?: string;
+    }>();
+    if (!body.filePath || body.endLine === null || !body.content?.trim()) {
+      return c.json({ error: "filePath, endLine, and content are required" }, 400);
     }
 
     const id = crypto.randomUUID();
     diffCommentStmts.insert.run({
-      $id: id,
       $agentId: agent.id,
-      $filePath: body.filePath,
-      $lineNumber: body.lineNumber,
       $content: body.content.trim(),
       $createdAt: Date.now(),
+      $endLine: body.endLine,
+      $filePath: body.filePath,
+      $id: id,
+      $side: body.side ?? "additions",
+      $startLine: body.startLine ?? body.endLine,
     });
 
-    return c.json(diffCommentStmts.listByAgent.all(agent.id).find((c) => c.id === id)!, 201);
+    return c.json(diffCommentStmts.listByAgent.all(agent.id).find((dc) => dc.id === id)!, 201);
   });
 
   app.delete("/:id/comments/:commentId", (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
     diffCommentStmts.delete.run(c.req.param("commentId"), agent.id);
     return c.body(null, 204);
   });
 
   app.post("/:id/review", async (c) => {
     const agent = agentStmts.get.get(c.req.param("id"));
-    if (!agent) return c.json({ error: "agent not found" }, 404);
+    if (!agent) {
+      return c.json({ error: "agent not found" }, 404);
+    }
 
     const comments = diffCommentStmts.listByAgent.all(agent.id);
-    if (comments.length === 0) return c.json({ error: "no comments to submit" }, 400);
+    if (comments.length === 0) {
+      return c.json({ error: "no comments to submit" }, 400);
+    }
 
     const grouped = new Map<string, typeof comments>();
     for (const comment of comments) {
@@ -232,19 +311,22 @@ export function agentsRouter(orchestrator: OrchestratorService) {
     for (const [file, fileComments] of grouped) {
       lines.push(`File: ${file}`);
       for (const comment of fileComments) {
-        const lineRef = comment.lineNumber > 0 ? `Line ${comment.lineNumber}: ` : "";
+        const lineRef =
+          comment.startLine === comment.endLine
+            ? `Line ${comment.endLine} (${comment.side}): `
+            : `Lines ${comment.startLine}-${comment.endLine} (${comment.side}): `;
         lines.push(`  ${lineRef}${comment.content}`);
       }
       lines.push("");
     }
-    const message = lines.join("\n") + "\n";
+    const message = `${lines.join("\n")}\n`;
 
     try {
       await acpClientManager.writeToAgent(agent, message);
       diffCommentStmts.deleteByAgent.run(agent.id);
-      return c.json({ ok: true, message });
-    } catch (err) {
-      return c.json({ error: (err as Error).message }, 500);
+      return c.json({ message, ok: true });
+    } catch (error) {
+      return c.json({ error: (error as Error).message }, 500);
     }
   });
 

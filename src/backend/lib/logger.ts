@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
+
 import type { Context, MiddlewareHandler, Next } from "hono";
-import { randomUUID } from "crypto";
 
 type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 type LogFormat = "pretty" | "json";
@@ -7,10 +8,10 @@ type LogMeta = Record<string, unknown>;
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 10,
-  info: 20,
-  warn: 30,
   error: 40,
+  info: 20,
   silent: 50,
+  warn: 30,
 };
 
 const configuredLevel = normalizeLevel(process.env.LOG_LEVEL);
@@ -23,10 +24,12 @@ function normalizeLevel(level: string | undefined): LogLevel {
     case "info":
     case "warn":
     case "error":
-    case "silent":
+    case "silent": {
       return level.toLowerCase() as LogLevel;
-    default:
+    }
+    default: {
       return process.env.NODE_ENV === "test" ? "silent" : "info";
+    }
   }
 }
 
@@ -41,8 +44,8 @@ function shouldLog(level: LogLevel): boolean {
 function serializeError(error: unknown): LogMeta {
   if (error instanceof Error) {
     return {
-      name: error.name,
       message: error.message,
+      name: error.name,
       stack: error.stack,
     };
   }
@@ -51,13 +54,19 @@ function serializeError(error: unknown): LogMeta {
 }
 
 function serializeValue(value: unknown): unknown {
-  if (value instanceof Error) return serializeError(value);
-  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Error) {
+    return serializeError(value);
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
   return value;
 }
 
 function sanitizeMeta(meta: LogMeta | undefined): LogMeta | undefined {
-  if (!meta) return undefined;
+  if (!meta) {
+    return undefined;
+  }
 
   return Object.fromEntries(
     Object.entries(meta)
@@ -67,13 +76,15 @@ function sanitizeMeta(meta: LogMeta | undefined): LogMeta | undefined {
 }
 
 function write(level: Exclude<LogLevel, "silent">, scope: string, message: string, meta?: LogMeta) {
-  if (!shouldLog(level)) return;
+  if (!shouldLog(level)) {
+    return;
+  }
 
   const entry = {
-    ts: new Date().toISOString(),
     level,
-    scope,
     message,
+    scope,
+    ts: new Date().toISOString(),
     ...sanitizeMeta(meta),
   };
 
@@ -140,10 +151,10 @@ export function requestLogger(): MiddlewareHandler {
     } catch (error) {
       const durationMs = Math.round(performance.now() - start);
       httpLogger.error("request failed", {
-        requestId,
+        durationMs,
         method: c.req.method,
         path: getRequestPath(c),
-        durationMs,
+        requestId,
         ...serializeError(error),
       });
       markErrorLogged(error);
@@ -151,15 +162,15 @@ export function requestLogger(): MiddlewareHandler {
     }
 
     const durationMs = Math.round(performance.now() - start);
-    const status = c.res.status;
+    const { status } = c.res;
     const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
 
     httpLogger[level]("request completed", {
-      requestId,
+      durationMs,
       method: c.req.method,
       path: getRequestPath(c),
+      requestId,
       status,
-      durationMs,
     });
   };
 }

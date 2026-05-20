@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+
 import { agentStmts, ticketStmts } from "../db/index.ts";
 import { broadcastNotification } from "../ws/hub.ts";
 
@@ -8,10 +9,14 @@ hooksRouter.post("/:agentId/:event", async (c) => {
   const { agentId, event } = c.req.param();
 
   const agent = agentStmts.get.get(agentId);
-  if (!agent) return c.json({ ok: true }); // agent may have been cleaned up
+  if (!agent) {
+    return c.json({ ok: true });
+  } // agent may have been cleaned up
 
   const ticket = ticketStmts.get.get(agent.ticketId);
-  if (!ticket) return c.json({ ok: true });
+  if (!ticket) {
+    return c.json({ ok: true });
+  }
 
   let body: Record<string, unknown> = {};
   try {
@@ -21,7 +26,10 @@ hooksRouter.post("/:agentId/:event", async (c) => {
   }
 
   if (typeof body.session_id === "string" && !agent.sessionId) {
-    agentStmts.updateSessionId.run({ $sessionId: body.session_id, $id: agentId });
+    agentStmts.updateSessionId.run({
+      $id: agentId,
+      $sessionId: body.session_id,
+    });
   }
 
   switch (event) {
@@ -30,36 +38,38 @@ hooksRouter.post("/:agentId/:event", async (c) => {
       // Guard against double-transition if the PTY exit fires first.
       if (agent.status !== "done" && agent.status !== "error") {
         agentStmts.updateStatus.run({
+          $endedAt: Date.now(),
           $id: agentId,
           $status: "done",
-          $endedAt: Date.now(),
         });
         const updatedAgent = agentStmts.get.get(agentId);
-        if (!updatedAgent) return c.json({ ok: true });
-        broadcastNotification({ type: "agent-updated", agent: updatedAgent });
+        if (!updatedAgent) {
+          return c.json({ ok: true });
+        }
+        broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
       }
 
       if (ticket.status === "in-progress") {
         ticketStmts.updateStatus.run({
+          $id: ticket.id,
           $status: "review",
           $updatedAt: Date.now(),
-          $id: ticket.id,
         });
         broadcastNotification({
-          type: "notification",
           notification: {
-            type: "agent-done",
+            agentId,
             message: `Agent on "${ticket.title}" finished — ready for review`,
             ticketId: ticket.id,
-            agentId,
+            type: "agent-done",
           },
+          type: "notification",
         });
       }
 
       // Title extraction from transcript (JSONL format) if agentTitle not yet set
       if (!ticket.agentTitle && body.transcript_path && typeof body.transcript_path === "string") {
         try {
-          const { readFileSync } = await import("fs");
+          const { readFileSync } = await import("node:fs");
           const content = readFileSync(body.transcript_path, "utf-8");
           const lines = content.trim().split("\n").filter(Boolean);
           let extractedTitle: string | null = null;
@@ -86,8 +96,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
           if (extractedTitle) {
             ticketStmts.updateAgentTitle.run({
               $agentTitle: extractedTitle,
-              $updatedAt: Date.now(),
               $id: ticket.id,
+              $updatedAt: Date.now(),
             });
           }
         } catch {
@@ -98,8 +108,11 @@ hooksRouter.post("/:agentId/:event", async (c) => {
       // Broadcast final ticket state (includes any title update)
       const finalTicket = ticketStmts.get.get(ticket.id);
       if (finalTicket) {
-        broadcastNotification({ type: "ticket-updated", ticket: finalTicket });
-        broadcastNotification({ type: "kanban-sync", tickets: ticketStmts.list.all() });
+        broadcastNotification({ ticket: finalTicket, type: "ticket-updated" });
+        broadcastNotification({
+          tickets: ticketStmts.list.all(),
+          type: "kanban-sync",
+        });
       }
 
       return c.json({ ok: true });
@@ -109,8 +122,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
       const message = typeof body.message === "string" ? body.message : undefined;
       if (message) {
         broadcastNotification({
+          notification: { agentId, message, ticketId: ticket.id, type: "info" },
           type: "notification",
-          notification: { type: "info", message, ticketId: ticket.id, agentId },
         });
       }
       return c.json({ ok: true });
@@ -121,11 +134,13 @@ hooksRouter.post("/:agentId/:event", async (c) => {
       if (typeof taskTitle === "string" && taskTitle) {
         ticketStmts.updateAgentTitle.run({
           $agentTitle: taskTitle,
-          $updatedAt: Date.now(),
           $id: ticket.id,
+          $updatedAt: Date.now(),
         });
         const updated = ticketStmts.get.get(ticket.id);
-        if (updated) broadcastNotification({ type: "ticket-updated", ticket: updated });
+        if (updated) {
+          broadcastNotification({ ticket: updated, type: "ticket-updated" });
+        }
       }
       return c.json({ ok: true });
     }
@@ -135,7 +150,8 @@ hooksRouter.post("/:agentId/:event", async (c) => {
       return c.json({ permissionDecision: "allow" });
     }
 
-    default:
+    default: {
       return c.json({ ok: true });
+    }
   }
 });

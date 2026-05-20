@@ -1,4 +1,6 @@
 import { create } from "zustand";
+
+import { api } from "../lib/api";
 import type {
   Agent,
   AcpAgentState,
@@ -9,12 +11,11 @@ import type {
   Ticket,
   TicketStatus,
 } from "../types";
-import { api } from "../lib/api";
 
 // Registered by NavigateFnRegistrar in App.tsx so the store can trigger navigation.
-let _navigate: ((path: string) => void) | null = null;
+let navigateFn: ((path: string) => void) | null = null;
 export function registerNavigate(fn: (path: string) => void) {
-  _navigate = fn;
+  navigateFn = fn;
 }
 
 interface AppState {
@@ -76,30 +77,84 @@ let notifCounter = 0;
 let branchFetchId = 0;
 
 export const useStore = create<AppState>((set, get) => ({
-  tickets: [],
-  agents: {},
-  notifications: [],
-  remoteConfig: null,
-  currentBranch: null,
-  agentDiffs: {},
-  branches: [],
   acpStates: {},
   activeTicketId: null,
-  isCreateModalOpen: false,
-  isConnected: false,
-  isFetchingTickets: false,
-
-  getActiveTicket: () => {
-    const { activeTicketId, tickets } = get();
-    return activeTicketId ? (tickets.find((t) => t.id === activeTicketId) ?? null) : null;
+  addNotification: (n) => {
+    const id = `notif-${(notifCounter += 1)}`;
+    const notif: AppNotification = { ...n, id, timestamp: Date.now() };
+    set((s) => ({ notifications: [notif, ...s.notifications].slice(0, 20) }));
+    if (n.type === "info" || n.type === "agent-done") {
+      setTimeout(() => get().dismissNotification(id), 5000);
+    }
   },
-
-  getActiveAgent: () => {
-    const ticket = get().getActiveTicket();
-    if (!ticket?.agentId) return null;
-    return get().agents[ticket.agentId] ?? null;
+  addTicket: (ticket) => set((s) => ({ tickets: [...s.tickets, ticket] })),
+  agentDiffs: {},
+  agents: {},
+  branches: [],
+  closeCreateModal: () => set({ isCreateModalOpen: false }),
+  closeTicket: () => {
+    set({ activeTicketId: null });
+    navigateFn?.("/");
   },
+  currentBranch: null,
+  discardTicket: async (ticketId) => {
+    const { tickets, agents, activeTicketId, closeTicket } = get();
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) {
+      return;
+    }
 
+    // Close panel if this ticket is open
+    if (activeTicketId === ticketId) {
+      closeTicket();
+    }
+
+    // Kill the agent if one is running
+    if (ticket.agentId && agents[ticket.agentId]) {
+      await api.agents.kill(ticket.agentId).catch(() => {
+        /* empty */
+      });
+    }
+
+    // Optimistic removal
+    set((s) => ({ tickets: s.tickets.filter((t) => t.id !== ticketId) }));
+
+    try {
+      await api.tickets.delete(ticketId);
+    } catch (error) {
+      // Rollback
+      set((s) => ({ tickets: [...s.tickets, ticket] }));
+      get().addNotification({
+        type: "error",
+        message: `Delete failed: ${(error as Error).message}`,
+      });
+    }
+  },
+  dismissNotification: (id) =>
+    set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
+  fetchAgentForTicket: async (ticketId) => {
+    const ticket = get().tickets.find((t) => t.id === ticketId);
+    if (!ticket?.agentId) {
+      return;
+    }
+    try {
+      const agent = await api.agents.get(ticket.agentId);
+      set((s) => ({ agents: { ...s.agents, [agent.id]: agent } }));
+    } catch {
+      // agent may not exist yet — that's OK
+    }
+  },
+  fetchBranches: async () => {
+    const id = (branchFetchId += 1);
+    try {
+      const { branches } = await api.remote.listBranches();
+      if (id === branchFetchId) {
+        set({ branches });
+      }
+    } catch {
+      // ignore transient errors
+    }
+  },
   fetchTickets: async () => {
     set({ isFetchingTickets: true });
     try {
@@ -108,64 +163,34 @@ export const useStore = create<AppState>((set, get) => ({
       // Also load agents for every ticket with history so older review/done tickets hydrate.
       const needAgents = tickets.filter((t) => t.agentId);
       await Promise.all(needAgents.map((t) => get().fetchAgentForTicket(t.id)));
-    } catch (err) {
+    } catch (error) {
       get().addNotification({
         type: "error",
-        message: `Failed to load tickets: ${(err as Error).message}`,
+        message: `Failed to load tickets: ${(error as Error).message}`,
       });
     } finally {
       set({ isFetchingTickets: false });
     }
   },
-
-  fetchAgentForTicket: async (ticketId) => {
-    const ticket = get().tickets.find((t) => t.id === ticketId);
-    if (!ticket?.agentId) return;
-    try {
-      const agent = await api.agents.get(ticket.agentId);
-      set((s) => ({ agents: { ...s.agents, [agent.id]: agent } }));
-    } catch {
-      // agent may not exist yet — that's OK
+  getActiveAgent: () => {
+    const ticket = get().getActiveTicket();
+    if (!ticket?.agentId) {
+      return null;
     }
+    return get().agents[ticket.agentId] ?? null;
   },
-
-  addTicket: (ticket) => set((s) => ({ tickets: [...s.tickets, ticket] })),
-
-  updateTicket: (id, updates) =>
-    set((s) => ({
-      tickets: s.tickets.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-    })),
-
-  removeTicket: (id) => set((s) => ({ tickets: s.tickets.filter((t) => t.id !== id) })),
-
-  discardTicket: async (ticketId) => {
-    const { tickets, agents, activeTicketId, closeTicket } = get();
-    const ticket = tickets.find((t) => t.id === ticketId);
-    if (!ticket) return;
-
-    // Close panel if this ticket is open
-    if (activeTicketId === ticketId) closeTicket();
-
-    // Kill the agent if one is running
-    if (ticket.agentId && agents[ticket.agentId]) {
-      await api.agents.kill(ticket.agentId).catch(() => {});
-    }
-
-    // Optimistic removal
-    set((s) => ({ tickets: s.tickets.filter((t) => t.id !== ticketId) }));
-
-    try {
-      await api.tickets.delete(ticketId);
-    } catch (err) {
-      // Rollback
-      set((s) => ({ tickets: [...s.tickets, ticket] }));
-      get().addNotification({ type: "error", message: `Delete failed: ${(err as Error).message}` });
-    }
+  getActiveTicket: () => {
+    const { activeTicketId, tickets } = get();
+    return activeTicketId ? (tickets.find((t) => t.id === activeTicketId) ?? null) : null;
   },
-
+  isConnected: false,
+  isCreateModalOpen: false,
+  isFetchingTickets: false,
   moveTicket: async (ticketId, newStatus) => {
     const prev = get().tickets.find((t) => t.id === ticketId);
-    if (!prev || prev.status === newStatus) return;
+    if (!prev || prev.status === newStatus) {
+      return;
+    }
 
     set((s) => ({
       tickets: s.tickets.map((t) =>
@@ -181,16 +206,39 @@ export const useStore = create<AppState>((set, get) => ({
       if (newStatus === "in-progress") {
         get().openTicket(ticketId);
       }
-    } catch (err) {
+    } catch (error) {
       set((s) => ({
         tickets: s.tickets.map((t) => (t.id === ticketId ? prev : t)),
       }));
-      get().addNotification({ type: "error", message: `Move failed: ${(err as Error).message}` });
+      get().addNotification({
+        type: "error",
+        message: `Move failed: ${(error as Error).message}`,
+      });
     }
   },
-
+  notifications: [],
+  openCreateModal: () => set({ isCreateModalOpen: true }),
+  openTicket: (ticketId) => {
+    set({ activeTicketId: ticketId });
+    navigateFn?.(`/agent/${ticketId}`);
+  },
+  remoteConfig: null,
+  removeTicket: (id) => set((s) => ({ tickets: s.tickets.filter((t) => t.id !== id) })),
+  setAcpState: (agentId, state) =>
+    set((s) => {
+      const current = s.acpStates[agentId];
+      if (current && current.updatedAt > state.updatedAt) {
+        return s;
+      }
+      return { acpStates: { ...s.acpStates, [agentId]: state } };
+    }),
   setAgent: (agent) => set((s) => ({ agents: { ...s.agents, [agent.id]: agent } })),
-
+  setAgentDiff: (agentId, diff) =>
+    set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
+  setConnected: (isConnected) => set({ isConnected }),
+  setCurrentBranch: (currentBranch) => set({ currentBranch }),
+  setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
+  tickets: [],
   updateAgent: (id, updates) =>
     set((s) => ({
       agents: {
@@ -198,50 +246,10 @@ export const useStore = create<AppState>((set, get) => ({
         ...(s.agents[id] ? { [id]: { ...s.agents[id], ...updates } } : {}),
       },
     })),
-
-  addNotification: (n) => {
-    const id = `notif-${++notifCounter}`;
-    const notif: AppNotification = { ...n, id, timestamp: Date.now() };
-    set((s) => ({ notifications: [notif, ...s.notifications].slice(0, 20) }));
-    if (n.type === "info" || n.type === "agent-done") {
-      setTimeout(() => get().dismissNotification(id), 5000);
-    }
-  },
-
-  dismissNotification: (id) =>
-    set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
-
-  openTicket: (ticketId) => {
-    set({ activeTicketId: ticketId });
-    _navigate?.(`/agent/${ticketId}`);
-  },
-  closeTicket: () => {
-    set({ activeTicketId: null });
-    _navigate?.("/");
-  },
-  openCreateModal: () => set({ isCreateModalOpen: true }),
-  closeCreateModal: () => set({ isCreateModalOpen: false }),
-  fetchBranches: async () => {
-    const id = ++branchFetchId;
-    try {
-      const { branches } = await api.remote.listBranches();
-      if (id === branchFetchId) set({ branches });
-    } catch {
-      // ignore transient errors
-    }
-  },
-
-  setConnected: (isConnected) => set({ isConnected }),
-  setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
-  setCurrentBranch: (currentBranch) => set({ currentBranch }),
-  setAgentDiff: (agentId, diff) =>
-    set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
-  setAcpState: (agentId, state) =>
-    set((s) => {
-      const current = s.acpStates[agentId];
-      if (current && current.updatedAt > state.updatedAt) return s;
-      return { acpStates: { ...s.acpStates, [agentId]: state } };
-    }),
+  updateTicket: (id, updates) =>
+    set((s) => ({
+      tickets: s.tickets.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    })),
 }));
 
 export const selectTicketsByStatus = (status: TicketStatus) => (s: AppState) =>

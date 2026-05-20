@@ -17,6 +17,7 @@
     "typecheck:frontend": "tsc --build src/frontend/tsconfig.json",
     "typecheck:backend": "tsc --build src/backend/tsconfig.json",
     "typecheck:common": "tsc --build src/common/tsconfig.json",
+    "test": "bun test",
     "typecheck": "tsc --build",
     "check": "oxfmt --check . && oxlint .",
     "lint": "oxlint .",

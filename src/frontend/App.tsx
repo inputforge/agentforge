@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Route, Routes, useNavigate } from "react-router-dom";
+
 import { CreateTicketModal } from "./components/CreateTicketModal";
 import { IntegrationsModal } from "./components/IntegrationsModal";
 import { KanbanBoard } from "./components/kanban-board/KanbanBoard";
-import { ShellTerminal } from "./components/ShellTerminal";
 import { Header } from "./components/layout/Header";
 import { NotificationToast } from "./components/NotificationToast";
+import { ShellTerminal } from "./components/ShellTerminal";
 import { SessionSocketProvider } from "./hooks/useSessionSocket";
 import { AgentPage } from "./pages/AgentPage";
 import { registerNavigate, useStore } from "./store";

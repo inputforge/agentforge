@@ -1,5 +1,7 @@
-import { watch, type FSWatcher } from "fs";
-import { join } from "path";
+import { watch } from "node:fs";
+import type { FSWatcher } from "node:fs";
+import { join } from "node:path";
+
 import type { DiffResult } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
@@ -45,17 +47,21 @@ class GitWatcher {
     this.watchers.get(key)?.close();
     try {
       const w = watch(dir, { recursive }, (_evt, filename) => {
-        if (filename) onFile(filename.replace(/\\/g, "/"));
+        if (filename) {
+          onFile(filename.replaceAll(/\\/g, "/"));
+        }
       });
       this.watchers.set(key, w);
-    } catch (err) {
-      log.warn("watch failed", { dir, recursive, ...errorMeta(err) });
+    } catch (error) {
+      log.warn("watch failed", { dir, recursive, ...errorMeta(error) });
     }
   }
 
   watchWorktree(agentId: string, worktreePath: string, baseBranch: string): void {
     this.addWatcher(`worktree:${agentId}`, worktreePath, true, (filename) => {
-      if (filename.startsWith(".git")) return;
+      if (filename.startsWith(".git")) {
+        return;
+      }
       this.debounce(`diff:${agentId}`, () => this.pushDiff(agentId, worktreePath, baseBranch), 800);
     });
   }
@@ -71,9 +77,13 @@ class GitWatcher {
   }
 
   stop(): void {
-    for (const w of this.watchers.values()) w.close();
+    for (const w of this.watchers.values()) {
+      w.close();
+    }
     this.watchers.clear();
-    for (const t of this.debounceTimers.values()) clearTimeout(t);
+    for (const t of this.debounceTimers.values()) {
+      clearTimeout(t);
+    }
     this.debounceTimers.clear();
     this.gitManager = null;
   }
@@ -92,16 +102,18 @@ class GitWatcher {
 
   private async pushBranch(): Promise<void> {
     const git = this.git();
-    if (!git) return;
+    if (!git) {
+      return;
+    }
     try {
       const branch = await git.currentBranch();
-      this.broadcast?.({ type: "branch-updated", branch });
-    } catch (err) {
-      log.debug("pushBranch error", errorMeta(err));
+      this.broadcast?.({ branch, type: "branch-updated" });
+    } catch (error) {
+      log.debug("pushBranch error", errorMeta(error));
     }
   }
 
-  private async onRefChanged(branchName: string): Promise<void> {
+  private onRefChanged(branchName: string): Promise<void> {
     const agents = agentStmts.listRunning.all();
     for (const agent of agents) {
       if (agent.branch === branchName || agent.baseBranch === branchName) {
@@ -116,18 +128,22 @@ class GitWatcher {
 
   private async pushDiff(agentId: string, worktreePath: string, baseBranch: string): Promise<void> {
     const git = this.git();
-    if (!git) return;
+    if (!git) {
+      return;
+    }
     try {
       const diff: DiffResult = await git.getDiff(worktreePath, baseBranch);
-      this.broadcast?.({ type: "diff-updated", agentId, diff });
-    } catch (err) {
-      log.debug("pushDiff error", { agentId, ...errorMeta(err) });
+      this.broadcast?.({ agentId, diff, type: "diff-updated" });
+    } catch (error) {
+      log.debug("pushDiff error", { agentId, ...errorMeta(error) });
     }
   }
 
   private debounce(key: string, fn: () => void, ms: number): void {
     const existing = this.debounceTimers.get(key);
-    if (existing) clearTimeout(existing);
+    if (existing) {
+      clearTimeout(existing);
+    }
     this.debounceTimers.set(
       key,
       setTimeout(() => {

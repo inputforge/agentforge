@@ -36,7 +36,9 @@ export class MigrationRunner {
     );
 
     for (const migration of migrations) {
-      if (applied.has(migration.name)) continue;
+      if (applied.has(migration.name)) {
+        continue;
+      }
       this.adapter.transaction(() => {
         migration.up(this.adapter);
         this.adapter.run(

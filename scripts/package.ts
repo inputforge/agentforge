@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 
 const projectRoot = join(import.meta.dir, "..");
 const distDir = join(projectRoot, "dist");
@@ -23,14 +23,16 @@ await Promise.all(
   found.map(async (rel) => {
     const [dir] = rel.split("/");
     const target = dir;
-    if (target === "native") return;
+    if (target === "native") {
+      return;
+    }
     const zipName = `agentforge-${target}.zip`;
     const zipPath = join(pkgDir, zipName);
     const executable = join(distDir, rel);
 
     const proc = Bun.spawn(["zip", "-j", zipPath, executable, ...staticFiles], {
-      stdout: "pipe",
       stderr: "pipe",
+      stdout: "pipe",
     });
     const exitCode = await proc.exited;
     if (exitCode !== 0) {

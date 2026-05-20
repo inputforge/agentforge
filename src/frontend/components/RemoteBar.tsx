@@ -1,14 +1,21 @@
 import { SiBitbucket, SiGit, SiGithub, SiGitlab } from "@icons-pack/react-simple-icons";
 import { GitBranch } from "lucide-react";
 import { useEffect } from "react";
+
 import { api } from "../lib/api";
 import { useStore } from "../store";
 
 function repoIcon(url: string) {
-  const props = { size: 12, className: "flex-shrink-0" };
-  if (/github\.com/i.test(url)) return <SiGithub {...props} />;
-  if (/gitlab\.com/i.test(url)) return <SiGitlab {...props} />;
-  if (/bitbucket\.(org|com)/i.test(url)) return <SiBitbucket {...props} />;
+  const props = { className: "flex-shrink-0", size: 12 };
+  if (/github\.com/i.test(url)) {
+    return <SiGithub {...props} />;
+  }
+  if (/gitlab\.com/i.test(url)) {
+    return <SiGitlab {...props} />;
+  }
+  if (/bitbucket\.(org|com)/i.test(url)) {
+    return <SiBitbucket {...props} />;
+  }
   return <SiGit {...props} />;
 }
 
@@ -19,13 +26,16 @@ function parseRepo(url: string): { label: string; href?: string } {
     if (ssh) {
       const [, host, path] = ssh;
       const isKnown = /github\.com|gitlab\.com|bitbucket\.(org|com)/i.test(host);
-      return { label: path, href: isKnown ? `https://${host}/${path}` : undefined };
+      return {
+        href: isKnown ? `https://${host}/${path}` : undefined,
+        label: path,
+      };
     }
     const parsed = new URL(url);
     const label = parsed.pathname.replace(/^\//, "").replace(/\.git$/, "");
     const isKnown = /github\.com|gitlab\.com|bitbucket\.(org|com)/i.test(parsed.hostname);
     const href = isKnown ? `https://${parsed.host}/${label}` : undefined;
-    return { label, href };
+    return { href, label };
   } catch {
     return { label: url };
   }
@@ -38,18 +48,26 @@ export function RemoteBar() {
     api.remote
       .getConfig()
       .then((cfg) => {
-        if (cfg) setRemoteConfig(cfg);
+        if (cfg) {
+          setRemoteConfig(cfg);
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        /* empty */
+      });
   }, [setRemoteConfig]);
 
   // Fetch initial branch once; subsequent updates come via WS push
   useEffect(() => {
-    if (!remoteConfig) return;
+    if (!remoteConfig) {
+      return;
+    }
     api.remote
       .getBranch()
       .then(({ branch }) => setCurrentBranch(branch))
-      .catch(() => {});
+      .catch(() => {
+        /* empty */
+      });
   }, [remoteConfig, setCurrentBranch]);
 
   if (!remoteConfig) {

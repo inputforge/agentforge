@@ -24,9 +24,6 @@
     "react/no-array-index-key": "off",
     "react/jsx-key": "error",
     "react/no-direct-mutation-state": "error",
-    "react-perf/jsx-no-new-object-as-prop": "warn",
-    "react-perf/jsx-no-new-array-as-prop": "warn",
-    "react-perf/jsx-no-new-function-as-prop": "warn",
 
     // Unicorn — disable noisy ones
     "unicorn/filename-case": "off",

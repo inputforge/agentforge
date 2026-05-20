@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { join } from "path";
+import { join } from "node:path";
+
 import type { CodexStatus } from "../../common/types.ts";
 
 const projectRoot = join(import.meta.dir, "../../..");
@@ -7,11 +8,13 @@ const projectRoot = join(import.meta.dir, "../../..");
 export class CodexService {
   resolveBinaryPath(): string {
     const local = join(projectRoot, "node_modules/.bin/codex-acp");
-    if (existsSync(local)) return local;
+    if (existsSync(local)) {
+      return local;
+    }
     return "codex-acp";
   }
 
-  async getStatus(): Promise<CodexStatus> {
+  getStatus(): Promise<CodexStatus> {
     const command = this.resolveBinaryPath();
     let installed: boolean;
     let binaryPath: string | null;
@@ -26,17 +29,17 @@ export class CodexService {
     }
 
     return {
-      installed,
-      authenticated: installed,
-      ready: installed,
-      command,
-      binaryPath,
-      version: null,
       authMethod: null,
-      loginStatusText: null,
+      authenticated: installed,
+      binaryPath,
+      command,
       error: installed
         ? null
         : "codex-acp is not installed. Run `bun add @zed-industries/codex-acp`.",
+      installed,
+      loginStatusText: null,
+      ready: installed,
+      version: null,
     };
   }
 }

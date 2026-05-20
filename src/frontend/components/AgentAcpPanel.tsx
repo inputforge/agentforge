@@ -17,6 +17,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type { ChangeEvent, ComponentProps, KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type { AcpMessage, AcpToolCall, AcpTurnStatus, AcpPlanStep } from "../types";
@@ -51,8 +52,21 @@ function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTur
 const mdRemarkPlugins = [remarkGfm];
 
 const mdComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
-  p: ({ children }) => <p className="text-xs leading-relaxed text-forge-text my-1">{children}</p>,
-  pre: ({ children }) => <>{children}</>,
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-forge-accent underline underline-offset-2"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-forge-accent/30 pl-3 my-1 text-forge-text-dim text-xs">
+      {children}
+    </blockquote>
+  ),
   code: ({ className, children }) => {
     const lang = /language-(\w+)/.exec(className ?? "")?.[1];
     if (lang) {
@@ -71,36 +85,23 @@ const mdComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
       <code className="font-mono text-xs text-forge-green bg-forge-surface px-1">{children}</code>
     );
   },
-  ul: ({ children }) => (
-    <ul className="text-xs text-forge-text list-disc list-inside my-1 space-y-0.5">{children}</ul>
-  ),
+  em: ({ children }) => <em className="text-forge-text-dim italic">{children}</em>,
+  h1: ({ children }) => <h1 className="text-sm font-mono text-forge-accent my-2">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-xs font-mono text-forge-accent my-2">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-xs font-mono text-forge-text-dim my-1">{children}</h3>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
   ol: ({ children }) => (
     <ol className="text-xs text-forge-text list-decimal list-inside my-1 space-y-0.5">
       {children}
     </ol>
   ),
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  h1: ({ children }) => <h1 className="text-sm font-mono text-forge-accent my-2">{children}</h1>,
-  h2: ({ children }) => <h2 className="text-xs font-mono text-forge-accent my-2">{children}</h2>,
-  h3: ({ children }) => <h3 className="text-xs font-mono text-forge-text-dim my-1">{children}</h3>,
+  p: ({ children }) => <p className="text-xs leading-relaxed text-forge-text my-1">{children}</p>,
+  pre: ({ children }) => <>{children}</>,
   strong: ({ children }) => (
     <strong className="text-forge-text-bright font-mono">{children}</strong>
   ),
-  em: ({ children }) => <em className="text-forge-text-dim italic">{children}</em>,
-  blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-forge-accent/30 pl-3 my-1 text-forge-text-dim text-xs">
-      {children}
-    </blockquote>
-  ),
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="text-forge-accent underline underline-offset-2"
-    >
-      {children}
-    </a>
+  ul: ({ children }) => (
+    <ul className="text-xs text-forge-text list-disc list-inside my-1 space-y-0.5">{children}</ul>
   ),
 };
 
@@ -175,15 +176,27 @@ function StatusBadge({ status }: { status: AcpTurnStatus }) {
     AcpTurnStatus,
     { label: string; dotClass: string; labelClass: string; dot?: string }
   > = {
-    idle: { label: "IDLE", dotClass: "bg-forge-text-dim", labelClass: "text-forge-text-dim" },
-    running: {
-      label: "RUNNING",
-      dotClass: "bg-forge-blue",
-      labelClass: "text-forge-blue",
-      dot: "animate-status-blink",
+    completed: {
+      dotClass: "bg-forge-green",
+      label: "DONE",
+      labelClass: "text-forge-green",
     },
-    completed: { label: "DONE", dotClass: "bg-forge-green", labelClass: "text-forge-green" },
-    failed: { label: "FAILED", dotClass: "bg-forge-red", labelClass: "text-forge-red" },
+    failed: {
+      dotClass: "bg-forge-red",
+      label: "FAILED",
+      labelClass: "text-forge-red",
+    },
+    idle: {
+      dotClass: "bg-forge-text-dim",
+      label: "IDLE",
+      labelClass: "text-forge-text-dim",
+    },
+    running: {
+      dot: "animate-status-blink",
+      dotClass: "bg-forge-blue",
+      label: "RUNNING",
+      labelClass: "text-forge-blue",
+    },
   };
   const c = config[status] ?? config.idle;
   return (
@@ -198,16 +211,21 @@ function toolKindIcon(kind: string) {
   switch (kind) {
     case "edit":
     case "delete":
-    case "move":
+    case "move": {
       return FileText;
-    case "execute":
+    }
+    case "execute": {
       return Terminal;
-    case "search":
+    }
+    case "search": {
       return Search;
-    case "fetch":
+    }
+    case "fetch": {
       return Globe;
-    default:
+    }
+    default: {
       return Terminal;
+    }
   }
 }
 
@@ -258,7 +276,9 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
 }
 
 function PlanPanel({ plan }: { plan: AcpPlanStep[] }) {
-  if (plan.length === 0) return null;
+  if (plan.length === 0) {
+    return null;
+  }
   return (
     <div className="mx-4 mt-3 mb-1 border border-forge-border bg-forge-panel/50">
       <div className="px-3 py-1.5 border-b border-forge-border">
@@ -332,46 +352,56 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     api.agents
       .getAcpState(agentId)
       .then((state) => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setAcpState(agentId, state);
         setTurns((existing) => mergeTurns(state.userMessages, existing));
       })
-      .catch((err: Error) => addNotification({ type: "error", message: err.message }));
+      .catch((error: Error) => addNotification({ message: error.message, type: "error" }));
     return () => {
       cancelled = true;
     };
   }, [agentId, setAcpState, addNotification]);
 
   useEffect(() => {
-    if (!acpState?.userMessages.length) return;
+    if (!acpState?.userMessages.length) {
+      return;
+    }
     setTurns((existing) => mergeTurns(acpState.userMessages, existing));
   }, [acpState?.userMessages]);
 
   const hasCurrentTurnMessages = useMemo(() => {
-    if (!isRunning || turns.length === 0) return false;
-    return allMessages.length > turns[turns.length - 1].agentStartIndex;
+    if (!isRunning || turns.length === 0) {
+      return false;
+    }
+    return allMessages.length > turns.at(-1).agentStartIndex;
   }, [isRunning, turns, allMessages.length]);
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     el.scrollTop = el.scrollHeight;
   }, [allMessages, isRunning, toolCalls.length]);
 
   const handleSend = useCallback(async () => {
     const value = input.trim();
-    if (!value) return;
+    if (!value) {
+      return;
+    }
     setIsSending(true);
 
     const agentStartIndex = allMessages.length;
     const clientId = `turn-${Date.now()}`;
-    setTurns((prev) => [...prev, { id: clientId, userText: value, agentStartIndex, clientId }]);
+    setTurns((prev) => [...prev, { agentStartIndex, clientId, id: clientId, userText: value }]);
     setInput("");
 
     try {
       await api.agents.sendInput(agentId, value, clientId);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
       setTurns((prev) => prev.filter((t) => t.clientId !== clientId));
       setInput(value);
       textareaRef.current?.focus();
@@ -384,8 +414,8 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     setIsStopping(true);
     try {
       await api.agents.interrupt(agentId);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsStopping(false);
     }
@@ -406,7 +436,7 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     [],
   );
 
-  const lastMessageId = allMessages[allMessages.length - 1]?.id;
+  const lastMessageId = allMessages.at(-1)?.id;
 
   type TimelineItem =
     | { kind: "message"; data: AcpMessage; seq: number }
@@ -414,10 +444,14 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
 
   const timeline = useMemo((): TimelineItem[] => {
     const items: TimelineItem[] = [
-      ...allMessages.map((m, i) => ({ kind: "message" as const, data: m, seq: m.seq ?? i * 2 })),
+      ...allMessages.map((m, i) => ({
+        data: m,
+        kind: "message" as const,
+        seq: m.seq ?? i * 2,
+      })),
       ...toolCalls.map((tc, i) => ({
-        kind: "toolCall" as const,
         data: tc,
+        kind: "toolCall" as const,
         seq: tc.seq ?? allMessages.length * 2 + i * 2 + 1,
       })),
     ];
@@ -430,7 +464,9 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     const map = new Map<string, string>();
     for (const turn of turns) {
       const boundary = allMessages[turn.agentStartIndex];
-      if (boundary) map.set(boundary.id, turn.userText);
+      if (boundary) {
+        map.set(boundary.id, turn.userText);
+      }
     }
     return map;
   }, [turns, allMessages]);

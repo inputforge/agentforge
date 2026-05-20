@@ -1,8 +1,9 @@
 import { Hono } from "hono";
+
 import { integrationStmts, remoteStmts } from "../db/index.ts";
 import { logger } from "../lib/logger.ts";
-import { GitHubService } from "../services/GitHubService.ts";
 import { codexService } from "../services/CodexService.ts";
+import { GitHubService } from "../services/GitHubService.ts";
 import { globalConfig } from "../services/GlobalConfigService.ts";
 import { LinearService } from "../services/LinearService.ts";
 
@@ -11,7 +12,9 @@ const log = logger.child("integrations");
 function parseGitHubOwnerRepo(repoUrl: string): { owner: string; repo: string } | null {
   // SSH: git@github.com:owner/repo.git
   const ssh = repoUrl.match(/^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?$/i);
-  if (ssh) return { owner: ssh[1], repo: ssh[2] };
+  if (ssh) {
+    return { owner: ssh[1], repo: ssh[2] };
+  }
   // HTTPS: https://github.com/owner/repo
   try {
     const u = new URL(repoUrl);
@@ -20,7 +23,9 @@ function parseGitHubOwnerRepo(repoUrl: string): { owner: string; repo: string } 
         .replace(/^\//, "")
         .replace(/\.git$/, "")
         .split("/");
-      if (parts.length >= 2) return { owner: parts[0], repo: parts[1] };
+      if (parts.length >= 2) {
+        return { owner: parts[0], repo: parts[1] };
+      }
     }
   } catch {}
   return null;
@@ -31,8 +36,8 @@ export const integrationsRouter = new Hono();
 integrationsRouter.get("/codex/status", async (c) => {
   try {
     return c.json(await codexService.getStatus());
-  } catch (err) {
-    log.error("codex status probe failed", { error: (err as Error).message });
+  } catch (error) {
+    log.error("codex status probe failed", { error: (error as Error).message });
     return c.json({ error: "Failed to check Codex status." }, 502);
   }
 });
@@ -63,7 +68,9 @@ integrationsRouter.post("/:provider/config", async (c) => {
   const provider = c.req.param("provider") as "github" | "linear";
   const body = await c.req.json<Record<string, string>>();
   for (const [key, value] of Object.entries(body)) {
-    if (!value) continue;
+    if (!value) {
+      continue;
+    }
     if (key === "pat") {
       globalConfig.setPat(provider, value);
     } else {
@@ -91,18 +98,22 @@ integrationsRouter.delete("/:provider/config", (c) => {
 
 integrationsRouter.get("/github/issues", async (c) => {
   const pat = globalConfig.getPat("github");
-  if (!pat) return c.json({ error: "GitHub not configured" }, 400);
+  if (!pat) {
+    return c.json({ error: "GitHub not configured" }, 400);
+  }
   const config = integrationStmts.getAll("github");
-  if (!config.owner || !config.repo) return c.json({ error: "GitHub owner/repo not set" }, 400);
+  if (!config.owner || !config.repo) {
+    return c.json({ error: "GitHub owner/repo not set" }, 400);
+  }
 
   const svc = new GitHubService(pat, config.owner, config.repo);
   try {
     const state = (c.req.query("state") as "open" | "closed" | "all") ?? "open";
     const issues = await svc.listIssues(state);
     return c.json(issues);
-  } catch (err) {
-    log.error("github list issues failed", { error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
+  } catch (error) {
+    log.error("github list issues failed", { error: (error as Error).message });
+    return c.json({ error: (error as Error).message }, 502);
   }
 });
 
@@ -110,29 +121,33 @@ integrationsRouter.get("/github/issues", async (c) => {
 
 integrationsRouter.get("/linear/teams", async (c) => {
   const pat = globalConfig.getPat("linear");
-  if (!pat) return c.json({ error: "Linear not configured" }, 400);
+  if (!pat) {
+    return c.json({ error: "Linear not configured" }, 400);
+  }
 
   const svc = new LinearService(pat);
   try {
     const teams = await svc.listTeams();
     return c.json(teams);
-  } catch (err) {
-    log.error("linear list teams failed", { error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
+  } catch (error) {
+    log.error("linear list teams failed", { error: (error as Error).message });
+    return c.json({ error: (error as Error).message }, 502);
   }
 });
 
 integrationsRouter.get("/linear/issues", async (c) => {
   const pat = globalConfig.getPat("linear");
-  if (!pat) return c.json({ error: "Linear not configured" }, 400);
+  if (!pat) {
+    return c.json({ error: "Linear not configured" }, 400);
+  }
   const config = integrationStmts.getAll("linear");
 
   const svc = new LinearService(pat);
   try {
     const issues = await svc.listIssues(config.teamId ?? undefined);
     return c.json(issues);
-  } catch (err) {
-    log.error("linear list issues failed", { error: (err as Error).message });
-    return c.json({ error: (err as Error).message }, 502);
+  } catch (error) {
+    log.error("linear list issues failed", { error: (error as Error).message });
+    return c.json({ error: (error as Error).message }, 502);
   }
 });

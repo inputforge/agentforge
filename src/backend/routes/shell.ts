@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { Hono } from "hono";
-import { randomUUID } from "crypto";
+
 import { remoteStmts } from "../db/index.ts";
 import { shellSessionManager } from "../services/ShellSessionManager.ts";
 import { clearShellScrollback } from "../ws/hub.ts";
@@ -16,7 +18,7 @@ shellRouter.post("/", (c) => {
     clearShellScrollback(id);
   });
 
-  return c.json({ id: sessionId, cwd });
+  return c.json({ cwd, id: sessionId });
 });
 
 shellRouter.delete("/:id", (c) => {

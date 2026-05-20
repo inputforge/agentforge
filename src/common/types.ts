@@ -99,7 +99,9 @@ export interface DiffComment {
   id: string;
   agentId: string;
   filePath: string;
-  lineNumber: number;
+  side: "additions" | "deletions";
+  startLine: number;
+  endLine: number;
   content: string;
   createdAt: number;
 }

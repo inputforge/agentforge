@@ -21,8 +21,8 @@ export class GitHubService {
     const res = await fetch(`https://api.github.com${path}`, {
       ...init,
       headers: {
-        Authorization: `Bearer ${this.pat}`,
         Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${this.pat}`,
         "X-GitHub-Api-Version": "2022-11-28",
         ...init?.headers,
       },
@@ -41,15 +41,15 @@ export class GitHubService {
     return data
       .filter((issue) => !issue.pull_request)
       .map((issue) => ({
-        number: issue.number as number,
-        title: issue.title as string,
-        body: (issue.body as string | null) ?? "",
-        state: issue.state as "open" | "closed",
-        url: issue.html_url as string,
-        labels: (issue.labels as { name: string }[]).map((l) => l.name),
         assignees: (issue.assignees as { login: string }[]).map((a) => a.login),
+        body: (issue.body as string | null) ?? "",
         createdAt: issue.created_at as string,
+        labels: (issue.labels as { name: string }[]).map((l) => l.name),
+        number: issue.number as number,
+        state: issue.state as "open" | "closed",
+        title: issue.title as string,
         updatedAt: issue.updated_at as string,
+        url: issue.html_url as string,
       }));
   }
 
@@ -59,15 +59,15 @@ export class GitHubService {
         `/repos/${this.owner}/${this.repo}/issues/${number}`,
       );
       return {
-        number: issue.number as number,
-        title: issue.title as string,
-        body: (issue.body as string | null) ?? "",
-        state: issue.state as "open" | "closed",
-        url: issue.html_url as string,
-        labels: (issue.labels as { name: string }[]).map((l) => l.name),
         assignees: (issue.assignees as { login: string }[]).map((a) => a.login),
+        body: (issue.body as string | null) ?? "",
         createdAt: issue.created_at as string,
+        labels: (issue.labels as { name: string }[]).map((l) => l.name),
+        number: issue.number as number,
+        state: issue.state as "open" | "closed",
+        title: issue.title as string,
         updatedAt: issue.updated_at as string,
+        url: issue.html_url as string,
       };
     } catch {
       return null;

@@ -1,56 +1,69 @@
 import { ChevronRight, GitBranch, Plus, X } from "lucide-react";
 import { useCallback, useState } from "react";
+
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, Ticket } from "../types";
+import type { AgentType, Ticket, TicketStatus } from "../types";
 
-const AGENTS: { type: AgentType; label: string; sub: string; command: string }[] = [
-  {
-    type: "claude-code",
-    label: "CLAUDE",
-    sub: "Anthropic · claude-agent-acp",
-    command: "claude-agent-acp",
-  },
-  {
-    type: "codex",
-    label: "CODEX",
-    sub: "OpenAI · codex-acp",
-    command: "codex-acp",
-  },
+const AGENTS: { type: AgentType; label: string; command: string }[] = [
+  { command: "claude-agent-acp", label: "CLAUDE", type: "claude-code" },
+  { command: "codex-acp", label: "CODEX", type: "codex" },
 ];
 
-interface AgentButtonProps {
-  a: (typeof AGENTS)[number];
-  launching: AgentType | null;
-  disabled?: boolean;
-  reason?: string | null;
-  onLaunch: (type: AgentType) => void;
+const STATUS_STYLES: Record<TicketStatus, { dot: string; text: string; label: string }> = {
+  backlog: {
+    dot: "bg-forge-text-muted",
+    label: "Backlog",
+    text: "text-forge-text-dim",
+  },
+  done: { dot: "bg-forge-green", label: "Done", text: "text-forge-green" },
+  "in-progress": {
+    dot: "bg-forge-blue",
+    label: "In Progress",
+    text: "text-forge-blue",
+  },
+  review: { dot: "bg-amber-400", label: "In Review", text: "text-amber-400" },
+};
+
+function formatDate(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-function AgentButton({ a, launching, disabled, reason, onLaunch }: AgentButtonProps) {
-  const handleClick = useCallback(() => onLaunch(a.type), [a.type, onLaunch]);
+function AgentLaunchButton({
+  agent,
+  launching,
+  onLaunch,
+}: {
+  agent: { type: AgentType; label: string; command: string };
+  launching: AgentType | null;
+  onLaunch: (type: AgentType) => void;
+}) {
+  const handleClick = useCallback(() => onLaunch(agent.type), [agent.type, onLaunch]);
   return (
     <button
-      className="w-full forge-surface border border-forge-border hover:border-forge-accent group transition-colors p-4 text-left disabled:opacity-40"
+      className="w-full flex items-center justify-between px-3 py-2.5 border border-forge-border bg-forge-black hover:border-forge-accent group transition-colors disabled:opacity-40"
       onClick={handleClick}
-      disabled={!!launching || disabled}
+      disabled={!!launching}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-forge-text-bright text-sm uppercase tracking-widest group-hover:text-forge-accent transition-colors">
-          {launching === a.type ? "LAUNCHING..." : a.label}
+      <div className="flex items-center gap-2.5">
+        <span className="text-xs font-mono text-forge-text-dim group-hover:text-forge-accent transition-colors uppercase tracking-widest">
+          {launching === agent.type ? "Launching…" : agent.label}
         </span>
-        {launching === a.type ? (
-          <span className="status-dot-running" />
-        ) : (
-          <ChevronRight
-            size={15}
-            className="text-forge-text-muted group-hover:text-forge-accent transition-colors"
-          />
-        )}
+        <span className="text-[10px] text-forge-text-muted font-mono">{agent.command}</span>
       </div>
-      <p className="text-forge-text-muted text-xs mt-1 font-mono">{a.command}</p>
-      <p className="text-forge-text-dim text-xs mt-0.5">{a.sub.split(" · ")[0]}</p>
-      {reason && <p className="text-amber-300 text-[10px] mt-2">{reason}</p>}
+      {launching === agent.type ? (
+        <span className="status-dot-running" />
+      ) : (
+        <ChevronRight
+          size={13}
+          className="text-forge-text-muted group-hover:text-forge-accent transition-colors"
+        />
+      )}
     </button>
   );
 }
@@ -67,11 +80,12 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
       setLaunching(type);
       try {
         const { ticket: updatedTicket, agent } = await api.tickets.spawn(ticket.id, type, custom);
-        // Apply immediately — don't wait for the WS round-trip
         updateTicket(updatedTicket.id, updatedTicket);
-        if (agent) setAgent(agent);
-      } catch (err) {
-        addNotification({ type: "error", message: (err as Error).message });
+        if (agent) {
+          setAgent(agent);
+        }
+      } catch (error) {
+        addNotification({ message: (error as Error).message, type: "error" });
         setLaunching(null);
       }
     },
@@ -84,26 +98,36 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
 
   const handleCustomKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && customCmd.trim()) launch("custom", customCmd.trim());
+      if (e.key === "Enter" && customCmd.trim()) {
+        launch("custom", customCmd.trim());
+      }
     },
     [customCmd, launch],
   );
 
   const handleCustomLaunch = useCallback(() => {
-    if (customCmd.trim()) launch("custom", customCmd.trim());
+    if (customCmd.trim()) {
+      launch("custom", customCmd.trim());
+    }
   }, [customCmd, launch]);
+
+  const handleShowCustom = useCallback(() => setShowCustom(true), []);
+  const handleHideCustom = useCallback(() => setShowCustom(false), []);
 
   const handleBaseBranchChange = useCallback(
     async (e: React.ChangeEvent<HTMLSelectElement>) => {
       const nextBranch = e.target.value;
-      if (!nextBranch || nextBranch === ticket.baseBranch) return;
-
+      if (!nextBranch || nextBranch === ticket.baseBranch) {
+        return;
+      }
       setIsUpdatingBaseBranch(true);
       try {
         const result = await api.tickets.updateBaseBranch(ticket.id, nextBranch);
-        if (result.ticket) updateTicket(result.ticket.id, result.ticket);
-      } catch (err) {
-        addNotification({ type: "error", message: (err as Error).message });
+        if (result.ticket) {
+          updateTicket(result.ticket.id, result.ticket);
+        }
+      } catch (error) {
+        addNotification({ message: (error as Error).message, type: "error" });
       } finally {
         setIsUpdatingBaseBranch(false);
       }
@@ -111,61 +135,117 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
     [ticket.id, ticket.baseBranch, updateTicket, addNotification],
   );
 
-  const handleHideCustom = useCallback(() => setShowCustom(false), []);
-  const handleShowCustom = useCallback(() => setShowCustom(true), []);
+  const status = STATUS_STYLES[ticket.status];
 
   return (
     <div className="flex flex-col h-full border-l border-forge-border bg-forge-black animate-slide-in-right">
-      {/* Header */}
+      {/* Slim header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-forge-border bg-forge-panel flex-shrink-0">
-        <span className="text-forge-text-dim text-xs uppercase tracking-widest">LAUNCH AGENT</span>
+        <div className="flex items-center gap-2">
+          <span className={`inline-block w-1.5 h-1.5 rounded-full ${status.dot}`} />
+          <span className={`text-xs font-mono uppercase tracking-widest ${status.text}`}>
+            {status.label}
+          </span>
+        </div>
         <button className="forge-btn-ghost py-0.5 px-2" onClick={onClose}>
           <X size={13} />
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
-        {/* Ticket context */}
-        <div className="w-full max-w-md forge-panel p-4">
-          <p className="forge-label mb-1">TICKET</p>
-          <p className="text-forge-text-bright text-sm font-medium">{ticket.title}</p>
-          {ticket.description && (
-            <p className="text-forge-text-dim text-xs mt-1 leading-relaxed">{ticket.description}</p>
-          )}
-          {branches.length > 0 && (
-            <div className="mt-4 flex items-center gap-2">
-              <GitBranch size={12} className="text-forge-text-dim" />
-              <select
-                className="forge-input w-auto min-w-[160px] py-1 px-2 text-xs"
-                value={ticket.baseBranch ?? remoteConfig?.baseBranch ?? branches[0]?.name ?? ""}
-                onChange={handleBaseBranchChange}
-                disabled={isUpdatingBaseBranch}
-                title="Select the branch this ticket should commit and merge into"
-              >
-                {branches.map((branch) => (
-                  <option key={branch.name} value={branch.name}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+      {/* Scrollable issue body */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Title block */}
+        <div className="px-6 pt-6 pb-4">
+          <h1 className="text-forge-text-bright text-xl font-semibold leading-snug tracking-tight">
+            {ticket.title}
+          </h1>
         </div>
 
-        {/* Agent buttons */}
-        <div className="w-full max-w-md flex flex-col gap-3">
-          <p className="forge-label text-center">SELECT AGENT</p>
+        {/* Divider */}
+        <div className="mx-6 border-t border-forge-border" />
 
+        {/* Description */}
+        {ticket.description ? (
+          <div className="px-6 py-4">
+            <p className="text-forge-text-dim text-sm leading-relaxed whitespace-pre-wrap">
+              {ticket.description}
+            </p>
+          </div>
+        ) : (
+          <div className="px-6 py-4">
+            <p className="text-forge-text-muted text-xs italic">No description provided.</p>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div className="mx-6 border-t border-forge-border" />
+
+        {/* Metadata */}
+        <div className="px-6 py-4 flex flex-col gap-3">
+          {/* Base branch */}
+          <div className="flex items-start gap-3">
+            <span className="text-forge-text-muted text-xs w-24 flex-shrink-0 pt-0.5 uppercase tracking-widest">
+              Target
+            </span>
+            {branches.length > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <GitBranch size={11} className="text-forge-text-dim flex-shrink-0" />
+                <select
+                  className="forge-input w-auto py-0.5 px-2 text-xs"
+                  value={ticket.baseBranch ?? remoteConfig?.baseBranch ?? branches[0]?.name ?? ""}
+                  onChange={handleBaseBranchChange}
+                  disabled={isUpdatingBaseBranch}
+                  title="Select the branch this ticket should merge into"
+                >
+                  {branches.map((b) => (
+                    <option key={b.name} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <span className="text-forge-text-dim text-xs font-mono">
+                {ticket.baseBranch ?? remoteConfig?.baseBranch ?? "—"}
+              </span>
+            )}
+          </div>
+
+          {/* Branch (if set) */}
+          {ticket.branch && (
+            <div className="flex items-start gap-3">
+              <span className="text-forge-text-muted text-xs w-24 flex-shrink-0 pt-0.5 uppercase tracking-widest">
+                Branch
+              </span>
+              <span className="text-forge-accent text-xs font-mono">{ticket.branch}</span>
+            </div>
+          )}
+
+          {/* Created date */}
+          <div className="flex items-start gap-3">
+            <span className="text-forge-text-muted text-xs w-24 flex-shrink-0 uppercase tracking-widest">
+              Created
+            </span>
+            <span className="text-forge-text-dim text-xs">{formatDate(ticket.createdAt)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Agent launcher — pinned to bottom */}
+      <div className="flex-shrink-0 border-t border-forge-border bg-forge-panel px-4 py-4">
+        <p className="forge-label mb-3">Start with</p>
+
+        <div className="flex flex-col gap-2">
           {AGENTS.map((a) => (
-            <AgentButton key={a.type} a={a} launching={launching} onLaunch={launch} />
+            <AgentLaunchButton key={a.type} agent={a} launching={launching} onLaunch={launch} />
           ))}
 
           {/* Custom command */}
           {showCustom ? (
-            <div className="forge-surface border border-forge-border p-4 flex flex-col gap-2">
-              <label className="forge-label">CUSTOM COMMAND</label>
+            <div className="border border-forge-border bg-forge-black p-3 flex flex-col gap-2">
+              <label className="forge-label text-[10px]">Custom command</label>
               <input
-                className="forge-input"
+                className="forge-input text-xs py-1.5"
                 placeholder="e.g. aider --yes-always"
                 value={customCmd}
                 onChange={handleCustomCmdChange}
@@ -174,25 +254,25 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
               />
               <div className="flex gap-2">
                 <button
-                  className="forge-btn-primary py-1 px-4 flex-1"
+                  className="forge-btn-primary py-1 px-3 flex-1 text-xs"
                   onClick={handleCustomLaunch}
                   disabled={!!launching || !customCmd.trim()}
                 >
-                  {launching === "custom" ? "LAUNCHING..." : "LAUNCH"}
+                  {launching === "custom" ? "Launching…" : "Launch"}
                 </button>
-                <button className="forge-btn-ghost py-1 px-3" onClick={handleHideCustom}>
-                  CANCEL
+                <button className="forge-btn-ghost py-1 px-2 text-xs" onClick={handleHideCustom}>
+                  Cancel
                 </button>
               </div>
             </div>
           ) : (
             <button
-              className="w-full flex items-center justify-center gap-1.5 text-forge-text-muted hover:text-forge-text text-xs uppercase tracking-widest py-2 transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 text-forge-text-muted hover:text-forge-text text-xs py-1.5 transition-colors"
               onClick={handleShowCustom}
               disabled={!!launching}
             >
-              <Plus size={11} />
-              CUSTOM COMMAND
+              <Plus size={10} />
+              <span className="uppercase tracking-widest text-[10px]">Custom command</span>
             </button>
           )}
         </div>
