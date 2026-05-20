@@ -113,7 +113,7 @@ class GitWatcher {
     }
   }
 
-  private onRefChanged(branchName: string): Promise<void> {
+  private onRefChanged(branchName: string): void {
     const agents = agentStmts.listRunning.all();
     for (const agent of agents) {
       if (agent.branch === branchName || agent.baseBranch === branchName) {

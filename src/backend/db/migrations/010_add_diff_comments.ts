@@ -16,5 +16,9 @@ export default {
         FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
       )
     `);
+    db.run(`
+      CREATE INDEX IF NOT EXISTS idx_diff_comments_agent_created_at
+      ON diff_comments(agent_id, created_at)
+    `);
   },
 } satisfies Migration;

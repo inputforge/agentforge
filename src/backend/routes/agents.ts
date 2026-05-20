@@ -254,14 +254,19 @@ export function agentsRouter(orchestrator: OrchestratorService) {
       return c.json({ error: "agent not found" }, 404);
     }
 
-    const body = await c.req.json<{
+    let body: {
       filePath?: string;
       side?: string;
       startLine?: number;
       endLine?: number;
       content?: string;
-    }>();
-    if (!body.filePath || body.endLine === null || !body.content?.trim()) {
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "malformed JSON" }, 400);
+    }
+    if (!body.filePath || typeof body.endLine !== "number" || !body.content?.trim()) {
       return c.json({ error: "filePath, endLine, and content are required" }, 400);
     }
 

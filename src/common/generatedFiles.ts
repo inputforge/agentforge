@@ -56,7 +56,7 @@ const GENERATED_PATH_PATTERNS = [
 ];
 
 export function isGeneratedFile(path: string, content = ""): boolean {
-  const normalizedPath = path.replaceAll("\\", "/");
+  const normalizedPath = path.replace(/\\/g, "/");
   const extension = extname(normalizedPath);
   const lowercaseExtension = extension.toLowerCase();
   const lines = content ? content.split("\n") : [];
@@ -120,8 +120,8 @@ function isGeneratedByPathOrHeader(
 
     if (
       lines[0] === "(function() {" &&
-      (lines.at(-2) ?? "") === "}).call(this);" &&
-      (lines.at(-1) ?? "") === ""
+      (lines[lines.length - 2] ?? "") === "}).call(this);" &&
+      (lines[lines.length - 1] ?? "") === ""
     ) {
       let score = 0;
       for (const line of lines) {
@@ -149,7 +149,7 @@ function isGeneratedByPathOrHeader(
     lines.length > 3 &&
     (lines[1] ?? "").includes("<doc>") &&
     (lines[2] ?? "").includes("<assembly>") &&
-    (lines.at(-2) ?? "").includes("</doc>")
+    (lines[lines.length - 2] ?? "").includes("</doc>")
   ) {
     return true;
   }
@@ -227,7 +227,7 @@ function isGeneratedByPathOrHeader(
     return true;
   }
 
-  if (extension === ".yml" && (lines.at(-2) ?? "").includes("recorded_with: VCR")) {
+  if (extension === ".yml" && (lines[lines.length - 2] ?? "").includes("recorded_with: VCR")) {
     return true;
   }
 

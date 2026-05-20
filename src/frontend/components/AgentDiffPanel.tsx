@@ -197,9 +197,11 @@ function CollapsedPlaceholder({
   onLoad: () => void;
 }) {
   return (
-    <div
-      className="relative flex flex-col items-center justify-center gap-2 py-6 cursor-pointer overflow-hidden"
+    <button
+      type="button"
+      className="relative flex flex-col items-center justify-center gap-2 py-6 cursor-pointer overflow-hidden w-full text-left"
       onClick={onLoad}
+      aria-label="Load diff"
     >
       <div className="absolute inset-0 px-4 py-3 select-none pointer-events-none space-y-2 opacity-10 blur-sm">
         <div className="h-2 bg-forge-text-muted rounded w-1/2" />
@@ -217,7 +219,7 @@ function CollapsedPlaceholder({
       <span className="relative z-10 mt-1 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest">
         Load Diff
       </span>
-    </div>
+    </button>
   );
 }
 

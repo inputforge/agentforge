@@ -53,27 +53,32 @@ export class LinearService {
   }
 
   async listIssues(teamId?: string, limit = 100): Promise<LinearIssue[]> {
-    const filterArg = teamId ? `, filter: { team: { id: { eq: "${teamId}" } } }` : "";
-    const data = await this.graphql<{
-      issues: { nodes: Record<string, unknown>[] };
-    }>(`
-      query {
-        issues(first: ${limit}${filterArg}, orderBy: updatedAt) {
-          nodes {
-            id
-            identifier
-            title
-            description
-            url
-            priority
-            createdAt
-            updatedAt
-            state { name }
-            labels { nodes { name } }
+    const issueFields = `
+            nodes {
+              id identifier title description url priority createdAt updatedAt
+              state { name }
+              labels { nodes { name } }
+            }`;
+    let data: { issues: { nodes: Record<string, unknown>[] } };
+    if (teamId) {
+      data = await this.graphql<{ issues: { nodes: Record<string, unknown>[] } }>(
+        `query($first: Int!, $teamId: String!) {
+          issues(first: $first, filter: { team: { id: { eq: $teamId } } }, orderBy: updatedAt) {
+            ${issueFields}
           }
-        }
-      }
-    `);
+        }`,
+        { first: limit, teamId },
+      );
+    } else {
+      data = await this.graphql<{ issues: { nodes: Record<string, unknown>[] } }>(
+        `query($first: Int!) {
+          issues(first: $first, orderBy: updatedAt) {
+            ${issueFields}
+          }
+        }`,
+        { first: limit },
+      );
+    }
     return data.issues.nodes.map((issue) => ({
       createdAt: issue.createdAt as string,
       description: (issue.description as string | null) ?? "",
@@ -92,15 +97,16 @@ export class LinearService {
     try {
       const data = await this.graphql<{
         issue: Record<string, unknown> | null;
-      }>(`
-        query {
-          issue(id: "${id}") {
+      }>(
+        `query($id: String!) {
+          issue(id: $id) {
             id identifier title description url priority createdAt updatedAt
             state { name }
             labels { nodes { name } }
           }
-        }
-      `);
+        }`,
+        { id },
+      );
       const { issue } = data;
       if (!issue) {
         return null;

@@ -308,13 +308,14 @@ function makeClient(session: AcpSession): Client {
       const allowOpt =
         params.options.find((o) => o.kind === "allow_always" || o.kind === "allow_once") ??
         params.options[0];
-      return {
+      return Promise.resolve({
         outcome: { optionId: allowOpt.optionId, outcome: "selected" },
-      };
+      });
     },
 
     sessionUpdate(params: SessionNotification): Promise<void> {
       handleSessionUpdate(session, params.update);
+      return Promise.resolve();
     },
   };
 }

@@ -375,7 +375,8 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     if (!isRunning || turns.length === 0) {
       return false;
     }
-    return allMessages.length > turns.at(-1).agentStartIndex;
+    const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined;
+    return lastTurn !== undefined && allMessages.length > lastTurn.agentStartIndex;
   }, [isRunning, turns, allMessages.length]);
 
   useEffect(() => {
@@ -436,7 +437,8 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
     [],
   );
 
-  const lastMessageId = allMessages.at(-1)?.id;
+  const lastMessageId =
+    allMessages.length > 0 ? allMessages[allMessages.length - 1]?.id : undefined;
 
   type TimelineItem =
     | { kind: "message"; data: AcpMessage; seq: number }

@@ -16,7 +16,7 @@ export function useForgeTerminal(wsUrl: string | null): {
 
   // terminalId is the last path segment: /ws/agent/<id> or /ws/shell/<id>
   const parts = wsUrl?.split("/");
-  const terminalId = parts ? parts.at(-1) : null;
+  const terminalId = parts ? parts[parts.length - 1] : null;
 
   // Load FitAddon once when terminal is ready
   useEffect(() => {

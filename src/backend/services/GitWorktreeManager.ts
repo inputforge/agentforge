@@ -422,7 +422,7 @@ function parseDiff(raw: string): DiffResult {
     } else if (line.startsWith("@@ ") && currentFile) {
       // Parse "+new_start" from "@@ -old,count +new_start,count @@"
       const match = line.match(/\+(\d+)/);
-      newLineNo = match ? Number.parseInt(match[1], 10) : 1;
+      newLineNo = match ? Number.parseInt(match[1], 10) - 1 : 0;
       currentChunk = { header: line, lines: [] };
       currentFile.chunks.push(currentChunk);
     } else if (currentChunk && currentFile) {

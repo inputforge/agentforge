@@ -182,7 +182,7 @@ export class OrchestratorService {
     }
   }
 
-  resumeAgent(agent: Agent): Promise<void> {
+  async resumeAgent(agent: Agent): Promise<void> {
     const ticket = ticketStmts.get.get(agent.ticketId);
     if (!ticket) {
       return;
@@ -207,7 +207,7 @@ export class OrchestratorService {
     gitWatcher.unwatchWorktree(ticket.agentId);
   }
 
-  private handleAgentExit(
+  private async handleAgentExit(
     agentId: string,
     exitCode: number,
     ticketId: string,

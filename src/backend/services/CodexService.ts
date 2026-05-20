@@ -28,7 +28,7 @@ export class CodexService {
       binaryPath = installed ? command : null;
     }
 
-    return {
+    return Promise.resolve({
       authMethod: null,
       authenticated: installed,
       binaryPath,
@@ -40,7 +40,7 @@ export class CodexService {
       loginStatusText: null,
       ready: installed,
       version: null,
-    };
+    });
   }
 }
 

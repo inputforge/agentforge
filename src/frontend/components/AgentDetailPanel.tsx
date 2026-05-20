@@ -391,18 +391,6 @@ export function AgentDetailPanel() {
               {isSubmittingReview ? "SENDING..." : `SUBMIT REVIEW (${comments.length})`}
             </button>
           )}
-          {(diff?.aheadCount ?? 0) > 0 && (
-            <button
-              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
-              onClick={handleMerge}
-              disabled={isMerging}
-            >
-              <GitMerge size={12} />
-              {isMerging
-                ? "MERGING..."
-                : `MERGE TO ${(agent.baseBranch ?? remoteConfig?.baseBranch ?? "BASE").toUpperCase()}`}
-            </button>
-          )}
           {ticket.status === "review" && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"

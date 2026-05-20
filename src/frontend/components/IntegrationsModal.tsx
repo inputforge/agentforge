@@ -106,12 +106,14 @@ function GitHubTab() {
   }, [pat, addNotification]);
 
   const handleDisconnectAccount = useCallback(async () => {
-    await api.integrations.disconnectAccount("github").catch(() => {
-      /* empty */
-    });
-    setHasPat(false);
-    setPat("");
-    addNotification({ message: "GitHub account disconnected", type: "info" });
+    try {
+      await api.integrations.disconnectAccount("github");
+      setHasPat(false);
+      setPat("");
+      addNotification({ message: "GitHub account disconnected", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
+    }
   }, [addNotification]);
 
   const handleSaveRepo = useCallback(async () => {
@@ -277,13 +279,15 @@ function LinearTab() {
   }, [pat, addNotification]);
 
   const handleDisconnectAccount = useCallback(async () => {
-    await api.integrations.disconnectAccount("linear").catch(() => {
-      /* empty */
-    });
-    setHasPat(false);
-    setPat("");
-    setTeams([]);
-    addNotification({ message: "Linear account disconnected", type: "info" });
+    try {
+      await api.integrations.disconnectAccount("linear");
+      setHasPat(false);
+      setPat("");
+      setTeams([]);
+      addNotification({ message: "Linear account disconnected", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
+    }
   }, [addNotification]);
 
   const handleLoadTeams = useCallback(async () => {
