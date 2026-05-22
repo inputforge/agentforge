@@ -1,11 +1,15 @@
-import { parsePatchFiles } from "@pierre/diffs";
-import type {
-  AnnotationSide,
-  DiffLineAnnotation,
-  FileDiffMetadata,
-  SelectedLineRange,
+import {
+  type AnnotationSide,
+  type CodeViewDiffItem,
+  type CodeViewItem,
+  type CodeViewLineSelection,
+  type CodeViewOptions,
+  type DiffLineAnnotation,
+  type LineAnnotation,
+  parsePatchFiles,
+  type SelectedLineRange,
 } from "@pierre/diffs";
-import { FileDiff as PierreDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
+import { CodeView, WorkerPoolContextProvider } from "@pierre/diffs/react";
 // eslint-disable-next-line import/default
 import WorkerUrl from "@pierre/diffs/worker/worker.js?worker&url";
 import { ChevronDown, ChevronRight, FileDiff, MessageSquare, Send, Trash2, X } from "lucide-react";
@@ -15,11 +19,6 @@ import type { DiffComment, DiffFile, DiffResult } from "../types";
 
 const EMPTY_COMMENTS: DiffComment[] = [];
 
-const PATCH_DIFF_OPTIONS = {
-  diffStyle: "unified",
-  disableFileHeader: true,
-  theme: "pierre-dark",
-} as const;
 const LARGE_DIFF_THRESHOLD = 150;
 
 const POOL_OPTIONS = {
@@ -27,36 +26,6 @@ const POOL_OPTIONS = {
 };
 
 const HIGHLIGHTER_OPTIONS = { theme: "pierre-dark" as const };
-
-interface DiffSection {
-  path: string;
-  raw: string;
-}
-
-function parseDiffSections(raw: string): DiffSection[] {
-  const sections: DiffSection[] = [];
-  let currentLines: string[] = [];
-  let currentPath = "";
-
-  for (const line of raw.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      if (currentPath && currentLines.length > 0) {
-        sections.push({ path: currentPath, raw: currentLines.join("\n") });
-      }
-      currentLines = [line];
-      const match = line.match(/^diff --git (?:"a\/([^"]+)"|a\/(\S+)) /);
-      currentPath = match?.[1] ?? match?.[2] ?? "";
-    } else {
-      currentLines.push(line);
-    }
-  }
-
-  if (currentPath && currentLines.length > 0) {
-    sections.push({ path: currentPath, raw: currentLines.join("\n") });
-  }
-
-  return sections;
-}
 
 type CommentAnnotation = { kind: "saved"; comment: DiffComment } | { kind: "draft" };
 
@@ -82,17 +51,26 @@ export function AgentDiffPanel({
   onAddComment,
   onDeleteComment,
 }: AgentDiffPanelProps) {
-  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
-  const [loadedPaths, setLoadedPaths] = useState<Set<string>>(new Set());
+  const [userCollapsedIds, setUserCollapsedIds] = useState<Set<string>>(new Set());
+  const [userExpandedIds, setUserExpandedIds] = useState<Set<string>>(new Set());
+  const [draft, setDraft] = useState<CodeViewLineSelection | null>(null);
 
-  const regularSections = useMemo(
-    () => (diff?.raw ? parseDiffSections(diff.raw) : []),
+  // Per-item version tracking so CodeView detects annotation/collapse changes
+  const itemStateRef = useRef<Map<string, { version: number; key: string }>>(new Map());
+
+  const allFileDiffs = useMemo(
+    () => (diff?.raw ? parsePatchFiles(diff.raw).flatMap((p) => p.files) : []),
     [diff?.raw],
   );
 
-  const generatedSections = useMemo(
-    () => (diff?.generatedRaw ? parseDiffSections(diff.generatedRaw) : []),
+  const generatedFileDiffs = useMemo(
+    () => (diff?.generatedRaw ? parsePatchFiles(diff.generatedRaw).flatMap((p) => p.files) : []),
     [diff?.generatedRaw],
+  );
+
+  const generatedFileNames = useMemo(
+    () => new Set(generatedFileDiffs.map((f) => f.name)),
+    [generatedFileDiffs],
   );
 
   const fileStatsByPath = useMemo(() => {
@@ -100,6 +78,16 @@ export function AgentDiffPanel({
     diff?.files.forEach((f) => map.set(f.path, f));
     return map;
   }, [diff?.files]);
+
+  // Items that are auto-collapsed: large diffs and generated files
+  const autoCollapsedIds = useMemo(() => {
+    const set = new Set<string>();
+    diff?.files.forEach((f) => {
+      if (f.additions + f.deletions > LARGE_DIFF_THRESHOLD) set.add(f.path);
+    });
+    generatedFileNames.forEach((id) => set.add(id));
+    return set;
+  }, [diff?.files, generatedFileNames]);
 
   const commentsByPath = useMemo(() => {
     const map = new Map<string, DiffComment[]>();
@@ -111,21 +99,192 @@ export function AgentDiffPanel({
     return map;
   }, [comments]);
 
-  const toggleCollapse = useCallback((path: string) => {
-    setCollapsedPaths((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
+  const toggleCollapse = useCallback((id: string, isCurrentlyCollapsed: boolean) => {
+    if (isCurrentlyCollapsed) {
+      setUserCollapsedIds((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+      setUserExpandedIds((prev) => {
+        const s = new Set(prev);
+        s.add(id);
+        return s;
+      });
+    } else {
+      setUserCollapsedIds((prev) => {
+        const s = new Set(prev);
+        s.add(id);
+        return s;
+      });
+      setUserExpandedIds((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+      setDraft((prev) => (prev?.id === id ? null : prev));
+    }
   }, []);
 
-  const loadDiff = useCallback((path: string) => {
-    setLoadedPaths((prev) => new Set(prev).add(path));
-  }, []);
+  const items = useMemo<CodeViewDiffItem<CommentAnnotation>[]>(() => {
+    const stateMap = itemStateRef.current;
+    const newStateMap = new Map<string, { version: number; key: string }>();
+
+    const result = [...allFileDiffs, ...generatedFileDiffs].map((fileDiff) => {
+      const id = fileDiff.name;
+      const fileComments = commentsByPath.get(id) ?? EMPTY_COMMENTS;
+      const isDraftHere = draft?.id === id;
+
+      const collapsed = userExpandedIds.has(id)
+        ? false
+        : userCollapsedIds.has(id)
+          ? true
+          : autoCollapsedIds.has(id);
+
+      const annotations: DiffLineAnnotation<CommentAnnotation>[] = [
+        ...fileComments.map((c) => ({
+          lineNumber: c.endLine,
+          metadata: { comment: c, kind: "saved" as const },
+          side: c.side as AnnotationSide,
+        })),
+        ...(isDraftHere && draft
+          ? [
+              {
+                lineNumber: draft.range.end,
+                metadata: { kind: "draft" as const },
+                side: (draft.range.endSide ?? draft.range.side ?? "additions") as AnnotationSide,
+              },
+            ]
+          : []),
+      ];
+
+      const stateKey = [
+        collapsed ? "1" : "0",
+        fileComments.map((c) => c.id).join("|"),
+        isDraftHere && draft
+          ? `${draft.range.start}:${draft.range.end}:${draft.range.endSide ?? ""}`
+          : "",
+      ].join("~");
+
+      const prev = stateMap.get(id);
+      const version = prev?.key === stateKey ? prev.version : (prev?.version ?? 0) + 1;
+      newStateMap.set(id, { version, key: stateKey });
+
+      return {
+        id,
+        type: "diff" as const,
+        fileDiff,
+        annotations,
+        version,
+        collapsed,
+      };
+    });
+
+    itemStateRef.current = newStateMap;
+    return result;
+  }, [
+    allFileDiffs,
+    generatedFileDiffs,
+    commentsByPath,
+    draft,
+    userExpandedIds,
+    userCollapsedIds,
+    autoCollapsedIds,
+  ]);
+
+  const handleDraftSubmit = useCallback(
+    async (content: string) => {
+      if (!draft || !content.trim()) return;
+      await onAddComment(
+        draft.id,
+        (draft.range.endSide ?? draft.range.side ?? "additions") as "additions" | "deletions",
+        draft.range.start,
+        draft.range.end,
+        content.trim(),
+      );
+      setDraft(null);
+    },
+    [draft, onAddComment],
+  );
+
+  const handleDraftCancel = useCallback(() => setDraft(null), []);
+
+  const options = useMemo<CodeViewOptions<CommentAnnotation>>(
+    () => ({
+      diffStyle: "unified",
+      theme: "pierre-dark",
+      enableGutterUtility: true,
+      enableLineSelection: true,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onGutterUtilityClick: ((range: SelectedLineRange, context: any) => {
+        if (context?.type === "diff") setDraft({ id: context.item.id, range });
+      }) as CodeViewOptions<CommentAnnotation>["onGutterUtilityClick"],
+    }),
+    [],
+  );
+
+  const renderAnnotation = useCallback(
+    (
+      ann: DiffLineAnnotation<CommentAnnotation> | LineAnnotation<CommentAnnotation>,
+      item: CodeViewItem<CommentAnnotation>,
+    ) => {
+      if (ann.metadata?.kind === "draft" && item.id === draft?.id) {
+        return (
+          <CommentDraftForm
+            range={draft.range}
+            onSubmit={handleDraftSubmit}
+            onCancel={handleDraftCancel}
+          />
+        );
+      }
+      if (ann.metadata?.kind === "saved") {
+        return <CommentCard comment={ann.metadata.comment} onDeleteComment={onDeleteComment} />;
+      }
+      return null;
+    },
+    [draft, handleDraftSubmit, handleDraftCancel, onDeleteComment],
+  );
+
+  const renderCustomHeader = useCallback(
+    (item: CodeViewItem<CommentAnnotation>) => {
+      const stats = fileStatsByPath.get(item.id);
+      const isGenerated = generatedFileNames.has(item.id);
+      const fileComments = commentsByPath.get(item.id) ?? EMPTY_COMMENTS;
+      const collapsed = item.collapsed ?? false;
+
+      return (
+        <button
+          type="button"
+          className="w-full py-1.5 px-3 flex items-center gap-2 hover:bg-forge-panel transition-colors text-left"
+          // eslint-disable-next-line react-perf/jsx-no-new-function-as-prop
+          onClick={() => toggleCollapse(item.id, collapsed)}
+        >
+          {collapsed ? (
+            <ChevronRight size={12} className="text-forge-text-dim flex-shrink-0" />
+          ) : (
+            <ChevronDown size={12} className="text-forge-text-dim flex-shrink-0" />
+          )}
+          <span className="text-xs font-mono text-forge-text truncate">{item.id}</span>
+          {isGenerated && (
+            <span className="text-xs font-mono text-forge-text-muted">generated</span>
+          )}
+          {fileComments.length > 0 && (
+            <span className="flex items-center gap-1 text-xs text-forge-accent">
+              <MessageSquare size={10} />
+              {fileComments.length}
+            </span>
+          )}
+          {stats && (
+            <span className="text-xs flex-shrink-0 ml-auto">
+              <span className="text-forge-green">+{stats.additions}</span>{" "}
+              <span className="text-forge-red">-{stats.deletions}</span>
+            </span>
+          )}
+        </button>
+      );
+    },
+    [fileStatsByPath, generatedFileNames, commentsByPath, toggleCollapse],
+  );
 
   return (
     <WorkerPoolContextProvider poolOptions={POOL_OPTIONS} highlighterOptions={HIGHLIGHTER_OPTIONS}>
@@ -148,7 +307,7 @@ export function AgentDiffPanel({
           )}
         </div>
 
-        <div className="flex-1 overflow-auto bg-forge-black">
+        <div className="flex-1 overflow-hidden bg-forge-black">
           {isLoading && (
             <div className="flex items-center justify-center h-full text-forge-text-muted text-xs uppercase tracking-widest">
               LOADING...
@@ -159,163 +318,18 @@ export function AgentDiffPanel({
               NO DIFF YET
             </div>
           )}
-          {regularSections.map((section) => {
-            const stats = fileStatsByPath.get(section.path);
-            const totalChanged = (stats?.additions ?? 0) + (stats?.deletions ?? 0);
-            const isLarge = totalChanged > LARGE_DIFF_THRESHOLD;
-            return (
-              <RegularFileEntry
-                key={section.path}
-                section={section}
-                stats={stats}
-                isCollapsed={collapsedPaths.has(section.path)}
-                isLoaded={!isLarge || loadedPaths.has(section.path)}
-                onToggleCollapse={toggleCollapse}
-                onLoad={loadDiff}
-                comments={commentsByPath.get(section.path) ?? EMPTY_COMMENTS}
-                onAddComment={onAddComment}
-                onDeleteComment={onDeleteComment}
-              />
-            );
-          })}
-          {generatedSections.map((section) => (
-            <GeneratedFileEntry key={section.path} section={section} />
-          ))}
+          {!isLoading && diff && (
+            <CodeView
+              items={items}
+              options={options}
+              renderAnnotation={renderAnnotation}
+              renderCustomHeader={renderCustomHeader}
+              className="h-full"
+            />
+          )}
         </div>
       </div>
     </WorkerPoolContextProvider>
-  );
-}
-
-function CollapsedPlaceholder({
-  reason,
-  message,
-  onLoad,
-}: {
-  reason: string;
-  message: string;
-  onLoad: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="relative flex flex-col items-center justify-center gap-2 py-6 cursor-pointer overflow-hidden w-full text-left"
-      onClick={onLoad}
-      aria-label="Load diff"
-    >
-      <div className="absolute inset-0 px-4 py-3 select-none pointer-events-none space-y-2 opacity-10 blur-sm">
-        <div className="h-2 bg-forge-text-muted rounded w-1/2" />
-        <div className="h-2 bg-forge-text-muted rounded w-3/4" />
-        <div className="h-2 bg-forge-text-muted rounded w-2/5" />
-        <div className="h-2 bg-forge-text-muted rounded w-5/6" />
-        <div className="h-2 bg-forge-text-muted rounded w-1/3" />
-      </div>
-      <span className="relative z-10 text-[10px] text-forge-text-muted uppercase tracking-widest font-mono">
-        {reason}
-      </span>
-      <span className="relative z-10 text-xs text-forge-text-dim text-center max-w-xs leading-relaxed">
-        {message}
-      </span>
-      <span className="relative z-10 mt-1 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest">
-        Load Diff
-      </span>
-    </button>
-  );
-}
-
-interface FileDiffWithCommentsProps {
-  fileDiff: FileDiffMetadata;
-  filePath: string;
-  comments: DiffComment[];
-  onAddComment: AgentDiffPanelProps["onAddComment"];
-  onDeleteComment: AgentDiffPanelProps["onDeleteComment"];
-}
-
-function FileDiffWithComments({
-  fileDiff,
-  filePath,
-  comments,
-  onAddComment,
-  onDeleteComment,
-}: FileDiffWithCommentsProps) {
-  const [draft, setDraft] = useState<SelectedLineRange | null>(null);
-
-  const annotations = useMemo<DiffLineAnnotation<CommentAnnotation>[]>(
-    () => [
-      ...comments.map((c) => ({
-        lineNumber: c.endLine,
-        metadata: { comment: c, kind: "saved" as const },
-        side: c.side as AnnotationSide,
-      })),
-      ...(draft
-        ? [
-            {
-              lineNumber: draft.end,
-              metadata: { kind: "draft" as const },
-              side: (draft.endSide ?? draft.side ?? "additions") as AnnotationSide,
-            },
-          ]
-        : []),
-    ],
-    [comments, draft],
-  );
-
-  const handleDraftSubmit = useCallback(
-    async (content: string) => {
-      if (!draft) {
-        return;
-      }
-      await onAddComment(
-        filePath,
-        (draft.endSide ?? draft.side ?? "additions") as "additions" | "deletions",
-        draft.start,
-        draft.end,
-        content,
-      );
-      setDraft(null);
-    },
-    [draft, filePath, onAddComment],
-  );
-
-  const handleDraftCancel = useCallback(() => setDraft(null), []);
-
-  const renderAnnotation = useCallback(
-    (ann: DiffLineAnnotation<CommentAnnotation>) => {
-      if (ann.metadata?.kind === "draft" && draft) {
-        return (
-          <CommentDraftForm
-            range={draft}
-            onSubmit={handleDraftSubmit}
-            onCancel={handleDraftCancel}
-          />
-        );
-      }
-      if (ann.metadata?.kind === "saved") {
-        return <CommentCard comment={ann.metadata.comment} onDeleteComment={onDeleteComment} />;
-      }
-      return null;
-    },
-    [draft, handleDraftSubmit, handleDraftCancel, onDeleteComment],
-  );
-
-  const enhancedOptions = useMemo(
-    () => ({
-      ...(PATCH_DIFF_OPTIONS as object),
-      enableGutterUtility: true,
-      enableLineSelection: true,
-      onGutterUtilityClick: setDraft,
-    }),
-    [],
-  );
-
-  return (
-    <PierreDiff
-      fileDiff={fileDiff}
-      lineAnnotations={annotations}
-      selectedLines={draft}
-      renderAnnotation={renderAnnotation}
-      options={enhancedOptions}
-    />
   );
 }
 
@@ -330,12 +344,9 @@ function CommentDraftForm({
 }) {
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = useCallback(async () => {
-    if (!content.trim()) {
-      return;
-    }
+    if (!content.trim()) return;
     setIsSaving(true);
     try {
       await onSubmit(content.trim());
@@ -371,7 +382,6 @@ function CommentDraftForm({
         <span className="text-xs text-forge-text-muted">{rangeLabel}</span>
       </div>
       <textarea
-        ref={textareaRef}
         className="w-full bg-forge-panel text-forge-text text-xs border border-forge-border rounded px-2 py-1 resize-none outline-none focus:border-forge-accent"
         rows={3}
         placeholder="Leave a comment… (Ctrl+Enter to save, Esc to cancel)"
@@ -422,129 +432,6 @@ function CommentCard({
       >
         <Trash2 size={10} />
       </button>
-    </div>
-  );
-}
-
-interface RegularFileEntryProps {
-  section: DiffSection;
-  stats: DiffFile | undefined;
-  isCollapsed: boolean;
-  isLoaded: boolean;
-  onToggleCollapse: (path: string) => void;
-  onLoad: (path: string) => void;
-  comments: DiffComment[];
-  onAddComment: AgentDiffPanelProps["onAddComment"];
-  onDeleteComment: AgentDiffPanelProps["onDeleteComment"];
-}
-
-function RegularFileEntry({
-  section,
-  stats,
-  isCollapsed,
-  isLoaded,
-  onToggleCollapse,
-  onLoad,
-  comments,
-  onAddComment,
-  onDeleteComment,
-}: RegularFileEntryProps) {
-  const fileDiffs = useMemo(
-    () => (isLoaded && !isCollapsed ? parsePatchFiles(section.raw).flatMap((p) => p.files) : []),
-    [section.raw, isLoaded, isCollapsed],
-  );
-
-  const handleToggleCollapse = useCallback(
-    () => onToggleCollapse(section.path),
-    [onToggleCollapse, section.path],
-  );
-
-  const handleLoad = useCallback(() => onLoad(section.path), [onLoad, section.path]);
-
-  return (
-    <div className="border-t border-forge-border">
-      <button
-        className="w-full py-1.5 px-3 flex items-center gap-2 hover:bg-forge-panel transition-colors"
-        onClick={handleToggleCollapse}
-      >
-        {isCollapsed ? (
-          <ChevronRight size={12} className="text-forge-text-dim flex-shrink-0" />
-        ) : (
-          <ChevronDown size={12} className="text-forge-text-dim flex-shrink-0" />
-        )}
-        <span className="text-xs font-mono text-forge-text truncate">{section.path}</span>
-        {stats && (
-          <span className="text-xs flex-shrink-0 ml-auto">
-            <span className="text-forge-green">+{stats.additions}</span>{" "}
-            <span className="text-forge-red">-{stats.deletions}</span>
-          </span>
-        )}
-      </button>
-      {!isCollapsed && !isLoaded && (
-        <CollapsedPlaceholder
-          reason="Large diff"
-          message="This diff is large and is not loaded by default. Click to load it."
-          onLoad={handleLoad}
-        />
-      )}
-      {!isCollapsed &&
-        isLoaded &&
-        fileDiffs.map((fileDiff, i) => (
-          <FileDiffWithComments
-            key={fileDiff.cacheKey ?? i}
-            fileDiff={fileDiff}
-            filePath={section.path}
-            comments={comments}
-            onAddComment={onAddComment}
-            onDeleteComment={onDeleteComment}
-          />
-        ))}
-    </div>
-  );
-}
-
-function GeneratedFileEntry({ section }: { section: DiffSection }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  const fileDiffs = useMemo(
-    () => (isLoaded && !isCollapsed ? parsePatchFiles(section.raw).flatMap((p) => p.files) : []),
-    [section.raw, isLoaded, isCollapsed],
-  );
-
-  const handleToggleCollapse = useCallback(() => setIsCollapsed((v) => !v), []);
-
-  const handleLoad = useCallback(() => setIsLoaded(true), []);
-
-  return (
-    <div className="border-t border-forge-border">
-      <button
-        className="w-full py-1.5 px-3 flex items-center gap-2 hover:bg-forge-panel transition-colors"
-        onClick={handleToggleCollapse}
-      >
-        {isCollapsed ? (
-          <ChevronRight size={12} className="text-forge-text-dim flex-shrink-0" />
-        ) : (
-          <ChevronDown size={12} className="text-forge-text-dim flex-shrink-0" />
-        )}
-        <span className="text-xs font-mono text-forge-text truncate">{section.path}</span>
-      </button>
-      {!isCollapsed && !isLoaded && (
-        <CollapsedPlaceholder
-          reason="Generated file"
-          message="Generated files are not shown by default to keep the diff view clean. Click to load."
-          onLoad={handleLoad}
-        />
-      )}
-      {!isCollapsed &&
-        isLoaded &&
-        fileDiffs.map((fileDiff, i) => (
-          <PierreDiff
-            key={fileDiff.cacheKey ?? i}
-            fileDiff={fileDiff}
-            options={PATCH_DIFF_OPTIONS}
-          />
-        ))}
     </div>
   );
 }
