@@ -1,15 +1,8 @@
 import { SiGithub, SiLinear } from "@icons-pack/react-simple-icons";
 import { ArrowLeft, ExternalLink, Import, X } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import type { GitHubIssue, LinearIssue, Ticket } from "../types";
@@ -18,16 +11,20 @@ type CreateMode = "manual" | "github" | "linear";
 
 function titleFromDescription(description: string): string {
   const trimmed = description.trim();
-  if (!trimmed) return "Untitled";
+  if (!trimmed) {
+    return "Untitled";
+  }
   const firstSentence = trimmed.split(/(?<=[.!?])\s+/)[0] ?? trimmed;
   const firstLine = trimmed.split(/\r?\n/)[0] ?? trimmed;
   const candidate = firstSentence.length <= firstLine.length ? firstSentence : firstLine;
-  return candidate.length > 72 ? candidate.slice(0, 69).trimEnd() + "…" : candidate;
+  return candidate.length > 72 ? `${candidate.slice(0, 69).trimEnd()}…` : candidate;
 }
 
 function matchesIssueSearch(query: string, title: string, numberOrIdentifier: string): boolean {
   const normalized = query.trim().toLowerCase().replace(/^#/, "");
-  if (!normalized) return true;
+  if (!normalized) {
+    return true;
+  }
   return (
     title.toLowerCase().includes(normalized) ||
     numberOrIdentifier.toLowerCase().includes(normalized)
@@ -47,7 +44,6 @@ export function CreateTicketModal() {
     useStore();
   const [screen, setScreen] = useState<CreateMode>("manual");
   const [description, setDescription] = useState("");
-  const [startNow, setStartNow] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [githubAvailable, setGithubAvailable] = useState(false);
   const [linearAvailable, setLinearAvailable] = useState(false);
@@ -63,10 +59,6 @@ export function CreateTicketModal() {
 
   const handleDescriptionChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value),
-    [],
-  );
-  const handleStartNowChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => setStartNow(e.target.checked),
     [],
   );
   const handleGithubStateChange = useCallback(
@@ -99,24 +91,34 @@ export function CreateTicketModal() {
   );
 
   useEffect(() => {
-    if (!isCreateModalOpen) return;
+    if (!isCreateModalOpen) {
+      return;
+    }
     let cancelled = false;
 
     api.integrations
       .getConfig("github")
       .then((cfg) => {
-        if (!cancelled) setGithubAvailable(cfg.hasPat && !!cfg.owner && !!cfg.repo);
+        if (!cancelled) {
+          setGithubAvailable(cfg.hasPat && !!cfg.owner && !!cfg.repo);
+        }
       })
       .catch(() => {
-        if (!cancelled) setGithubAvailable(false);
+        if (!cancelled) {
+          setGithubAvailable(false);
+        }
       });
     api.integrations
       .getConfig("linear")
       .then((cfg) => {
-        if (!cancelled) setLinearAvailable(cfg.hasPat);
+        if (!cancelled) {
+          setLinearAvailable(cfg.hasPat);
+        }
       })
       .catch(() => {
-        if (!cancelled) setLinearAvailable(false);
+        if (!cancelled) {
+          setLinearAvailable(false);
+        }
       });
 
     return () => {
@@ -125,41 +127,47 @@ export function CreateTicketModal() {
   }, [isCreateModalOpen]);
 
   const finishTicket = useCallback(
-    async (ticket: Ticket) => {
+    async (ticket: Ticket, startNow: boolean) => {
       addTicket(ticket);
       closeCreateModal();
       setScreen("manual");
       setDescription("");
       setGithubSearch("");
       setLinearSearch("");
-      setStartNow(false);
-      if (startNow) await moveTicket(ticket.id, "in-progress");
+      if (startNow) {
+        await moveTicket(ticket.id, "in-progress");
+      }
     },
-    [addTicket, closeCreateModal, moveTicket, startNow],
+    [addTicket, closeCreateModal, moveTicket],
   );
 
-  const handleCreate = useCallback(async () => {
-    if (!description.trim()) return;
-    setIsCreating(true);
-    try {
-      const ticket = await api.tickets.create({
-        title: titleFromDescription(description),
-        description: description.trim(),
-      });
-      await finishTicket(ticket);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
-    } finally {
-      setIsCreating(false);
-    }
-  }, [description, finishTicket, addNotification]);
+  const handleCreate = useCallback(
+    async (startNow = false) => {
+      if (!description.trim()) {
+        return;
+      }
+      setIsCreating(true);
+      try {
+        const ticket = await api.tickets.create({
+          description: description.trim(),
+          title: titleFromDescription(description),
+        });
+        await finishTicket(ticket, startNow);
+      } catch (error) {
+        addNotification({ message: (error as Error).message, type: "error" });
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [description, finishTicket, addNotification],
+  );
 
   const handleFetchGithubIssues = useCallback(async () => {
     setLoadingGithub(true);
     try {
       setGithubIssues(await api.integrations.github.listIssues(githubState));
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setLoadingGithub(false);
     }
@@ -169,54 +177,72 @@ export function CreateTicketModal() {
     setLoadingLinear(true);
     try {
       setLinearIssues(await api.integrations.linear.listIssues());
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setLoadingLinear(false);
     }
   }, [addNotification]);
 
   const handleImportGithubIssue = useCallback(
-    async (id: string | number) => {
+    (id: string | number) => {
       const number = Number(id);
       const issue = githubIssues.find((item) => item.number === number);
       if (!issue) {
-        addNotification({ type: "error", message: `GitHub issue #${number} is not loaded` });
+        addNotification({
+          message: `GitHub issue #${number} is not loaded`,
+          type: "error",
+        });
         return;
       }
       setDescription(githubIssueDraft(issue));
       setScreen("manual");
-      addNotification({ type: "info", message: `Prefilled from GitHub #${number}` });
+      addNotification({
+        message: `Prefilled from GitHub #${number}`,
+        type: "info",
+      });
     },
     [githubIssues, addNotification],
   );
 
   const handleImportLinearIssue = useCallback(
-    async (id: string | number) => {
+    (id: string | number) => {
       const issueId = String(id);
       const issue = linearIssues.find((item) => item.id === issueId);
       if (!issue) {
-        addNotification({ type: "error", message: "Linear issue is not loaded" });
+        addNotification({
+          message: "Linear issue is not loaded",
+          type: "error",
+        });
         return;
       }
       setDescription(linearIssueDraft(issue));
       setScreen("manual");
-      addNotification({ type: "info", message: `Prefilled from ${issue.identifier}` });
+      addNotification({
+        message: `Prefilled from ${issue.identifier}`,
+        type: "info",
+      });
     },
     [linearIssues, addNotification],
   );
 
   const handleBackdrop = useCallback(
     (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) closeCreateModal();
+      if (e.target === e.currentTarget) {
+        closeCreateModal();
+      }
     },
     [closeCreateModal],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") closeCreateModal();
-      if (screen === "manual" && e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleCreate();
+      if (e.key === "Escape") {
+        closeCreateModal();
+      }
+      if (screen === "manual" && e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        handleCreate();
+      }
     },
     [closeCreateModal, handleCreate, screen],
   );
@@ -224,8 +250,12 @@ export function CreateTicketModal() {
   const showManual = useCallback(() => setScreen("manual"), []);
   const showGithubImport = useCallback(() => setScreen("github"), []);
   const showLinearImport = useCallback(() => setScreen("linear"), []);
+  const handleCreateAndStart = useCallback(() => handleCreate(true), [handleCreate]);
+  const handleCreateOnly = useCallback(() => handleCreate(), [handleCreate]);
 
-  if (!isCreateModalOpen) return null;
+  if (!isCreateModalOpen) {
+    return null;
+  }
 
   return (
     <div
@@ -246,16 +276,6 @@ export function CreateTicketModal() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-            <input
-              type="checkbox"
-              className="accent-forge-accent"
-              checked={startNow}
-              onChange={handleStartNowChange}
-            />
-            <span className="text-forge-text-dim text-xs uppercase tracking-widest">Start now</span>
-          </label>
-
           {screen === "manual" && (
             <div className="flex flex-col gap-4 mt-4">
               {(githubAvailable || linearAvailable) && (
@@ -294,15 +314,19 @@ export function CreateTicketModal() {
               </div>
 
               <div className="flex justify-end gap-2 pt-1">
-                <button className="forge-btn-ghost py-1.5 px-4" onClick={closeCreateModal}>
-                  CANCEL
+                <button
+                  className="forge-btn-ghost py-1.5 px-4"
+                  onClick={handleCreateAndStart}
+                  disabled={isCreating || !description.trim()}
+                >
+                  {isCreating ? "STARTING..." : "CREATE & START NOW"}
                 </button>
                 <button
                   className="forge-btn-primary py-1.5 px-6"
-                  onClick={handleCreate}
+                  onClick={handleCreateOnly}
                   disabled={isCreating || !description.trim()}
                 >
-                  {isCreating ? (startNow ? "STARTING..." : "CREATING...") : "CREATE TICKET"}
+                  {isCreating ? "CREATING..." : "CREATE TICKET"}
                 </button>
               </div>
             </div>

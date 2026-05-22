@@ -1,8 +1,10 @@
 import {
   Bot,
+  FileText,
   GitBranch,
   GitCommit,
   GitMerge,
+  MessageSquarePlus,
   RefreshCw,
   RotateCcw,
   Terminal,
@@ -10,10 +12,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
+
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType } from "../types";
-
+import type { Agent, AgentType, DiffComment, Ticket, TicketStatus } from "../types";
 import { AgentAcpPanel } from "./AgentAcpPanel";
 import { AgentDiffPanel } from "./AgentDiffPanel";
 import { AgentLauncher } from "./AgentLauncher";
@@ -36,7 +38,7 @@ export function AgentDetailPanel() {
   const ticket = getActiveTicket();
   const agent = getActiveAgent();
 
-  const [activeTab, setActiveTab] = useState<"agent" | "shell">("agent");
+  const [activeTab, setActiveTab] = useState<"agent" | "shell" | "details">("agent");
   const [shellMounted, setShellMounted] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
@@ -44,6 +46,8 @@ export function AgentDetailPanel() {
   const [isRelaunching, setIsRelaunching] = useState(false);
   const [isDiffLoading, setIsDiffLoading] = useState(false);
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [comments, setComments] = useState<DiffComment[]>([]);
 
   const agentId = agent?.id;
   const diff = agentId ? (agentDiffs[agentId] ?? null) : null;
@@ -51,16 +55,22 @@ export function AgentDetailPanel() {
   // ── Auto-relaunch dead agent when ticket is opened ────────────────────────
 
   useEffect(() => {
-    if (!agent || !ticket) return;
-    if (agent.status !== "error" || ticket.status !== "in-progress") return;
+    if (!agent || !ticket) {
+      return;
+    }
+    if (agent.status !== "error" || ticket.status !== "in-progress") {
+      return;
+    }
     setIsRelaunching(true);
     api.tickets
       .spawn(ticket.id, agent.type as AgentType)
       .then(({ ticket: updatedTicket, agent: newAgent }) => {
         updateTicket(updatedTicket.id, updatedTicket);
-        if (newAgent) setAgent(newAgent);
+        if (newAgent) {
+          setAgent(newAgent);
+        }
       })
-      .catch((err: Error) => addNotification({ type: "error", message: err.message }))
+      .catch((error: Error) => addNotification({ message: error.message, type: "error" }))
       .finally(() => setIsRelaunching(false));
     // Run once when this panel mounts for a given ticket+agent combo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,7 +79,9 @@ export function AgentDetailPanel() {
   // ── Diff: initial fetch; live updates arrive via WS diff-updated event ───
 
   const fetchDiff = useCallback(async () => {
-    if (!agentId) return;
+    if (!agentId) {
+      return;
+    }
     try {
       const result = await api.agents.getDiff(agentId);
       setAgentDiff(agentId, result);
@@ -79,42 +91,128 @@ export function AgentDetailPanel() {
   }, [agentId, setAgentDiff]);
 
   useEffect(() => {
-    if (!agentId) return;
+    if (!agentId) {
+      return;
+    }
     setIsDiffLoading(true);
     fetchDiff().finally(() => setIsDiffLoading(false));
   }, [agentId, fetchDiff]);
 
+  // ── Comments ──────────────────────────────────────────────────────────────
+
+  const fetchComments = useCallback(async () => {
+    if (!agentId) {
+      return;
+    }
+    try {
+      const result = await api.agents.listComments(agentId);
+      setComments(result);
+    } catch {
+      // ignore transient errors
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (!agentId) {
+      return;
+    }
+    setComments([]);
+    fetchComments();
+  }, [agentId, fetchComments]);
+
+  const handleAddComment = useCallback(
+    async (
+      filePath: string,
+      side: "additions" | "deletions",
+      startLine: number,
+      endLine: number,
+      content: string,
+    ) => {
+      if (!agentId) {
+        return;
+      }
+      const comment = await api.agents.addComment(
+        agentId,
+        filePath,
+        side,
+        startLine,
+        endLine,
+        content,
+      );
+      setComments((prev) => [...prev, comment]);
+    },
+    [agentId],
+  );
+
+  const handleDeleteComment = useCallback(
+    async (commentId: string) => {
+      if (!agentId) {
+        return;
+      }
+      await api.agents.deleteComment(agentId, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    },
+    [agentId],
+  );
+
+  const handleSubmitReview = useCallback(async () => {
+    if (!agentId) {
+      return;
+    }
+    setIsSubmittingReview(true);
+    try {
+      await api.agents.submitReview(agentId);
+      setComments([]);
+      addNotification({ message: "Review submitted to agent.", type: "info" });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }, [agentId, addNotification]);
+
+  // ── Other actions ─────────────────────────────────────────────────────────
+
   const handleMerge = useCallback(async () => {
-    if (!agentId || !ticket || !agent) return;
+    if (!agentId || !ticket || !agent) {
+      return;
+    }
     setIsMerging(true);
     try {
       const result = await api.agents.merge(agentId);
       if (result.success) {
         addNotification({
-          type: "info",
           message: `Merged ${ticket.branch} into ${agent.baseBranch}.`,
+          type: "info",
         });
         closeTicket();
       } else if (result.conflicted) {
         addNotification({
-          type: "merge-conflict",
+          agentId,
           message: "Conflict during rebase — retrying.",
           ticketId: ticket.id,
-          agentId,
+          type: "merge-conflict",
         });
       } else {
-        addNotification({ type: "error", message: result.error ?? "Merge failed." });
+        addNotification({
+          message: result.error ?? "Merge failed.",
+          type: "error",
+        });
       }
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsMerging(false);
     }
   }, [agentId, ticket, agent, addNotification, closeTicket]);
 
   const handleRestart = useCallback(() => {
-    if (!agentId) return;
-    api.agents.restart(agentId).catch(() => {});
+    if (!agentId) {
+      return;
+    }
+    api.agents.restart(agentId).catch(() => {
+      /* empty */
+    });
   }, [agentId]);
 
   useEffect(() => {
@@ -126,41 +224,52 @@ export function AgentDetailPanel() {
     setActiveTab("shell");
     setShellMounted(true);
   }, []);
+  const selectDetailsTab = useCallback(() => setActiveTab("details"), []);
 
   const handleCommit = useCallback(async () => {
-    if (!agentId) return;
+    if (!agentId) {
+      return;
+    }
     setIsCommitting(true);
     try {
       await api.agents.commit(agentId);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsCommitting(false);
     }
   }, [agentId, addNotification]);
 
   const handleRebase = useCallback(async () => {
-    if (!agentId) return;
+    if (!agentId) {
+      return;
+    }
     setIsRebasing(true);
     try {
       const result = await api.agents.rebase(agentId);
       if (result.success) {
-        addNotification({ type: "info", message: "Rebase completed successfully." });
+        addNotification({
+          message: "Rebase completed successfully.",
+          type: "info",
+        });
         fetchDiff();
       } else if (result.conflicted) {
         if (result.resolving) {
-          addNotification({ type: "info", message: "Asked agent to fix rebase conflicts." });
+          addNotification({
+            message: "Asked agent to fix rebase conflicts.",
+            type: "info",
+          });
         } else {
           addNotification({
-            type: "merge-conflict",
+            agentId,
             message: "Rebase conflict detected — aborted. Relaunch agent to resolve.",
             ticketId: ticket?.id,
-            agentId,
+            type: "merge-conflict",
           });
         }
       }
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsRebasing(false);
     }
@@ -168,22 +277,30 @@ export function AgentDetailPanel() {
 
   const handleBaseBranchChange = useCallback(
     async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      if (!ticket) return;
+      if (!ticket) {
+        return;
+      }
       const nextBranch = e.target.value;
-      if (!nextBranch || nextBranch === (agent?.baseBranch ?? ticket.baseBranch)) return;
+      if (!nextBranch || nextBranch === (agent?.baseBranch ?? ticket.baseBranch)) {
+        return;
+      }
 
       setIsUpdatingBaseBranch(true);
       try {
         const result = await api.tickets.updateBaseBranch(ticket.id, nextBranch);
-        if (result.ticket) updateTicket(result.ticket.id, result.ticket);
-        if (result.agent) setAgent(result.agent);
+        if (result.ticket) {
+          updateTicket(result.ticket.id, result.ticket);
+        }
+        if (result.agent) {
+          setAgent(result.agent);
+        }
         addNotification({
-          type: "info",
           message: `Set this ticket to merge into ${nextBranch}.`,
+          type: "info",
         });
         fetchDiff();
-      } catch (err) {
-        addNotification({ type: "error", message: (err as Error).message });
+      } catch (error) {
+        addNotification({ message: (error as Error).message, type: "error" });
       } finally {
         setIsUpdatingBaseBranch(false);
       }
@@ -192,7 +309,9 @@ export function AgentDetailPanel() {
   );
 
   const handleRelaunch = useCallback(async () => {
-    if (!agent || !ticket) return;
+    if (!agent || !ticket) {
+      return;
+    }
     setIsRelaunching(true);
     try {
       const { ticket: updatedTicket, agent: newAgent } = await api.tickets.spawn(
@@ -200,15 +319,19 @@ export function AgentDetailPanel() {
         agent.type as AgentType,
       );
       updateTicket(updatedTicket.id, updatedTicket);
-      if (newAgent) setAgent(newAgent);
-    } catch (err) {
-      addNotification({ type: "error", message: (err as Error).message });
+      if (newAgent) {
+        setAgent(newAgent);
+      }
+    } catch (error) {
+      addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsRelaunching(false);
     }
   }, [agent, ticket, updateTicket, setAgent, addNotification]);
 
-  if (!ticket) return null;
+  if (!ticket) {
+    return null;
+  }
 
   // Show agent picker when ticket is in-progress but no agent spawned yet
   if (!agent) {
@@ -257,7 +380,18 @@ export function AgentDetailPanel() {
               </select>
             </div>
           )}
-          {(diff?.aheadCount ?? 0) > 0 && (
+          {comments.length > 0 && (
+            <button
+              className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
+              onClick={handleSubmitReview}
+              disabled={isSubmittingReview}
+              title="Send all diff comments to the agent"
+            >
+              <MessageSquarePlus size={12} />
+              {isSubmittingReview ? "SENDING..." : `SUBMIT REVIEW (${comments.length})`}
+            </button>
+          )}
+          {ticket.status === "review" && (
             <button
               className="forge-btn-primary py-0.5 px-3 flex items-center gap-1.5"
               onClick={handleMerge}
@@ -343,6 +477,17 @@ export function AgentDetailPanel() {
                 <Terminal size={11} />
                 TERMINAL
               </button>
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase tracking-widest transition-colors ${
+                  activeTab === "details"
+                    ? "text-forge-text border-b-2 border-forge-accent -mb-px"
+                    : "text-forge-text-muted hover:text-forge-text"
+                }`}
+                onClick={selectDetailsTab}
+              >
+                <FileText size={11} />
+                DETAILS
+              </button>
             </div>
             {/* Tab content */}
             <div className="flex-1 overflow-hidden relative">
@@ -352,14 +497,115 @@ export function AgentDetailPanel() {
               <div className={`absolute inset-0 ${activeTab === "shell" ? "" : "invisible"}`}>
                 {shellMounted && <WorktreeShellPanel agentId={agentId!} />}
               </div>
+              <div
+                className={`absolute inset-0 overflow-y-auto ${activeTab === "details" ? "" : "hidden"}`}
+              >
+                <TicketDetailsPane ticket={ticket} agent={agent} />
+              </div>
             </div>
           </div>
         </Panel>
         <PanelResizeHandle className="w-1 bg-forge-border hover:bg-forge-accent transition-colors duration-150 cursor-col-resize flex-shrink-0" />
         <Panel defaultSize={40} minSize={15}>
-          <AgentDiffPanel diff={diff} isLoading={isDiffLoading} />
+          <AgentDiffPanel
+            diff={diff}
+            isLoading={isDiffLoading}
+            agentId={agentId!}
+            comments={comments}
+            onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+          />
         </Panel>
       </PanelGroup>
+    </div>
+  );
+}
+
+// ── Ticket details pane ───────────────────────────────────────────────────────
+
+const STATUS_STYLES: Record<TicketStatus, { dot: string; text: string; label: string }> = {
+  backlog: {
+    dot: "bg-forge-text-muted",
+    label: "Backlog",
+    text: "text-forge-text-dim",
+  },
+  done: { dot: "bg-forge-green", label: "Done", text: "text-forge-green" },
+  "in-progress": {
+    dot: "bg-forge-blue",
+    label: "In Progress",
+    text: "text-forge-blue",
+  },
+  review: { dot: "bg-amber-400", label: "In Review", text: "text-amber-400" },
+};
+
+function formatDate(ts: number) {
+  return new Date(ts).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-forge-border/50">
+      <span className="text-forge-text-muted text-[10px] uppercase tracking-widest w-20 flex-shrink-0 pt-0.5">
+        {label}
+      </span>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function TicketDetailsPane({ ticket, agent }: { ticket: Ticket; agent: Agent }) {
+  const status = STATUS_STYLES[ticket.status];
+
+  return (
+    <div className="px-5 py-5 flex flex-col gap-0">
+      {/* Status + title */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${status.dot}`} />
+        <span className={`text-[10px] uppercase tracking-widest font-mono ${status.text}`}>
+          {status.label}
+        </span>
+      </div>
+      <h2 className="text-forge-text-bright text-lg font-semibold leading-snug tracking-tight mb-4">
+        {ticket.title}
+      </h2>
+
+      {/* Description */}
+      <div className="mb-5">
+        {ticket.description ? (
+          <p className="text-forge-text-dim text-xs leading-relaxed whitespace-pre-wrap">
+            {ticket.description}
+          </p>
+        ) : (
+          <p className="text-forge-text-muted text-xs italic">No description.</p>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-forge-border mb-1" />
+
+      {/* Metadata rows */}
+      <MetaRow label="Branch">
+        <span className="text-forge-accent text-xs font-mono">{agent.branch}</span>
+      </MetaRow>
+      <MetaRow label="Base">
+        <span className="text-forge-text-dim text-xs font-mono">{agent.baseBranch}</span>
+      </MetaRow>
+      <MetaRow label="Agent">
+        <span className="text-forge-text-dim text-xs font-mono uppercase">{agent.type}</span>
+      </MetaRow>
+      <MetaRow label="Command">
+        <span className="text-forge-text-dim text-xs font-mono break-all">{agent.command}</span>
+      </MetaRow>
+      <MetaRow label="Started">
+        <span className="text-forge-text-dim text-xs">{formatDate(agent.startedAt)}</span>
+      </MetaRow>
+      <MetaRow label="Created">
+        <span className="text-forge-text-dim text-xs">{formatDate(ticket.createdAt)}</span>
+      </MetaRow>
     </div>
   );
 }

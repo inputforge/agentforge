@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { filterGeneratedDiff } from "../services/GitWorktreeManager.ts";
+
 import { isGeneratedFile } from "../../common/generatedFiles.ts";
+import { filterGeneratedDiff } from "../services/GitWorktreeManager.ts";
 
 describe("generated file detection", () => {
   test("matches generated path patterns from Linguist", () => {

@@ -18,27 +18,27 @@ export const COLUMN_META: Record<
   { label: string; color: string; borderColor: string; dimColor: string }
 > = {
   backlog: {
-    label: "BACKLOG",
-    color: "text-forge-text-dim",
     borderColor: "border-forge-border-bright",
+    color: "text-forge-text-dim",
     dimColor: "bg-forge-surface",
-  },
-  "in-progress": {
-    label: "IN-PROGRESS",
-    color: "text-forge-blue",
-    borderColor: "border-forge-blue",
-    dimColor: "bg-forge-blue-dim",
-  },
-  review: {
-    label: "REVIEW",
-    color: "text-forge-amber",
-    borderColor: "border-forge-amber",
-    dimColor: "bg-forge-amber-dim",
+    label: "BACKLOG",
   },
   done: {
-    label: "DONE",
-    color: "text-forge-green",
     borderColor: "border-forge-green",
+    color: "text-forge-green",
     dimColor: "bg-forge-green-dim",
+    label: "DONE",
+  },
+  "in-progress": {
+    borderColor: "border-forge-blue",
+    color: "text-forge-blue",
+    dimColor: "bg-forge-blue-dim",
+    label: "IN-PROGRESS",
+  },
+  review: {
+    borderColor: "border-forge-amber",
+    color: "text-forge-amber",
+    dimColor: "bg-forge-amber-dim",
+    label: "REVIEW",
   },
 };

@@ -92,7 +92,18 @@ export interface GitBranchInfo {
 export interface DiffLine {
   type: "add" | "remove" | "context";
   content: string;
-  lineNo?: number;
+  lineNo?: number; // new-file line number for add/context lines
+}
+
+export interface DiffComment {
+  id: string;
+  agentId: string;
+  filePath: string;
+  side: "additions" | "deletions";
+  startLine: number;
+  endLine: number;
+  content: string;
+  createdAt: number;
 }
 
 export interface DiffChunk {

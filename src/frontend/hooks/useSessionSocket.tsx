@@ -1,19 +1,16 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from "react";
-import type { Agent, AcpAgentState, AppNotification, DiffResult, Ticket } from "../types";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
+
 import { useStore } from "../store";
+import type { Agent, AcpAgentState, AppNotification, DiffResult, Ticket } from "../types";
 
 type IncomingEvent =
   | { type: "ticket-updated"; ticket: Ticket }
   | { type: "agent-updated"; agent: Agent }
-  | { type: "notification"; notification: Omit<AppNotification, "id" | "timestamp"> }
+  | {
+      type: "notification";
+      notification: Omit<AppNotification, "id" | "timestamp">;
+    }
   | { type: "kanban-sync"; tickets: Ticket[] }
   | { type: "branch-updated"; branch: string | null }
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
@@ -24,7 +21,11 @@ interface SessionSocketContextValue {
   send: (msg: object) => void;
 }
 
-const SessionSocketContext = createContext<SessionSocketContextValue>({ send: () => {} });
+const SessionSocketContext = createContext<SessionSocketContextValue>({
+  send: () => {
+    /* empty */
+  },
+});
 
 export function SessionSocketProvider({ children }: { children: ReactNode }) {
   const {
@@ -44,44 +45,58 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     let unmounted = false;
 
     function connect() {
-      if (unmounted) return;
+      if (unmounted) {
+        return;
+      }
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${protocol}//${window.location.host}/ws/session`);
       wsRef.current = ws;
 
       ws.addEventListener("open", () => {
-        if (!unmounted) setConnected(true);
+        if (!unmounted) {
+          setConnected(true);
+        }
       });
 
       ws.addEventListener("message", (e) => {
-        if (unmounted) return;
+        if (unmounted) {
+          return;
+        }
         try {
           const event = JSON.parse(e.data as string) as IncomingEvent;
           switch (event.type) {
-            case "ticket-updated":
+            case "ticket-updated": {
               updateTicket(event.ticket.id, event.ticket);
               break;
-            case "agent-updated":
+            }
+            case "agent-updated": {
               setAgent(event.agent);
               break;
-            case "notification":
+            }
+            case "notification": {
               addNotification(event.notification);
               break;
-            case "kanban-sync":
+            }
+            case "kanban-sync": {
               useStore.setState({ tickets: event.tickets });
               break;
-            case "branch-updated":
+            }
+            case "branch-updated": {
               setCurrentBranch(event.branch);
               break;
-            case "diff-updated":
+            }
+            case "diff-updated": {
               setAgentDiff(event.agentId, event.diff);
               break;
-            case "acp-state-updated":
+            }
+            case "acp-state-updated": {
               setAcpState(event.agentId, event.state);
               break;
-            case "branches-updated":
+            }
+            case "branches-updated": {
               fetchBranches();
               break;
+            }
           }
         } catch {
           // malformed message — ignore
@@ -104,7 +119,9 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unmounted = true;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+      }
       wsRef.current?.close();
     };
   }, [

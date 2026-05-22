@@ -1,8 +1,11 @@
-import { EventEmitter } from "events";
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { existsSync } from "fs";
-import { join } from "path";
+
+import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
 import {
   AgentSideConnection,
   ClientSideConnection,
@@ -19,8 +22,7 @@ import type {
   Agent as AcpAgent,
   Stream,
 } from "@agentclientprotocol/sdk";
-import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
-import type { ChildProcess } from "node:child_process";
+
 import type {
   Agent,
   AgentType,
@@ -29,8 +31,8 @@ import type {
   AcpPlanStep,
 } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
-import { broadcastNotification } from "../ws/hub.ts";
 import { logger, errorMeta } from "../lib/logger.ts";
+import { broadcastNotification } from "../ws/hub.ts";
 import type { IAgentManager } from "./AgentManager.ts";
 
 const log = logger.child("acp");
@@ -67,30 +69,32 @@ const exitCallbacks = new Map<string, (agentId: string, code: number) => void>()
 function initialState(agentId: string): AcpAgentState {
   return {
     agentId,
+    lastError: null,
+    messages: [],
+    plan: [],
     sessionId: null,
     status: "idle",
-    userMessages: [],
-    messages: [],
     toolCalls: [],
-    plan: [],
-    lastError: null,
     updatedAt: Date.now(),
+    userMessages: [],
   };
 }
 
 function cloneState(state: AcpAgentState): AcpAgentState {
   return {
     ...state,
-    userMessages: [...state.userMessages],
     messages: [...state.messages],
-    toolCalls: [...state.toolCalls],
     plan: [...state.plan],
+    toolCalls: [...state.toolCalls],
+    userMessages: [...state.userMessages],
   };
 }
 
 function upsertById<T extends { id: string }>(arr: T[], next: T): T[] {
   const i = arr.findIndex((x) => x.id === next.id);
-  if (i === -1) return [...arr, next];
+  if (i === -1) {
+    return [...arr, next];
+  }
   const clone = [...arr];
   clone[i] = next;
   return clone;
@@ -98,12 +102,17 @@ function upsertById<T extends { id: string }>(arr: T[], next: T): T[] {
 
 function persistState(agentId: string, state: AcpAgentState): void {
   stateCache.set(agentId, state);
-  agentStmts.saveAgentState.run({ $id: agentId, $agentState: JSON.stringify(state) });
+  agentStmts.saveAgentState.run({
+    $agentState: JSON.stringify(state),
+    $id: agentId,
+  });
 }
 
 function loadPersistedState(agentId: string): AcpAgentState | null {
   const raw = agentStmts.loadAgentState.get(agentId);
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
   try {
     return JSON.parse(raw) as AcpAgentState;
   } catch {
@@ -114,9 +123,9 @@ function loadPersistedState(agentId: string): AcpAgentState | null {
 function pushState(session: AcpSession): void {
   session.state.updatedAt = Date.now();
   broadcastNotification({
-    type: "acp-state-updated",
     agentId: session.agentId,
     state: cloneState(session.state),
+    type: "acp-state-updated",
   });
 }
 
@@ -126,11 +135,11 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
   switch (update.sessionUpdate) {
     case "agent_message_chunk": {
       if (!session.activeMessageId) {
-        session.activeMessageId = `msg-${session.agentId}-${session.messageSeq++}`;
+        session.activeMessageId = `msg-${session.agentId}-${(session.messageSeq += 1)}`;
         session.activeMessageText = "";
         session.state.messages = [
           ...session.state.messages,
-          { id: session.activeMessageId, text: "", seq: session.eventSeq++ },
+          { id: session.activeMessageId, seq: (session.eventSeq += 1), text: "" },
         ];
       }
       if (update.content.type === "text") {
@@ -142,9 +151,10 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       break;
     }
 
-    case "agent_thought_chunk":
+    case "agent_thought_chunk": {
       // Thoughts are not surfaced in the UI
       break;
+    }
 
     case "tool_call": {
       // Close current text chunk so tool calls appear inline
@@ -153,13 +163,13 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       const existingTc = session.state.toolCalls.find((t) => t.id === update.toolCallId);
       const tc: AcpToolCall = {
         id: update.toolCallId,
-        title: update.title,
-        kind: update.kind ?? "other",
-        status: update.status ?? "pending",
-        location: update.locations?.[0]?.path ?? null,
         inputSummary: null,
+        kind: update.kind ?? "other",
+        location: update.locations?.[0]?.path ?? null,
         resultSummary: null,
-        seq: existingTc?.seq ?? session.eventSeq++,
+        seq: existingTc?.seq ?? ++session.eventSeq,
+        status: update.status ?? "pending",
+        title: update.title,
       };
       session.state.toolCalls = upsertById(session.state.toolCalls, tc);
       break;
@@ -183,16 +193,17 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       session.state.plan = update.entries.map(
         (entry, idx): AcpPlanStep => ({
           id: `plan-${idx}`,
-          title: entry.content,
           priority: entry.priority,
           status: entry.status,
+          title: entry.content,
         }),
       );
       break;
     }
 
-    default:
+    default: {
       break;
+    }
   }
 
   pushState(session);
@@ -201,7 +212,9 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
 function extractResultSummary(update: {
   content?: { type: string; content?: { type: string; text?: string } }[] | null;
 }): string | null {
-  if (!update.content) return null;
+  if (!update.content) {
+    return null;
+  }
   for (const item of update.content) {
     if (item.type === "content" && item.content?.type === "text" && item.content.text) {
       return item.content.text.slice(0, 300);
@@ -235,7 +248,7 @@ function buildClaudeInProcessChannel(): {
 
   const agentSideConn = new AgentSideConnection((conn) => new ClaudeAcpAgent(conn), agentStream);
 
-  return { stream: clientStream, agentSideConn };
+  return { agentSideConn, stream: clientStream };
 }
 
 function parseCommand(cmd: string): { executable: string; args: string[] } | null {
@@ -257,8 +270,10 @@ function parseCommand(cmd: string): { executable: string; args: string[] } | nul
       current += ch;
     }
   }
-  if (current) parts.push(current);
-  return parts.length === 0 ? null : { executable: parts[0], args: parts.slice(1) };
+  if (current) {
+    parts.push(current);
+  }
+  return parts.length === 0 ? null : { args: parts.slice(1), executable: parts[0] };
 }
 
 function spawnProcess(
@@ -268,8 +283,8 @@ function spawnProcess(
 ): ChildProcess {
   const spawnOpts = {
     cwd: worktreePath,
-    stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
     env: { ...process.env, TERM: "xterm-256color" },
+    stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
   };
 
   if (agentType === "codex") {
@@ -279,7 +294,9 @@ function spawnProcess(
   }
 
   const parsed = parseCommand(customCommand ?? "");
-  if (!parsed) throw new Error("Invalid or empty custom command");
+  if (!parsed) {
+    throw new Error("Invalid or empty custom command");
+  }
   return spawn(parsed.executable, parsed.args, spawnOpts);
 }
 
@@ -287,17 +304,18 @@ function spawnProcess(
 
 function makeClient(session: AcpSession): Client {
   return {
-    async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
       const allowOpt =
         params.options.find((o) => o.kind === "allow_always" || o.kind === "allow_once") ??
         params.options[0];
-      return {
-        outcome: { outcome: "selected", optionId: allowOpt.optionId },
-      };
+      return Promise.resolve({
+        outcome: { optionId: allowOpt.optionId, outcome: "selected" },
+      });
     },
 
-    async sessionUpdate(params: SessionNotification): Promise<void> {
+    sessionUpdate(params: SessionNotification): Promise<void> {
       handleSessionUpdate(session, params.update);
+      return Promise.resolve();
     },
   };
 }
@@ -307,7 +325,9 @@ function makeClient(session: AcpSession): Client {
 function startPrompt(session: AcpSession, text: string, clientId?: string): void {
   session.canceledForHandoff = false;
   if (!session.sessionId) {
-    log.error("startPrompt called without sessionId", { agentId: session.agentId });
+    log.error("startPrompt called without sessionId", {
+      agentId: session.agentId,
+    });
     return;
   }
 
@@ -318,9 +338,9 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
 
   if (text.trim()) {
     session.state.userMessages = upsertById(session.state.userMessages, {
+      agentStartIndex: session.state.messages.length,
       id: clientId ?? `user-${Date.now()}`,
       userText: text,
-      agentStartIndex: session.state.messages.length,
       ...(clientId && { clientId }),
     });
   }
@@ -329,10 +349,14 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
 
   const sid = session.sessionId;
   const promptPromise = session.connection
-    .prompt({ sessionId: sid, prompt: [{ type: "text", text }] })
+    .prompt({ prompt: [{ text, type: "text" }], sessionId: sid })
     .then((result) => {
-      if (session.finalized) return;
-      if (session.canceledForHandoff) return;
+      if (session.finalized) {
+        return;
+      }
+      if (session.canceledForHandoff) {
+        return;
+      }
       const success = result.stopReason === "end_turn" || result.stopReason === "max_tokens";
       session.state.status = success ? "completed" : "failed";
       session.activeMessageId = null;
@@ -341,34 +365,53 @@ function startPrompt(session: AcpSession, text: string, clientId?: string): void
       persistState(session.agentId, cloneState(session.state));
 
       agentStmts.updateStatus.run({
+        $endedAt: Date.now(),
         $id: session.agentId,
         $status: success ? "done" : "error",
-        $endedAt: Date.now(),
       });
       const updatedAgent = agentStmts.get.get(session.agentId);
-      if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
+      if (updatedAgent) {
+        broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+      }
 
       session.activePromise = null;
       if (!session.finalized) {
         const cb = exitCallbacks.get(session.agentId);
-        if (cb) cb(session.agentId, success ? 0 : 1);
+        if (cb) {
+          cb(session.agentId, success ? 0 : 1);
+        }
       }
     })
-    .catch((err: Error) => {
-      if (session.finalized) return;
-      if (session.canceledForHandoff) return;
-      log.error("ACP prompt error", { agentId: session.agentId, ...errorMeta(err) });
+    .catch((error: Error) => {
+      if (session.finalized) {
+        return;
+      }
+      if (session.canceledForHandoff) {
+        return;
+      }
+      log.error("ACP prompt error", {
+        agentId: session.agentId,
+        ...errorMeta(error),
+      });
       session.state.status = "failed";
-      session.state.lastError = err.message;
+      session.state.lastError = error.message;
       pushState(session);
       persistState(session.agentId, cloneState(session.state));
-      agentStmts.updateStatus.run({ $id: session.agentId, $status: "error", $endedAt: Date.now() });
+      agentStmts.updateStatus.run({
+        $endedAt: Date.now(),
+        $id: session.agentId,
+        $status: "error",
+      });
       const updatedAgent = agentStmts.get.get(session.agentId);
-      if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
+      if (updatedAgent) {
+        broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+      }
       session.activePromise = null;
       if (!session.finalized) {
         const cb = exitCallbacks.get(session.agentId);
-        if (cb) cb(session.agentId, 1);
+        if (cb) {
+          cb(session.agentId, 1);
+        }
       }
     });
 
@@ -383,13 +426,17 @@ async function initSession(
   const { connection, agentId, cwd } = session;
 
   await connection.initialize({
-    protocolVersion: PROTOCOL_VERSION,
     clientCapabilities: {},
+    protocolVersion: PROTOCOL_VERSION,
   });
 
   if (loadSessionId) {
     try {
-      await connection.loadSession({ sessionId: loadSessionId, cwd, mcpServers: [] });
+      await connection.loadSession({
+        cwd,
+        mcpServers: [],
+        sessionId: loadSessionId,
+      });
       session.sessionId = loadSessionId;
     } catch {
       const result = await connection.newSession({ cwd, mcpServers: [] });
@@ -401,7 +448,10 @@ async function initSession(
   }
 
   session.state.sessionId = session.sessionId;
-  agentStmts.overwriteSessionId.run({ $sessionId: session.sessionId!, $id: agentId });
+  agentStmts.overwriteSessionId.run({
+    $id: agentId,
+    $sessionId: session.sessionId!,
+  });
   pushState(session);
 
   if (prompt.trim()) {
@@ -428,8 +478,8 @@ export class AcpClientManager implements IAgentManager {
 
     if (agentType === "claude-code") {
       const channel = buildClaudeInProcessChannel();
-      stream = channel.stream;
-      agentSideConn = channel.agentSideConn;
+      ({ stream } = channel);
+      ({ agentSideConn } = channel);
     } else {
       proc = spawnProcess(agentType as "codex" | "custom", customCommand, worktreePath);
       stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
@@ -439,22 +489,22 @@ export class AcpClientManager implements IAgentManager {
     const state = initialState(agentId);
 
     const session: AcpSession = {
-      agentId,
-      cwd: worktreePath,
-      proc,
-      agentSideConn,
-      connection: null as unknown as ClientSideConnection,
-      emitter,
-      sessionId: null,
-      state,
-      finalized: false,
-      onExit,
       activeMessageId: null,
       activeMessageText: "",
-      messageSeq: 0,
-      eventSeq: 0,
       activePromise: null,
+      agentId,
+      agentSideConn,
       canceledForHandoff: false,
+      connection: null as unknown as ClientSideConnection,
+      cwd: worktreePath,
+      emitter,
+      eventSeq: 0,
+      finalized: false,
+      messageSeq: 0,
+      onExit,
+      proc,
+      sessionId: null,
+      state,
     };
 
     session.connection = new ClientSideConnection(
@@ -476,7 +526,11 @@ export class AcpClientManager implements IAgentManager {
           session.state.status = "failed";
           session.state.lastError = err.message;
           persistState(agentId, cloneState(session.state));
-          agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
+          agentStmts.updateStatus.run({
+            $endedAt: Date.now(),
+            $id: agentId,
+            $status: "error",
+          });
           sessions.delete(agentId);
           onExit(agentId, 1);
         }
@@ -489,9 +543,9 @@ export class AcpClientManager implements IAgentManager {
           session.state.status = exitCode === 0 ? "completed" : "failed";
           persistState(agentId, cloneState(session.state));
           agentStmts.updateStatus.run({
+            $endedAt: Date.now(),
             $id: agentId,
             $status: exitCode === 0 ? "done" : "error",
-            $endedAt: Date.now(),
           });
           sessions.delete(agentId);
           onExit(agentId, exitCode);
@@ -499,15 +553,19 @@ export class AcpClientManager implements IAgentManager {
       });
     }
 
-    initSession(session, prompt, null).catch((err: Error) => {
-      log.error("ACP session init failed", { agentId, ...errorMeta(err) });
+    initSession(session, prompt, null).catch((error: Error) => {
+      log.error("ACP session init failed", { agentId, ...errorMeta(error) });
       if (!session.finalized) {
         session.finalized = true;
         session.state.status = "failed";
-        session.state.lastError = err.message;
+        session.state.lastError = error.message;
         pushState(session);
         persistState(agentId, cloneState(session.state));
-        agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
+        agentStmts.updateStatus.run({
+          $endedAt: Date.now(),
+          $id: agentId,
+          $status: "error",
+        });
         sessions.delete(agentId);
         proc?.kill();
         onExit(agentId, 1);
@@ -517,15 +575,19 @@ export class AcpClientManager implements IAgentManager {
 
   write(agentId: string, input: string): void {
     const session = sessions.get(agentId);
-    if (!session) throw new Error(`No ACP session for agent ${agentId}`);
-    this._cancelAndPrompt(session, input);
+    if (!session) {
+      throw new Error(`No ACP session for agent ${agentId}`);
+    }
+    this.cancelAndPrompt(session, input);
   }
 
   async writeToAgent(agent: Agent, input: string, clientId?: string): Promise<void> {
     let session = sessions.get(agent.id);
 
     if (!session) {
-      if (!agent.sessionId) throw new Error(`No ACP session for agent ${agent.id}`);
+      if (!agent.sessionId) {
+        throw new Error(`No ACP session for agent ${agent.id}`);
+      }
 
       const agentRecord = agentStmts.get.get(agent.id);
       const agentType = (agentRecord?.type ?? "custom") as AgentType;
@@ -547,8 +609,8 @@ export class AcpClientManager implements IAgentManager {
 
       if (agentType === "claude-code") {
         const channel = buildClaudeInProcessChannel();
-        stream = channel.stream;
-        agentSideConn = channel.agentSideConn;
+        ({ stream } = channel);
+        ({ agentSideConn } = channel);
       } else {
         proc = spawnProcess(agentType as "codex" | "custom", customCmd, agent.worktreePath);
         stream = ndJsonStream(Writable.toWeb(proc.stdin!), Readable.toWeb(proc.stdout!));
@@ -557,22 +619,26 @@ export class AcpClientManager implements IAgentManager {
       const emitter = new EventEmitter();
 
       const newSession: AcpSession = {
-        agentId: agent.id,
-        cwd: agent.worktreePath,
-        proc,
-        agentSideConn,
-        connection: null as unknown as ClientSideConnection,
-        emitter,
-        sessionId: agent.sessionId,
-        state,
-        finalized: false,
-        onExit: exitCallbacks.get(agent.id) ?? (() => {}),
         activeMessageId: null,
         activeMessageText: "",
-        messageSeq: prior?.messages.length ?? 0,
-        eventSeq: (prior?.messages.length ?? 0) + (prior?.toolCalls.length ?? 0),
         activePromise: null,
+        agentId: agent.id,
+        agentSideConn,
         canceledForHandoff: false,
+        connection: null as unknown as ClientSideConnection,
+        cwd: agent.worktreePath,
+        emitter,
+        eventSeq: (prior?.messages.length ?? 0) + (prior?.toolCalls.length ?? 0),
+        finalized: false,
+        messageSeq: prior?.messages.length ?? 0,
+        onExit:
+          exitCallbacks.get(agent.id) ??
+          (() => {
+            /* empty */
+          }),
+        proc,
+        sessionId: agent.sessionId,
+        state,
       };
 
       newSession.connection = new ClientSideConnection(
@@ -587,13 +653,20 @@ export class AcpClientManager implements IAgentManager {
           newSession.emitter.emit("data", chunk.toString("utf-8"));
         });
         proc.on("error", (err) => {
-          log.error("ACP process spawn error", { agentId: agent.id, ...errorMeta(err) });
+          log.error("ACP process spawn error", {
+            agentId: agent.id,
+            ...errorMeta(err),
+          });
           if (!newSession.finalized) {
             newSession.finalized = true;
             newSession.state.status = "failed";
             newSession.state.lastError = err.message;
             persistState(agent.id, cloneState(newSession.state));
-            agentStmts.updateStatus.run({ $id: agent.id, $status: "error", $endedAt: Date.now() });
+            agentStmts.updateStatus.run({
+              $endedAt: Date.now(),
+              $id: agent.id,
+              $status: "error",
+            });
             sessions.delete(agent.id);
             newSession.onExit(agent.id, 1);
           }
@@ -605,9 +678,9 @@ export class AcpClientManager implements IAgentManager {
             newSession.state.status = exitCode === 0 ? "completed" : "failed";
             persistState(agent.id, cloneState(newSession.state));
             agentStmts.updateStatus.run({
+              $endedAt: Date.now(),
               $id: agent.id,
               $status: exitCode === 0 ? "done" : "error",
-              $endedAt: Date.now(),
             });
             sessions.delete(agent.id);
             newSession.onExit(agent.id, exitCode);
@@ -616,14 +689,14 @@ export class AcpClientManager implements IAgentManager {
       }
 
       await newSession.connection.initialize({
-        protocolVersion: PROTOCOL_VERSION,
         clientCapabilities: {},
+        protocolVersion: PROTOCOL_VERSION,
       });
       try {
         await newSession.connection.loadSession({
-          sessionId: agent.sessionId,
           cwd: agent.worktreePath,
           mcpServers: [],
+          sessionId: agent.sessionId,
         });
       } catch {
         const r = await newSession.connection.newSession({
@@ -632,18 +705,27 @@ export class AcpClientManager implements IAgentManager {
         });
         newSession.sessionId = r.sessionId;
         newSession.state.sessionId = r.sessionId;
-        agentStmts.overwriteSessionId.run({ $sessionId: r.sessionId, $id: agent.id });
+        agentStmts.overwriteSessionId.run({
+          $id: agent.id,
+          $sessionId: r.sessionId,
+        });
       }
     }
 
-    agentStmts.updateStatus.run({ $id: agent.id, $status: "running", $endedAt: null });
+    agentStmts.updateStatus.run({
+      $endedAt: null,
+      $id: agent.id,
+      $status: "running",
+    });
     const updated = agentStmts.get.get(agent.id);
-    if (updated) broadcastNotification({ type: "agent-updated", agent: updated });
+    if (updated) {
+      broadcastNotification({ agent: updated, type: "agent-updated" });
+    }
 
-    this._cancelAndPrompt(session, input, clientId);
+    this.cancelAndPrompt(session, input, clientId);
   }
 
-  private _cancelAndPrompt(session: AcpSession, input: string, clientId?: string): void {
+  private cancelAndPrompt(session: AcpSession, input: string, clientId?: string): void {
     if (session.activePromise && session.sessionId) {
       session.canceledForHandoff = true;
       const sid = session.sessionId;
@@ -658,26 +740,38 @@ export class AcpClientManager implements IAgentManager {
 
   interrupt(agentId: string): void {
     const session = sessions.get(agentId);
-    if (!session?.sessionId) return;
+    if (!session?.sessionId) {
+      return;
+    }
     session.connection.cancel({ sessionId: session.sessionId });
   }
 
   kill(agentId: string): void {
     const session = sessions.get(agentId);
-    if (!session) return;
+    if (!session) {
+      return;
+    }
     session.finalized = true;
     session.state.status = "failed";
     pushState(session);
     persistState(agentId, cloneState(session.state));
     if (!session.proc && session.sessionId) {
-      session.connection.cancel({ sessionId: session.sessionId }).catch(() => {});
+      session.connection.cancel({ sessionId: session.sessionId }).catch(() => {
+        /* empty */
+      });
     }
     session.proc?.kill();
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
-    agentStmts.updateStatus.run({ $id: agentId, $status: "error", $endedAt: Date.now() });
+    agentStmts.updateStatus.run({
+      $endedAt: Date.now(),
+      $id: agentId,
+      $status: "error",
+    });
     const updatedAgent = agentStmts.get.get(agentId);
-    if (updatedAgent) broadcastNotification({ type: "agent-updated", agent: updatedAgent });
+    if (updatedAgent) {
+      broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+    }
   }
 
   killAndWait(agentId: string): Promise<void> {
@@ -688,11 +782,13 @@ export class AcpClientManager implements IAgentManager {
     }
     if (!session.proc) {
       // Capture before kill() deletes the session entry.
-      const activePromise = session.activePromise;
+      const { activePromise } = session;
       this.kill(agentId);
       if (activePromise) {
         return Promise.race([
-          activePromise.catch(() => {}),
+          activePromise.catch(() => {
+            /* empty */
+          }),
           new Promise<void>((resolve) => setTimeout(resolve, 2000)),
         ]);
       }
@@ -718,14 +814,28 @@ export class AcpClientManager implements IAgentManager {
     return sessions.has(agentId);
   }
 
-  restore(agent: Agent, onExit: (agentId: string, code: number) => void = () => {}): void {
-    if (sessions.has(agent.id)) return;
+  restore(
+    agent: Agent,
+    onExit: (agentId: string, code: number) => void = () => {
+      /* empty */
+    },
+  ): void {
+    if (sessions.has(agent.id)) {
+      return;
+    }
 
     exitCallbacks.set(agent.id, onExit);
 
     if (!agent.sessionId) {
-      agentStmts.updateStatus.run({ $id: agent.id, $status: "error", $endedAt: Date.now() });
-      broadcastNotification({ type: "agent-updated", agent: { ...agent, status: "error" } });
+      agentStmts.updateStatus.run({
+        $endedAt: Date.now(),
+        $id: agent.id,
+        $status: "error",
+      });
+      broadcastNotification({
+        agent: { ...agent, status: "error" },
+        type: "agent-updated",
+      });
       return;
     }
 
@@ -743,15 +853,17 @@ export class AcpClientManager implements IAgentManager {
     // Don't spawn a new process on restore — session is idle until user sends a message.
     stateCache.set(agent.id, state);
     broadcastNotification({
-      type: "acp-state-updated",
       agentId: agent.id,
       state: cloneState(state),
+      type: "acp-state-updated",
     });
   }
 
   getState(agentId: string): AcpAgentState {
     const session = sessions.get(agentId);
-    if (session) return cloneState(session.state);
+    if (session) {
+      return cloneState(session.state);
+    }
     return stateCache.get(agentId) ?? loadPersistedState(agentId) ?? initialState(agentId);
   }
 }

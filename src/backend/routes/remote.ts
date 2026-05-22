@@ -1,10 +1,11 @@
 import { Hono } from "hono";
+
+import type { RemoteConfig } from "../../common/types.ts";
 import { remoteStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { gitWatcher } from "../services/GitWatcher.ts";
 import { detectLocalRepo, GitWorktreeManager } from "../services/GitWorktreeManager.ts";
 import { broadcastNotification } from "../ws/hub.ts";
-import type { RemoteConfig } from "../../common/types.ts";
 
 export const remoteRouter = new Hono();
 const log = logger.child("remote");
@@ -16,14 +17,19 @@ remoteRouter.get("/config", (c) => {
 
 remoteRouter.get("/branches", async (c) => {
   const config = remoteStmts.get.get();
-  if (!config?.localPath) return c.json({ branches: [] });
+  if (!config?.localPath) {
+    return c.json({ branches: [] });
+  }
 
   try {
     const git = new GitWorktreeManager(config.localPath);
     const branches = await git.listBranches();
     return c.json({ branches });
-  } catch (err) {
-    log.error("failed to list branches", { localPath: config.localPath, ...errorMeta(err) });
+  } catch (error) {
+    log.error("failed to list branches", {
+      localPath: config.localPath,
+      ...errorMeta(error),
+    });
     return c.json({ error: "Internal server error" }, 500);
   }
 });
@@ -40,9 +46,9 @@ remoteRouter.post("/detect", async (c) => {
   }
 
   remoteStmts.upsert.run({
-    $repoUrl: detected.repoUrl,
     $baseBranch: detected.baseBranch,
     $localPath: detected.localPath,
+    $repoUrl: detected.repoUrl,
   });
 
   gitWatcher.start(detected.localPath, broadcastNotification);
@@ -52,7 +58,9 @@ remoteRouter.post("/detect", async (c) => {
 
 remoteRouter.get("/branch", async (c) => {
   const config = remoteStmts.get.get();
-  if (!config?.localPath) return c.json({ branch: null });
+  if (!config?.localPath) {
+    return c.json({ branch: null });
+  }
   try {
     const git = new GitWorktreeManager(config.localPath);
     const branch = await git.currentBranch();
@@ -63,29 +71,33 @@ remoteRouter.get("/branch", async (c) => {
 });
 
 remoteRouter.post("/clone", async (c) => {
-  const body = await c.req.json<{ repoUrl?: string; baseBranch?: string; localPath?: string }>();
+  const body = await c.req.json<{
+    repoUrl?: string;
+    baseBranch?: string;
+    localPath?: string;
+  }>();
   if (!body.repoUrl || !body.localPath) {
     return c.json({ error: "repoUrl and localPath are required" }, 400);
   }
 
   const config: RemoteConfig = {
-    repoUrl: body.repoUrl,
     baseBranch: body.baseBranch ?? "main",
     localPath: body.localPath,
+    repoUrl: body.repoUrl,
   };
 
   try {
     const git = new GitWorktreeManager(config.localPath);
     await git.clone(config.repoUrl, config.localPath);
     remoteStmts.upsert.run({
-      $repoUrl: config.repoUrl,
       $baseBranch: config.baseBranch,
       $localPath: config.localPath,
+      $repoUrl: config.repoUrl,
     });
     gitWatcher.start(config.localPath, broadcastNotification);
     return c.json({ ok: true });
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 500);
+  } catch (error) {
+    return c.json({ error: (error as Error).message }, 500);
   }
 });
 
@@ -94,7 +106,9 @@ remoteRouter.post("/pull", async (c) => {
   const config = remoteStmts.get.get();
 
   const localPath = body.localPath ?? config?.localPath;
-  if (!localPath) return c.json({ error: "localPath is required" }, 400);
+  if (!localPath) {
+    return c.json({ error: "localPath is required" }, 400);
+  }
 
   const baseBranch = config?.baseBranch ?? "main";
 
@@ -102,8 +116,8 @@ remoteRouter.post("/pull", async (c) => {
     const git = new GitWorktreeManager(localPath);
     await git.pull(baseBranch);
     return c.json({ ok: true });
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 500);
+  } catch (error) {
+    return c.json({ error: (error as Error).message }, 500);
   }
 });
 
@@ -113,13 +127,15 @@ remoteRouter.post("/push", async (c) => {
 
   const localPath = body.localPath ?? config?.localPath;
   const branch = body.branch ?? config?.baseBranch;
-  if (!localPath || !branch) return c.json({ error: "branch and localPath are required" }, 400);
+  if (!localPath || !branch) {
+    return c.json({ error: "branch and localPath are required" }, 400);
+  }
 
   try {
     const git = new GitWorktreeManager(localPath);
     await git.push(branch);
     return c.json({ ok: true });
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 500);
+  } catch (error) {
+    return c.json({ error: (error as Error).message }, 500);
   }
 });

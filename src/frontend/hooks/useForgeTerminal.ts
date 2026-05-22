@@ -1,9 +1,11 @@
-import { useEffect, useMemo, type RefObject } from "react";
 import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
-import { useXTerm } from "./useXTerm";
-import { useSessionSocket } from "./useSessionSocket";
+import { useEffect, useMemo } from "react";
+import type { RefObject } from "react";
+
 import { TERMINAL_OPTIONS } from "../lib/terminalConfig";
+import { useSessionSocket } from "./useSessionSocket";
+import { useXTerm } from "./useXTerm";
 
 export function useForgeTerminal(wsUrl: string | null): {
   containerRef: RefObject<HTMLDivElement>;
@@ -18,13 +20,17 @@ export function useForgeTerminal(wsUrl: string | null): {
 
   // Load FitAddon once when terminal is ready
   useEffect(() => {
-    if (!instance) return;
+    if (!instance) {
+      return;
+    }
     instance.loadAddon(fitAddon);
   }, [instance, fitAddon]);
 
   // ResizeObserver → fit + send resize over session channel
   useEffect(() => {
-    if (!instance || !ref.current) return;
+    if (!instance || !ref.current) {
+      return;
+    }
     const container = ref.current;
     const safeFit = () => {
       try {
@@ -34,7 +40,12 @@ export function useForgeTerminal(wsUrl: string | null): {
     const observer = new ResizeObserver(() => {
       safeFit();
       if (terminalId) {
-        send({ type: "resize", agentId: terminalId, cols: instance.cols, rows: instance.rows });
+        send({
+          agentId: terminalId,
+          cols: instance.cols,
+          rows: instance.rows,
+          type: "resize",
+        });
       }
     });
     observer.observe(container);
@@ -44,7 +55,9 @@ export function useForgeTerminal(wsUrl: string | null): {
 
   // Data WS — AttachAddon owns it entirely (pure raw PTY)
   useEffect(() => {
-    if (!wsUrl || !instance) return;
+    if (!wsUrl || !instance) {
+      return;
+    }
     let disposed = false;
     let attachAddon: AttachAddon | null = null;
     let dataSocket: WebSocket | null = null;
@@ -53,7 +66,9 @@ export function useForgeTerminal(wsUrl: string | null): {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     const connect = () => {
-      if (disposed) return;
+      if (disposed) {
+        return;
+      }
       const ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
       dataSocket = ws;
 
@@ -69,17 +84,24 @@ export function useForgeTerminal(wsUrl: string | null): {
           fitAddon.fit();
         } catch {}
         if (terminalId) {
-          send({ type: "resize", agentId: terminalId, cols: instance.cols, rows: instance.rows });
+          send({
+            agentId: terminalId,
+            cols: instance.cols,
+            rows: instance.rows,
+            type: "resize",
+          });
         }
       });
       ws.addEventListener("close", () => {
         attachAddon?.dispose();
         attachAddon = null;
-        instance.write("\r\n\x1b[33m[disconnected]\x1b[0m\r\n");
-        if (!disposed) reconnectTimer = setTimeout(connect, 3000);
+        instance.write("\r\n\u001B[33m[disconnected]\u001B[0m\r\n");
+        if (!disposed) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
       });
       ws.addEventListener("error", () => {
-        instance.write("\r\n\x1b[31m[connection error]\x1b[0m\r\n");
+        instance.write("\r\n\u001B[31m[connection error]\u001B[0m\r\n");
       });
     };
 
@@ -87,7 +109,9 @@ export function useForgeTerminal(wsUrl: string | null): {
 
     return () => {
       disposed = true;
-      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+      }
       attachAddon?.dispose();
       dataSocket?.close();
     };

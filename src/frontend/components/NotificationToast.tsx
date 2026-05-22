@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback } from "react";
+
 import { useStore } from "../store";
 import type { AppNotification, NotificationType } from "../types";
 
@@ -12,13 +13,21 @@ const TYPE_META: Record<NotificationType, { Icon: LucideIcon; color: string; ico
       color: "border-forge-green",
       iconColor: "text-forge-green",
     },
+    error: {
+      Icon: AlertCircle,
+      color: "border-forge-red",
+      iconColor: "text-forge-red",
+    },
+    info: {
+      Icon: Info,
+      color: "border-forge-blue",
+      iconColor: "text-forge-blue",
+    },
     "merge-conflict": {
       Icon: AlertTriangle,
       color: "border-forge-red",
       iconColor: "text-forge-red",
     },
-    error: { Icon: AlertCircle, color: "border-forge-red", iconColor: "text-forge-red" },
-    info: { Icon: Info, color: "border-forge-blue", iconColor: "text-forge-blue" },
   };
 
 interface NotificationItemProps {
@@ -85,7 +94,9 @@ export function NotificationToast() {
     [openTicket, dismissNotification],
   );
 
-  if (notifications.length === 0) return null;
+  if (notifications.length === 0) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50 max-w-sm w-full">

@@ -1,27 +1,28 @@
-import { join, relative } from "path";
+import { join, relative } from "node:path";
+
 import type { CompileBuildOptions } from "bun";
 
 const projectRoot = join(import.meta.dir, "..");
 const clientDir = join(projectRoot, "out/client");
 
 const MIME_TYPES: Record<string, string> = {
-  html: "text/html;charset=utf-8",
   css: "text/css",
-  js: "application/javascript",
-  mjs: "application/javascript",
-  json: "application/json",
-  svg: "image/svg+xml",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
   gif: "image/gif",
-  webp: "image/webp",
+  html: "text/html;charset=utf-8",
   ico: "image/x-icon",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  js: "application/javascript",
+  json: "application/json",
+  map: "application/json",
+  mjs: "application/javascript",
+  png: "image/png",
+  svg: "image/svg+xml",
+  ttf: "font/ttf",
+  txt: "text/plain",
+  webp: "image/webp",
   woff: "font/woff",
   woff2: "font/woff2",
-  ttf: "font/ttf",
-  map: "application/json",
-  txt: "text/plain",
 };
 
 function mimeFor(filename: string): string {
@@ -44,17 +45,22 @@ async function generateAssetsModule(): Promise<string> {
 
   for await (const rel of glob.scan({ cwd: clientDir, onlyFiles: true })) {
     const absPath = join(clientDir, rel);
-    const relFromBackend = relative(join(projectRoot, "src/backend"), absPath).replace(/\\/g, "/");
-    const varName = `_a${idx++}`;
-    const normalizedRel = rel.replace(/\\/g, "/");
+    const relFromBackend = relative(join(projectRoot, "src/backend"), absPath).replaceAll(
+      "\\",
+      "/",
+    );
+    const varName = `_a${(idx += 1)}`;
+    const normalizedRel = rel.replaceAll("\\", "/");
     const isIndex = normalizedRel === "index.html";
-    const urlPath = isIndex ? "/index" : "/" + normalizedRel;
+    const urlPath = isIndex ? "/index" : `/${normalizedRel}`;
 
     imports.push(`import ${varName} from ${JSON.stringify(relFromBackend)} with { type: "file" };`);
     entries.push(
       `  { path: ${JSON.stringify(urlPath)}, type: ${JSON.stringify(mimeFor(rel))}, file: ${varName} }`,
     );
-    if (isIndex) indexVar = varName;
+    if (isIndex) {
+      indexVar = varName;
+    }
   }
 
   const indexExport = indexVar
@@ -98,14 +104,14 @@ await Promise.all(
 
     console.log(`Building for ${target ?? "native"}`);
     return Bun.build({
+      compile,
       entrypoints: ["./src/backend/main.ts"],
-      outdir: `./dist/${target?.replace("bun-", "") ?? "native"}`,
-      target: "bun",
-      minify: true,
       files: {
         [join(projectRoot, "src/backend/assets.ts")]: assetsModule,
       },
-      compile,
+      minify: true,
+      outdir: `./dist/${target?.replace("bun-", "") ?? "native"}`,
+      target: "bun",
     });
   }),
 );

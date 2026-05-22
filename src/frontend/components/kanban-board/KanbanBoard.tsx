@@ -1,14 +1,14 @@
 import {
   DndContext,
-  type DragEndEvent,
   DragOverlay,
-  type DragStartEvent,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { useCallback, useState } from "react";
+
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
 import { COLUMN_ORDER } from "../../types";
@@ -23,7 +23,9 @@ export function KanbanBoard() {
     // Mouse: only activates drag after 8px movement — quick clicks fire onClick normally
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     // Touch: short hold distinguishes tap from drag
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
   );
 
   const handleDragStart = useCallback(
@@ -38,15 +40,21 @@ export function KanbanBoard() {
     (event: DragEndEvent) => {
       setDraggingTicket(null);
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        return;
+      }
 
       const ticketId = active.id as string;
       const targetStatus = over.id as TicketStatus;
 
-      if (!COLUMN_ORDER.includes(targetStatus)) return;
+      if (!COLUMN_ORDER.includes(targetStatus)) {
+        return;
+      }
 
       const ticket = tickets.find((t) => t.id === ticketId);
-      if (!ticket || ticket.status === targetStatus) return;
+      if (!ticket || ticket.status === targetStatus) {
+        return;
+      }
 
       moveTicket(ticketId, targetStatus);
     },
@@ -58,7 +66,7 @@ export function KanbanBoard() {
       acc[status] = tickets.filter((t) => t.status === status);
       return acc;
     },
-    { backlog: [], "in-progress": [], review: [], done: [] },
+    { backlog: [], done: [], "in-progress": [], review: [] },
   );
 
   return (

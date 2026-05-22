@@ -1,4 +1,4 @@
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 
 export interface ShellSession {
   id: string;
@@ -17,24 +17,24 @@ export class ShellSessionManager {
 
     const terminal = new Bun.Terminal({
       cols: 80,
-      rows: 24,
-      name: "xterm-256color",
       data: (_terminal, data) => {
         emitter.emit("data", decoder.decode(data));
       },
+      name: "xterm-256color",
+      rows: 24,
     });
 
     const shell = process.env.SHELL ?? "/bin/zsh";
     const loginFlag = shell.endsWith("zsh") ? "--login" : "-l";
 
     const subprocess = Bun.spawn([shell, loginFlag], {
-      terminal,
       cwd,
       env: {
         ...process.env,
-        TERM: "xterm-256color",
         COLORTERM: "truecolor",
+        TERM: "xterm-256color",
       },
+      terminal,
     });
 
     subprocess.exited.then(() => {
@@ -42,7 +42,13 @@ export class ShellSessionManager {
       onExit(sessionId);
     });
 
-    const session: ShellSession = { id: sessionId, terminal, subprocess, emitter, cwd };
+    const session: ShellSession = {
+      cwd,
+      emitter,
+      id: sessionId,
+      subprocess,
+      terminal,
+    };
     sessions.set(sessionId, session);
     return session;
   }
@@ -53,7 +59,9 @@ export class ShellSessionManager {
 
   kill(sessionId: string): void {
     const s = sessions.get(sessionId);
-    if (!s) return;
+    if (!s) {
+      return;
+    }
     try {
       s.subprocess.kill();
     } catch {

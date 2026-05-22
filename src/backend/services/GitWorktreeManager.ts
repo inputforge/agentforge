@@ -1,8 +1,11 @@
-import { simpleGit, type SimpleGit } from "simple-git";
-import { join } from "path";
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import type { DiffResult, GitBranchInfo, RemoteConfig } from "../../common/types.ts";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { simpleGit } from "simple-git";
+import type { SimpleGit } from "simple-git";
+
 import { isGeneratedFile } from "../../common/generatedFiles.ts";
+import type { DiffResult, GitBranchInfo, RemoteConfig } from "../../common/types.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
 const log = logger.child("git");
@@ -16,7 +19,9 @@ export async function detectLocalRepo(searchPath: string): Promise<RemoteConfig 
   try {
     const git = simpleGit(searchPath);
     const isRepo = await git.checkIsRepo();
-    if (!isRepo) return null;
+    if (!isRepo) {
+      return null;
+    }
 
     const localPath = (await git.revparse(["--show-toplevel"])).trim();
     const baseBranch = (await git.revparse(["--abbrev-ref", "HEAD"])).trim();
@@ -28,7 +33,7 @@ export async function detectLocalRepo(searchPath: string): Promise<RemoteConfig 
       // no remote configured — that's fine, local-only repo
     }
 
-    return { localPath, baseBranch, repoUrl };
+    return { baseBranch, localPath, repoUrl };
   } catch {
     return null;
   }
@@ -49,12 +54,14 @@ export class GitWorktreeManager {
     const summary = await this.baseGit.branchLocal();
     return summary.all
       .filter((name) => !name.startsWith("agent/"))
-      .map((name) => ({ name, current: name === summary.current }));
+      .map((name) => ({ current: name === summary.current, name }));
   }
 
   async clone(url: string, targetPath: string): Promise<void> {
     const parentDir = join(targetPath, "..");
-    if (!existsSync(parentDir)) mkdirSync(parentDir, { recursive: true });
+    if (!existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
+    }
     await simpleGit().clone(url, targetPath);
   }
 
@@ -76,35 +83,48 @@ export class GitWorktreeManager {
     const worktreePath = join(this.repoPath, ".agentforge/worktrees", ticketId);
 
     if (!existsSync(join(this.repoPath, ".agentforge/worktrees"))) {
-      mkdirSync(join(this.repoPath, ".agentforge/worktrees"), { recursive: true });
+      mkdirSync(join(this.repoPath, ".agentforge/worktrees"), {
+        recursive: true,
+      });
     }
 
     // Worktree already registered and directory exists — reuse it
     if (existsSync(worktreePath)) {
-      log.debug("reusing existing worktree", { ticketId, worktreePath, branch });
-      return { worktreePath, branch };
+      log.debug("reusing existing worktree", {
+        branch,
+        ticketId,
+        worktreePath,
+      });
+      return { branch, worktreePath };
     }
 
     try {
       // Create the agent branch from the selected base branch, not whatever
       // happens to be checked out in the main worktree.
       await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath, baseBranch]);
-      log.info("worktree created", { ticketId, worktreePath, branch });
+      log.info("worktree created", { branch, ticketId, worktreePath });
     } catch {
       // Branch already exists (e.g. agent restarted after exit) — check it out without -b
       await this.baseGit.raw(["worktree", "add", worktreePath, branch]);
-      log.info("worktree created from existing branch", { ticketId, worktreePath, branch });
+      log.info("worktree created from existing branch", {
+        branch,
+        ticketId,
+        worktreePath,
+      });
     }
 
-    return { worktreePath, branch };
+    return { branch, worktreePath };
   }
 
   async removeWorktree(worktreePath: string): Promise<void> {
     try {
       await this.baseGit.raw(["worktree", "remove", worktreePath, "--force"]);
       log.info("worktree removed", { worktreePath });
-    } catch (err) {
-      log.debug("worktree already gone or remove failed", { worktreePath, ...errorMeta(err) });
+    } catch (error) {
+      log.debug("worktree already gone or remove failed", {
+        worktreePath,
+        ...errorMeta(error),
+      });
     }
   }
 
@@ -122,7 +142,7 @@ export class GitWorktreeManager {
     const aheadCountStr = (
       await worktreeGit.raw(["rev-list", "--count", `${mergeBase}..HEAD`])
     ).trim();
-    const aheadCount = parseInt(aheadCountStr, 10) || 0;
+    const aheadCount = Number.parseInt(aheadCountStr, 10) || 0;
 
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
@@ -132,7 +152,9 @@ export class GitWorktreeManager {
     );
 
     const result = parseDiff(filtered);
-    if (generated.trim()) result.generatedRaw = generated;
+    if (generated.trim()) {
+      result.generatedRaw = generated;
+    }
     result.isDiverged = isDiverged;
     result.aheadCount = aheadCount;
     return result;
@@ -142,9 +164,9 @@ export class GitWorktreeManager {
     log.debug("staging all changes", { worktreePath });
     const worktreeGit = simpleGit(worktreePath);
     await worktreeGit.add("-A");
-    log.debug("committing", { worktreePath, message });
+    log.debug("committing", { message, worktreePath });
     await worktreeGit.commit(message, { "--allow-empty": null });
-    log.info("commit complete", { worktreePath, message });
+    log.info("commit complete", { message, worktreePath });
   }
 
   async rebase(
@@ -152,30 +174,41 @@ export class GitWorktreeManager {
     baseBranch: string,
     abortOnConflict = true,
   ): Promise<{ success: boolean; conflicted: boolean }> {
-    log.debug("rebasing worktree", { worktreePath, baseBranch, abortOnConflict });
+    log.debug("rebasing worktree", {
+      abortOnConflict,
+      baseBranch,
+      worktreePath,
+    });
     const worktreeGit = simpleGit(worktreePath);
 
     try {
       await worktreeGit.rebase([baseBranch]);
-      log.info("rebase complete", { worktreePath, baseBranch });
-      return { success: true, conflicted: false };
-    } catch (err) {
-      const msg = String(err);
+      log.info("rebase complete", { baseBranch, worktreePath });
+      return { conflicted: false, success: true };
+    } catch (error) {
+      const msg = String(error);
       if (msg.includes("CONFLICT") || msg.includes("conflict")) {
-        log.warn("rebase conflict", { worktreePath, baseBranch, abortOnConflict });
+        log.warn("rebase conflict", {
+          abortOnConflict,
+          baseBranch,
+          worktreePath,
+        });
         if (abortOnConflict) {
           await worktreeGit.rebase(["--abort"]).catch((abortErr) => {
-            log.warn("rebase --abort failed", { worktreePath, ...errorMeta(abortErr) });
+            log.warn("rebase --abort failed", {
+              worktreePath,
+              ...errorMeta(abortErr),
+            });
           });
         }
-        return { success: false, conflicted: true };
+        return { conflicted: true, success: false };
       }
       log.error("rebase failed with unexpected error", {
-        worktreePath,
         baseBranch,
-        ...errorMeta(err),
+        worktreePath,
+        ...errorMeta(error),
       });
-      throw err;
+      throw error;
     }
   }
 
@@ -197,7 +230,7 @@ export class GitWorktreeManager {
     branch: string,
     baseBranch: string,
   ): Promise<{ success: boolean; conflicted: boolean; error?: string }> {
-    log.info("mergeToBase started", { branch, baseBranch, worktreePath });
+    log.info("mergeToBase started", { baseBranch, branch, worktreePath });
 
     // Refuse if the main worktree has staged or unstaged tracked-file changes
     const status = await this.baseGit.status();
@@ -210,23 +243,23 @@ export class GitWorktreeManager {
     if (hasDirtyTracked) {
       log.warn("merge blocked: main worktree has dirty tracked files", {
         branch,
-        staged: status.staged.length,
-        modified: status.modified.length,
-        deleted: status.deleted.length,
-        renamed: status.renamed.length,
         conflicted: status.conflicted.length,
+        deleted: status.deleted.length,
+        modified: status.modified.length,
+        renamed: status.renamed.length,
+        staged: status.staged.length,
       });
       return {
-        success: false,
         conflicted: false,
         error: "Working tree has uncommitted changes — commit or stash before merging",
+        success: false,
       };
     }
 
     // Rebase agent branch onto local base branch for linear history
     const rebaseResult = await this.rebase(worktreePath, baseBranch);
     if (!rebaseResult.success) {
-      return { success: false, conflicted: true };
+      return { conflicted: true, success: false };
     }
 
     try {
@@ -235,22 +268,29 @@ export class GitWorktreeManager {
       if (checkedOutAt) {
         // baseBranch is live in a worktree — run ff-merge there directly.
         log.debug("base branch checked out in worktree, running ff-merge there", {
-          branch,
           baseBranch,
+          branch,
           checkedOutAt,
         });
         const wtGit = simpleGit(checkedOutAt);
         await wtGit.merge(["--ff-only", branch]);
       } else {
         // baseBranch is not checked out anywhere — safe to update ref via fetch.
-        log.debug("fast-forward updating base branch ref via fetch", { branch, baseBranch });
+        log.debug("fast-forward updating base branch ref via fetch", {
+          baseBranch,
+          branch,
+        });
         await this.baseGit.raw(["fetch", ".", `${branch}:${baseBranch}`]);
       }
-      log.info("fast-forward merge complete", { branch, baseBranch });
-      return { success: true, conflicted: false };
-    } catch (err) {
-      log.error("fast-forward merge failed", { branch, baseBranch, ...errorMeta(err) });
-      return { success: false, conflicted: false, error: String(err) };
+      log.info("fast-forward merge complete", { baseBranch, branch });
+      return { conflicted: false, success: true };
+    } catch (error) {
+      log.error("fast-forward merge failed", {
+        baseBranch,
+        branch,
+        ...errorMeta(error),
+      });
+      return { conflicted: false, error: String(error), success: false };
     }
   }
 }
@@ -313,10 +353,14 @@ function diffSectionPath(section: string[]): string | null {
 }
 
 function parseDiffPathLine(line: string, marker: string, prefix: string): string | null {
-  if (!line.startsWith(marker)) return null;
+  if (!line.startsWith(marker)) {
+    return null;
+  }
 
   const path = line.slice(marker.length).split("\t")[0];
-  if (path === "/dev/null") return null;
+  if (path === "/dev/null") {
+    return null;
+  }
 
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
@@ -336,7 +380,9 @@ function diffSectionContent(section: string[]): string {
       continue;
     }
 
-    if (!inChunk) continue;
+    if (!inChunk) {
+      continue;
+    }
 
     if ((line.startsWith("+") && !line.startsWith("+++")) || line.startsWith(" ")) {
       content.push(line.slice(1));
@@ -348,7 +394,7 @@ function diffSectionContent(section: string[]): string {
 
 function readWorktreeFile(worktreePath: string, path: string): string | null {
   try {
-    return readFileSync(join(worktreePath, path), "utf8");
+    return readFileSync(join(worktreePath, path), "utf-8");
   } catch {
     return null;
   }
@@ -358,36 +404,53 @@ function parseDiff(raw: string): DiffResult {
   const files: DiffResult["files"] = [];
   let currentFile: DiffResult["files"][0] | null = null;
   let currentChunk: DiffResult["files"][0]["chunks"][0] | null = null;
+  let newLineNo = 0;
 
   let totalAdditions = 0;
   let totalDeletions = 0;
 
   for (const line of raw.split("\n")) {
     if (line.startsWith("diff --git")) {
-      if (currentFile) files.push(currentFile);
-      currentFile = { path: "", additions: 0, deletions: 0, chunks: [] };
+      if (currentFile) {
+        files.push(currentFile);
+      }
+      currentFile = { additions: 0, chunks: [], deletions: 0, path: "" };
       currentChunk = null;
+      newLineNo = 0;
     } else if (line.startsWith("+++ b/") && currentFile) {
       currentFile.path = line.slice(6);
     } else if (line.startsWith("@@ ") && currentFile) {
+      // Parse "+new_start" from "@@ -old,count +new_start,count @@"
+      const match = line.match(/\+(\d+)/);
+      newLineNo = match ? Number.parseInt(match[1], 10) - 1 : 0;
       currentChunk = { header: line, lines: [] };
       currentFile.chunks.push(currentChunk);
     } else if (currentChunk && currentFile) {
       if (line.startsWith("+") && !line.startsWith("+++")) {
-        currentChunk.lines.push({ type: "add", content: line.slice(1) });
-        currentFile.additions++;
-        totalAdditions++;
+        currentChunk.lines.push({
+          content: line.slice(1),
+          lineNo: (newLineNo += 1),
+          type: "add",
+        });
+        currentFile.additions += 1;
+        totalAdditions += 1;
       } else if (line.startsWith("-") && !line.startsWith("---")) {
-        currentChunk.lines.push({ type: "remove", content: line.slice(1) });
-        currentFile.deletions++;
-        totalDeletions++;
+        currentChunk.lines.push({ content: line.slice(1), type: "remove" });
+        currentFile.deletions += 1;
+        totalDeletions += 1;
       } else if (!line.startsWith("\\")) {
-        currentChunk.lines.push({ type: "context", content: line.slice(1) });
+        currentChunk.lines.push({
+          content: line.slice(1),
+          lineNo: (newLineNo += 1),
+          type: "context",
+        });
       }
     }
   }
 
-  if (currentFile) files.push(currentFile);
+  if (currentFile) {
+    files.push(currentFile);
+  }
 
-  return { files, totalAdditions, totalDeletions, raw };
+  return { files, raw, totalAdditions, totalDeletions };
 }

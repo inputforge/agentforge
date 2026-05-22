@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+
 import { useForgeTerminal } from "../hooks/useForgeTerminal";
+import { api } from "../lib/api";
 
 interface WorktreeShellPanelProps {
   agentId: string;
@@ -19,20 +20,28 @@ export function WorktreeShellPanel({ agentId }: WorktreeShellPanelProps) {
       .createShell(agentId)
       .then(({ id }) => {
         if (cancelled) {
-          api.shell.kill(id).catch(() => {});
+          api.shell.kill(id).catch(() => {
+            /* empty */
+          });
           return;
         }
         sessionId = id;
         setWsUrl(`/ws/shell/${id}`);
       })
-      .catch((err: Error) => {
-        console.error(err);
-        if (!cancelled) setShellError(err);
+      .catch((error: Error) => {
+        console.error(error);
+        if (!cancelled) {
+          setShellError(error);
+        }
       });
 
     return () => {
       cancelled = true;
-      if (sessionId) api.shell.kill(sessionId).catch(() => {});
+      if (sessionId) {
+        api.shell.kill(sessionId).catch(() => {
+          /* empty */
+        });
+      }
     };
   }, [agentId]);
 

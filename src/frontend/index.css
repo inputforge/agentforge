@@ -30,9 +30,9 @@
 
   /* Warm off-white text */
   --color-forge-text: #ede8df;
-  --color-forge-text-dim: #6e6860;
+  --color-forge-text-dim: #8d877e;
   --color-forge-text-bright: #f5f0e8;
-  --color-forge-text-muted: #3d3a36;
+  --color-forge-text-muted: #7d776d;
 
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -276,7 +276,7 @@
 }
 
 .diff-line-context {
-  color: #6e6860;
+  color: #8d877e;
 }
 
 .diff-chunk-header {

@@ -1,5 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
-import { type ITerminalInitOnlyOptions, type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { Terminal } from "@xterm/xterm";
+import type { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 
 export function useXTerm(options?: ITerminalOptions & ITerminalInitOnlyOptions) {
@@ -20,5 +21,5 @@ export function useXTerm(options?: ITerminalOptions & ITerminalInitOnlyOptions) 
     };
   }, []);
 
-  return { ref, instance };
+  return { instance, ref };
 }
