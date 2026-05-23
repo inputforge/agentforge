@@ -179,16 +179,16 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
 
   app.post("/:id/archive", async (c) => {
     const id = c.req.param("id");
-    const existing = ticketStmts.get.get(id);
-    if (!existing) {
-      return c.json({ error: "ticket not found" }, 404);
-    }
-    if (existing.archivedAt) {
+    const now = Date.now();
+    const result = ticketStmts.archive.run({ $archivedAt: now, $id: id });
+    if (result.changes === 0) {
+      const existing = ticketStmts.get.get(id);
+      if (!existing) {
+        return c.json({ error: "ticket not found" }, 404);
+      }
       return c.json({ error: "ticket already archived" }, 409);
     }
 
-    const now = Date.now();
-    ticketStmts.archive.run({ $archivedAt: now, $id: id });
     const updated = ticketStmts.get.get(id);
     broadcastNotification({ tickets: ticketStmts.list.all(), type: "kanban-sync" });
     return c.json(updated);
@@ -196,15 +196,15 @@ export function ticketsRouter(orchestrator: OrchestratorService) {
 
   app.post("/:id/unarchive", (c) => {
     const id = c.req.param("id");
-    const existing = ticketStmts.get.get(id);
-    if (!existing) {
-      return c.json({ error: "ticket not found" }, 404);
-    }
-    if (!existing.archivedAt) {
+    const result = ticketStmts.unarchive.run({ $updatedAt: Date.now(), $id: id });
+    if (result.changes === 0) {
+      const existing = ticketStmts.get.get(id);
+      if (!existing) {
+        return c.json({ error: "ticket not found" }, 404);
+      }
       return c.json({ error: "ticket is not archived" }, 409);
     }
 
-    ticketStmts.unarchive.run({ $updatedAt: Date.now(), $id: id });
     const updated = ticketStmts.get.get(id);
     broadcastNotification({ tickets: ticketStmts.list.all(), type: "kanban-sync" });
     return c.json(updated);

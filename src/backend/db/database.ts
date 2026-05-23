@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type Changes } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -135,10 +135,14 @@ export const ticketStmts = {
     },
   },
   archive: {
-    run: (args: { $archivedAt: number; $id: string }): void => {
-      db.query(
-        "UPDATE tickets SET archived_at = $archivedAt, updated_at = $archivedAt WHERE id = $id",
-      ).run(args);
+    run: (args: { $archivedAt: number; $id: string }): Changes => {
+      return db
+        .query(
+          `UPDATE tickets
+           SET archived_at = $archivedAt, updated_at = $archivedAt
+           WHERE id = $id AND archived_at IS NULL`,
+        )
+        .run(args);
     },
   },
   list: {
@@ -160,10 +164,14 @@ export const ticketStmts = {
         .map(mapTicket),
   },
   unarchive: {
-    run: (args: { $updatedAt: number; $id: string }): void => {
-      db.query("UPDATE tickets SET archived_at = NULL, updated_at = $updatedAt WHERE id = $id").run(
-        args,
-      );
+    run: (args: { $updatedAt: number; $id: string }): Changes => {
+      return db
+        .query(
+          `UPDATE tickets
+           SET archived_at = NULL, updated_at = $updatedAt
+           WHERE id = $id AND archived_at IS NOT NULL`,
+        )
+        .run(args);
     },
   },
   updateAgentTitle: {
