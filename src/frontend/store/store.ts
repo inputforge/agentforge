@@ -46,6 +46,16 @@ interface AppState {
   removeTicket: (id: string) => void;
   moveTicket: (ticketId: string, newStatus: TicketStatus) => Promise<void>;
   discardTicket: (ticketId: string) => Promise<void>;
+  archiveTicket: (ticketId: string) => Promise<void>;
+  unarchiveTicket: (ticketId: string) => Promise<void>;
+
+  // Archive state
+  archivedTickets: Ticket[];
+  isArchiveOpen: boolean;
+  isFetchingArchived: boolean;
+  fetchArchivedTickets: () => Promise<void>;
+  openArchive: () => void;
+  closeArchive: () => void;
 
   // Agent actions
   setAgent: (agent: Agent) => void;
@@ -79,6 +89,9 @@ let branchFetchId = 0;
 export const useStore = create<AppState>((set, get) => ({
   acpStates: {},
   activeTicketId: null,
+  archivedTickets: [],
+  isArchiveOpen: false,
+  isFetchingArchived: false,
   addNotification: (n) => {
     const id = `notif-${(notifCounter += 1)}`;
     const notif: AppNotification = { ...n, id, timestamp: Date.now() };
@@ -130,8 +143,67 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
   },
+  archiveTicket: async (ticketId) => {
+    const { tickets, activeTicketId, closeTicket } = get();
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    if (activeTicketId === ticketId) closeTicket();
+
+    // Optimistic removal from kanban
+    set((s) => ({ tickets: s.tickets.filter((t) => t.id !== ticketId) }));
+
+    try {
+      const archived = await api.tickets.archive(ticketId);
+      set((s) => ({ archivedTickets: [archived, ...s.archivedTickets] }));
+    } catch (error) {
+      set((s) => ({ tickets: [...s.tickets, ticket] }));
+      get().addNotification({
+        type: "error",
+        message: `Archive failed: ${(error as Error).message}`,
+      });
+    }
+  },
+  closeArchive: () => set({ isArchiveOpen: false }),
   dismissNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
+  fetchArchivedTickets: async () => {
+    set({ isFetchingArchived: true });
+    try {
+      const archivedTickets = await api.tickets.listArchived();
+      set({ archivedTickets });
+    } catch (error) {
+      get().addNotification({
+        type: "error",
+        message: `Failed to load archive: ${(error as Error).message}`,
+      });
+    } finally {
+      set({ isFetchingArchived: false });
+    }
+  },
+  openArchive: () => {
+    set({ isArchiveOpen: true });
+    get().fetchArchivedTickets();
+  },
+  unarchiveTicket: async (ticketId) => {
+    const { archivedTickets } = get();
+    const ticket = archivedTickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    // Optimistic removal from archive list
+    set((s) => ({ archivedTickets: s.archivedTickets.filter((t) => t.id !== ticketId) }));
+
+    try {
+      const restored = await api.tickets.unarchive(ticketId);
+      set((s) => ({ tickets: [restored, ...s.tickets] }));
+    } catch (error) {
+      set((s) => ({ archivedTickets: [ticket, ...s.archivedTickets] }));
+      get().addNotification({
+        type: "error",
+        message: `Restore failed: ${(error as Error).message}`,
+      });
+    }
+  },
   fetchAgentForTicket: async (ticketId) => {
     const ticket = get().tickets.find((t) => t.id === ticketId);
     if (!ticket?.agentId) {

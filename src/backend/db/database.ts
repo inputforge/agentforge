@@ -32,6 +32,7 @@ interface RawTicket {
   worktree: string | null;
   branch: string | null;
   agentTitle: string | null;
+  archivedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -53,13 +54,14 @@ interface RawAgent {
 
 const TICKET_COLS = `
   id, title, description, status,
-  base_branch AS baseBranch,
-  agent_id    AS agentId,
+  base_branch  AS baseBranch,
+  agent_id     AS agentId,
   worktree,
   branch,
-  agent_title AS agentTitle,
-  created_at  AS createdAt,
-  updated_at  AS updatedAt
+  agent_title  AS agentTitle,
+  archived_at  AS archivedAt,
+  created_at   AS createdAt,
+  updated_at   AS updatedAt
 `;
 
 const AGENT_COLS = `
@@ -132,12 +134,37 @@ export const ticketStmts = {
       ).run(args);
     },
   },
+  archive: {
+    run: (args: { $archivedAt: number; $id: string }): void => {
+      db.query(
+        "UPDATE tickets SET archived_at = $archivedAt, updated_at = $archivedAt WHERE id = $id",
+      ).run(args);
+    },
+  },
   list: {
     all: (): Ticket[] =>
       db
-        .query<RawTicket, []>(`SELECT ${TICKET_COLS} FROM tickets ORDER BY created_at DESC`)
+        .query<RawTicket, []>(
+          `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NULL ORDER BY created_at DESC`,
+        )
         .all()
         .map(mapTicket),
+  },
+  listArchived: {
+    all: (): Ticket[] =>
+      db
+        .query<RawTicket, []>(
+          `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`,
+        )
+        .all()
+        .map(mapTicket),
+  },
+  unarchive: {
+    run: (args: { $updatedAt: number; $id: string }): void => {
+      db.query("UPDATE tickets SET archived_at = NULL, updated_at = $updatedAt WHERE id = $id").run(
+        args,
+      );
+    },
   },
   updateAgentTitle: {
     run: (args: { $agentTitle: string; $updatedAt: number; $id: string }): void => {
