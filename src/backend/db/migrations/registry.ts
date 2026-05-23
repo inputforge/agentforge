@@ -9,4 +9,17 @@ import m007 from "./007_add_claude_state.ts";
 import m008 from "./008_add_acp_state.ts";
 import m009 from "./009_add_agent_state.ts";
 import m010 from "./010_add_diff_comments.ts";
-export const migrations: Migration[] = [m001, m002, m003, m004, m005, m006, m007, m008, m009, m010];
+import m011 from "./011_add_archive.ts";
+export const migrations: Migration[] = [
+  m001,
+  m002,
+  m003,
+  m004,
+  m005,
+  m006,
+  m007,
+  m008,
+  m009,
+  m010,
+  m011,
+];

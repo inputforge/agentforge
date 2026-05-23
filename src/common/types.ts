@@ -59,6 +59,7 @@ export interface Ticket {
   worktree?: string | null;
   branch?: string | null;
   agentTitle?: string | null;
+  archivedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }

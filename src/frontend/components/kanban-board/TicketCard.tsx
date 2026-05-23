@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
-import { ChevronRight, Play, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { useStore } from "../../store";
@@ -31,7 +31,7 @@ const AGENT_STATUS_LABEL: Record<string, string> = {
 };
 
 export function TicketCard({ ticket, agent }: Props) {
-  const { openTicket, activeTicketId, discardTicket, moveTicket } = useStore();
+  const { openTicket, activeTicketId, discardTicket, moveTicket, archiveTicket } = useStore();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
 
@@ -68,6 +68,14 @@ export function TicketCard({ ticket, agent }: Props) {
       discardTicket(ticket.id);
     },
     [needsConfirm, confirmDiscard, discardTicket, ticket.id],
+  );
+
+  const handleArchiveClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      archiveTicket(ticket.id);
+    },
+    [archiveTicket, ticket.id],
   );
 
   const handleMouseLeave = useCallback(() => setConfirmDiscard(false), []);
@@ -114,6 +122,15 @@ export function TicketCard({ ticket, agent }: Props) {
               ) : (
                 <Play size={13} strokeWidth={1.2} />
               )}
+            </button>
+          )}
+          {!confirmDiscard && (
+            <button
+              className="text-forge-text-muted hover:text-forge-amber transition-colors opacity-0 group-hover:opacity-100"
+              onClick={handleArchiveClick}
+              title="Archive ticket"
+            >
+              <Archive size={13} strokeWidth={1.2} />
             </button>
           )}
           {confirmDiscard ? (

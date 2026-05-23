@@ -145,6 +145,7 @@ export const api = {
   },
 
   tickets: {
+    archive: (id: string) => request<Ticket>(`/tickets/${id}/archive`, { method: "POST" }),
     create: (data: { title: string; description: string }) =>
       request<Ticket>("/tickets", {
         body: JSON.stringify(data),
@@ -152,11 +153,13 @@ export const api = {
       }),
     delete: (id: string) => request<void>(`/tickets/${id}`, { method: "DELETE" }),
     list: () => request<Ticket[]>("/tickets"),
+    listArchived: () => request<Ticket[]>("/tickets/archived"),
     spawn: (id: string, agentType: "claude-code" | "codex" | "custom", customCommand?: string) =>
       request<{ ticket: Ticket; agent: Agent | null }>(`/tickets/${id}/spawn`, {
         body: JSON.stringify({ agentType, customCommand }),
         method: "POST",
       }),
+    unarchive: (id: string) => request<Ticket>(`/tickets/${id}/unarchive`, { method: "POST" }),
     updateBaseBranch: (id: string, baseBranch: string) =>
       request<{ ticket: Ticket | null; agent: Agent | null }>(`/tickets/${id}/base-branch`, {
         body: JSON.stringify({ baseBranch }),

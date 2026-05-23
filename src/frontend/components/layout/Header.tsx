@@ -1,4 +1,4 @@
-import { Plug, Plus, TerminalSquare } from "lucide-react";
+import { Archive, Plug, Plus, TerminalSquare } from "lucide-react";
 
 import { useStore } from "../../store";
 import { RemoteBar } from "../RemoteBar";
@@ -6,9 +6,11 @@ import { RemoteBar } from "../RemoteBar";
 export function Header({
   onOpenShell,
   onOpenIntegrations,
+  onOpenArchive,
 }: {
   onOpenShell: () => void;
   onOpenIntegrations: () => void;
+  onOpenArchive: () => void;
 }) {
   const { isConnected, openCreateModal } = useStore();
 
@@ -40,6 +42,15 @@ export function Header({
         >
           <Plug size={13} />
           <span className="text-xs">INTEGRATIONS</span>
+        </button>
+
+        <button
+          className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"
+          onClick={onOpenArchive}
+          title="View archived tickets"
+        >
+          <Archive size={13} />
+          <span className="text-xs">ARCHIVE</span>
         </button>
 
         <button

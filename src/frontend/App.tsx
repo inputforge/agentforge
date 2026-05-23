@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Route, Routes, useNavigate } from "react-router-dom";
 
+import { ArchiveDrawer } from "./components/ArchiveDrawer";
 import { CreateTicketModal } from "./components/CreateTicketModal";
 import { IntegrationsModal } from "./components/IntegrationsModal";
 import { KanbanBoard } from "./components/kanban-board/KanbanBoard";
@@ -22,6 +23,7 @@ function NavigateFnRegistrar() {
 function KanbanPage() {
   const [shellOpen, setShellOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const { isArchiveOpen, openArchive, closeArchive } = useStore();
   const openShell = useCallback(() => setShellOpen(true), []);
   const closeShell = useCallback(() => setShellOpen(false), []);
   const openIntegrations = useCallback(() => setIntegrationsOpen(true), []);
@@ -29,13 +31,18 @@ function KanbanPage() {
 
   return (
     <div className="h-full flex flex-col bg-forge-black overflow-hidden">
-      <Header onOpenShell={openShell} onOpenIntegrations={openIntegrations} />
+      <Header
+        onOpenShell={openShell}
+        onOpenIntegrations={openIntegrations}
+        onOpenArchive={openArchive}
+      />
       <main className="flex-1 overflow-hidden">
         <KanbanBoard />
       </main>
       <CreateTicketModal />
       <IntegrationsModal open={integrationsOpen} onClose={closeIntegrations} />
       {shellOpen && <ShellTerminal onClose={closeShell} />}
+      {isArchiveOpen && <ArchiveDrawer onClose={closeArchive} />}
     </div>
   );
 }
