@@ -1,8 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
@@ -32,8 +30,10 @@ import type {
 } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
 import { logger, errorMeta } from "../lib/logger.ts";
-import { broadcastNotification } from "../ws/hub.ts";
+import { isExecutableFile, whichSync } from "../lib/which.ts";
+import { broadcastNotification } from "../ipc/broadcast.ts";
 import type { IAgentManager } from "./AgentManager.ts";
+import { codexService, NOT_INSTALLED_ERROR } from "./CodexService.ts";
 
 const log = logger.child("acp");
 
@@ -225,6 +225,22 @@ function extractResultSummary(update: {
 
 // ─── Channel builders ─────────────────────────────────────────────────────────
 
+export const CLAUDE_NOT_INSTALLED_ERROR =
+  "claude was not found. Set CLAUDE_CODE_EXECUTABLE to the claude binary, or install " +
+  "Claude Code so that it is on your PATH.";
+
+/**
+ * Resolution order: `CLAUDE_CODE_EXECUTABLE` (an explicit override) → PATH lookup →
+ * null. Mirrors `CodexService.resolveBinaryPath()`; neither binary ships with the app.
+ */
+function resolveClaudePath(): string | null {
+  const configured = process.env.CLAUDE_CODE_EXECUTABLE;
+  if (configured) {
+    return isExecutableFile(configured) ? configured : null;
+  }
+  return whichSync("claude");
+}
+
 /**
  * Wires ClaudeAcpAgent in-process via a paired TransformStream, avoiding any
  * subprocess. Returns the client-facing Stream and the AgentSideConnection
@@ -234,6 +250,17 @@ function buildClaudeInProcessChannel(): {
   stream: Stream;
   agentSideConn: AgentSideConnection;
 } {
+  // ClaudeAcpAgent's ctor takes no options, so the executable can only be injected
+  // through the environment: acp-agent.js's claudeCliPath() reads
+  // CLAUDE_CODE_EXECUTABLE and, only if unset, falls back to resolving its own
+  // per-arch optional dep out of node_modules. We do not ship that dep — the user
+  // installs Claude Code — so resolve from PATH and set the var before it runs.
+  const claudePath = resolveClaudePath();
+  if (!claudePath) {
+    throw new Error(CLAUDE_NOT_INSTALLED_ERROR);
+  }
+  process.env.CLAUDE_CODE_EXECUTABLE = claudePath;
+
   const clientToAgent = new TransformStream<AnyMessage, AnyMessage>();
   const agentToClient = new TransformStream<AnyMessage, AnyMessage>();
 
@@ -288,8 +315,13 @@ function spawnProcess(
   };
 
   if (agentType === "codex") {
-    const localBin = join(process.cwd(), "node_modules/.bin/codex-acp");
-    const executable = existsSync(localBin) ? localBin : "codex-acp";
+    // Single source of truth for resolution (CODEX_ACP_PATH → PATH). A packaged app
+    // has cwd `/` and a Dock PATH of `/usr/bin:/bin:/usr/sbin:/sbin`, so neither a
+    // cwd-relative node_modules/.bin path nor a bare name resolves there.
+    const executable = codexService.resolveBinaryPath();
+    if (!executable) {
+      throw new Error(NOT_INSTALLED_ERROR);
+    }
     return spawn(executable, [], spawnOpts);
   }
 

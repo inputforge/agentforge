@@ -1,78 +1,96 @@
 import { EventEmitter } from "node:events";
 
+import { spawn as spawnPty } from "node-pty";
+
+import type { IPty } from "node-pty";
+
+const DEFAULT_COLS = 80;
+const DEFAULT_ROWS = 24;
+
 export interface ShellSession {
   id: string;
-  terminal: InstanceType<typeof Bun.Terminal>;
-  subprocess: ReturnType<typeof Bun.spawn>;
+  /**
+   * node-pty fuses Bun's separate `Terminal` + `Subprocess` pair into a single
+   * handle: it owns the pty master, the child process, and their lifecycle.
+   */
+  pty: IPty;
   emitter: EventEmitter;
   cwd: string;
 }
 
 const sessions = new Map<string, ShellSession>();
-const decoder = new TextDecoder();
 
 export class ShellSessionManager {
-  spawn(sessionId: string, cwd: string, onExit: (sessionId: string) => void): ShellSession {
+  /**
+   * @param onExit Called once the child exits, with the exit code so callers can
+   * surface it (e.g. `[process exited with code N]`). Fires for both a natural
+   * exit and an explicit `kill()`.
+   */
+  spawn(
+    sessionId: string,
+    cwd: string,
+    onExit: (sessionId: string, exitCode: number) => void,
+  ): ShellSession {
     const emitter = new EventEmitter();
-
-    const terminal = new Bun.Terminal({
-      cols: 80,
-      data: (_terminal, data) => {
-        emitter.emit("data", decoder.decode(data));
-      },
-      name: "xterm-256color",
-      rows: 24,
-    });
 
     const shell = process.env.SHELL ?? "/bin/zsh";
     const loginFlag = shell.endsWith("zsh") ? "--login" : "-l";
 
-    const subprocess = Bun.spawn([shell, loginFlag], {
+    const pty = spawnPty(shell, [loginFlag], {
+      cols: DEFAULT_COLS,
       cwd,
       env: {
         ...process.env,
         COLORTERM: "truecolor",
         TERM: "xterm-256color",
       },
-      terminal,
+      name: "xterm-256color",
+      rows: DEFAULT_ROWS,
     });
 
-    subprocess.exited.then(() => {
+    // node-pty decodes to UTF-8 itself (`encoding` defaults to "utf8") and holds
+    // back multi-byte sequences that straddle a read boundary, so `data` is
+    // already a complete string. Decoding it again would corrupt it.
+    pty.onData((data) => {
+      emitter.emit("data", data);
+    });
+
+    pty.onExit(({ exitCode }) => {
       sessions.delete(sessionId);
-      onExit(sessionId);
+      onExit(sessionId, exitCode);
     });
 
-    const session: ShellSession = {
-      cwd,
-      emitter,
-      id: sessionId,
-      subprocess,
-      terminal,
-    };
+    const session: ShellSession = { cwd, emitter, id: sessionId, pty };
     sessions.set(sessionId, session);
     return session;
   }
 
   write(sessionId: string, input: string | Buffer): void {
-    sessions.get(sessionId)?.terminal.write(input);
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    // node-pty accepts string | Buffer and encodes internally.
+    try {
+      session.pty.write(input);
+    } catch {
+      /* exited between lookup and write; an uncaught throw would kill Electron main */
+    }
   }
 
   kill(sessionId: string): void {
-    const s = sessions.get(sessionId);
-    if (!s) {
+    const session = sessions.get(sessionId);
+    if (!session) {
       return;
     }
+    // Drop it first so `isRunning` is false synchronously, even though the
+    // `onExit` handler only fires once the child is reaped.
+    sessions.delete(sessionId);
     try {
-      s.subprocess.kill();
+      session.pty.kill();
     } catch {
       /* already dead */
     }
-    try {
-      s.terminal.close();
-    } catch {
-      /* already closed */
-    }
-    sessions.delete(sessionId);
   }
 
   subscribe(sessionId: string): EventEmitter | null {
@@ -80,7 +98,15 @@ export class ShellSessionManager {
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
-    sessions.get(sessionId)?.terminal.resize(cols, rows);
+    const session = sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    try {
+      session.pty.resize(cols, rows);
+    } catch {
+      /* exited between lookup and resize */
+    }
   }
 
   isRunning(sessionId: string): boolean {

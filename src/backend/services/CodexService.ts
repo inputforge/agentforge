@@ -1,41 +1,50 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute } from "node:path";
 
 import type { CodexStatus } from "../../common/types.ts";
+import { isExecutableFile, whichSync } from "../lib/which.ts";
 
-const projectRoot = join(import.meta.dir, "../../..");
+const BINARY_NAME = "codex-acp";
+
+export const NOT_INSTALLED_ERROR =
+  "codex-acp was not found. Set CODEX_ACP_PATH to the codex-acp binary, or install it so that it is on your PATH.";
 
 export class CodexService {
-  resolveBinaryPath(): string {
-    const local = join(projectRoot, "node_modules/.bin/codex-acp");
-    if (existsSync(local)) {
-      return local;
+  /**
+   * Resolution order: `CODEX_ACP_PATH` (an explicit override) → PATH lookup → null.
+   *
+   * AgentForge does not ship codex-acp; the user installs it. There is no bare-name
+   * fallback, because a bare name is not runnable from a Dock launch, where PATH is
+   * `/usr/bin:/bin:/usr/sbin:/sbin` until resolveUserPath() repairs it.
+   */
+  resolveBinaryPath(): string | null {
+    const configured = process.env.CODEX_ACP_PATH;
+    if (configured) {
+      return isExecutableFile(configured) ? configured : null;
     }
-    return "codex-acp";
+    return whichSync(BINARY_NAME);
   }
 
   getStatus(): Promise<CodexStatus> {
-    const command = this.resolveBinaryPath();
-    let installed: boolean;
-    let binaryPath: string | null;
+    const binaryPath = this.resolveBinaryPath();
+    const installed = binaryPath !== null;
+    const configured = process.env.CODEX_ACP_PATH;
 
-    if (command === "codex-acp") {
-      const which = Bun.which("codex-acp");
-      installed = which !== null;
-      binaryPath = which;
-    } else {
-      installed = existsSync(command);
-      binaryPath = installed ? command : null;
+    let error: string | null = null;
+    if (!installed) {
+      error =
+        configured === undefined || configured === ""
+          ? NOT_INSTALLED_ERROR
+          : `CODEX_ACP_PATH is set to "${configured}" but that is not an executable file.` +
+            (isAbsolute(configured) ? "" : " CODEX_ACP_PATH must be an absolute path.");
     }
 
     return Promise.resolve({
       authMethod: null,
       authenticated: installed,
       binaryPath,
-      command,
-      error: installed
-        ? null
-        : "codex-acp is not installed. Run `bun add @zed-industries/codex-acp`.",
+      // Null when unresolved: there is no command we could actually run.
+      command: binaryPath,
+      error,
       installed,
       loginStatusText: null,
       ready: installed,

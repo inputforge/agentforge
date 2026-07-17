@@ -27,7 +27,12 @@ export function KanbanColumn({ status, tickets }: Props) {
   const Icon = COLUMN_ICONS[status];
 
   return (
-    <div className="flex flex-col min-w-[280px] max-w-[320px] w-full">
+    /* `flex-1` so the four columns divide the window rather than stopping at a fixed
+       320px and stranding ~90px of dead space at the right edge of the default 1440px
+       window — a desktop window is resized, not scrolled to. min/max keep cards
+       readable: below 280px the board scrolls horizontally instead of crushing them,
+       and above 420px they would stretch without gaining anything. */
+    <div className="flex flex-col flex-1 min-w-[280px] max-w-[420px]">
       {/* Column header */}
       <div
         className={clsx(

@@ -138,9 +138,15 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
   const status = STATUS_STYLES[ticket.status];
 
   return (
-    <div className="flex flex-col h-full border-l border-forge-border bg-forge-black animate-slide-in-right">
-      {/* Slim header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-forge-border bg-forge-panel flex-shrink-0">
+    /* Matches AgentDetailPanel's root: this is the same full-window route, just the
+       no-agent-yet state of it. The `border-l` and `animate-slide-in-right` it used to
+       carry were left from when this was a side panel — as a full-window route they drew a
+       stray 1px line down the window edge and slid the title bar itself in from the right,
+       neither of which the with-agent state does. */
+    <div className="flex flex-col h-full bg-forge-black">
+      {/* Slim header. Also the window title bar — see AgentDetailPanel; this renders in its
+          place while a ticket has no agent, so it inherits the same traffic-light overlap. */}
+      <div className="app-titlebar flex items-center justify-between pr-4 h-10 border-b border-forge-border bg-forge-panel flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${status.dot}`} />
           <span className={`text-xs font-mono uppercase tracking-widest ${status.text}`}>

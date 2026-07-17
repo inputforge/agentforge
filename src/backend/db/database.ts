@@ -1,25 +1,93 @@
-import { Database, type Changes } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 
 import type { Agent, DiffComment, RemoteConfig, Ticket } from "../../common/types.ts";
 import { migrations } from "./migrations/index.ts";
 import { MigrationRunner, SqliteAdapter } from "./migrator.ts";
 
-const BASE_PATH = process.env.REPO_PATH ?? process.cwd();
-const DB_PATH = join(BASE_PATH, ".agentforge/data/agentforge.db");
-mkdirSync(join(BASE_PATH, ".agentforge/data"), { recursive: true });
+/**
+ * Result of a `run()` call. Mirrors node:sqlite's `StatementResultingChanges`,
+ * narrowed to `number`: that type is `number | bigint` because a statement can
+ * opt into BigInt results via `setReadBigInts(true)` — we never do, so SQLite
+ * counters always come back as plain numbers.
+ */
+export interface Changes {
+  changes: number;
+  lastInsertRowid: number;
+}
 
-export const db = new Database(DB_PATH, { create: true });
+type BindValue = SQLInputValue;
 
-export function initDb(): void {
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA synchronous = NORMAL;");
-  db.exec("PRAGMA foreign_keys = ON;");
-  db.exec("PRAGMA busy_timeout = 10000;");
+/**
+ * Typed view over a node:sqlite `StatementSync`. `StatementSync` has no row
+ * generics, so `q()` casts once and every call site keeps its original types.
+ */
+interface Stmt<Row> {
+  all(namedParameters: Record<string, BindValue>): Row[];
+  all(...anonymousParameters: BindValue[]): Row[];
+  get(namedParameters: Record<string, BindValue>): Row | undefined;
+  get(...anonymousParameters: BindValue[]): Row | undefined;
+  run(namedParameters: Record<string, BindValue>): Changes;
+  run(...anonymousParameters: BindValue[]): Changes;
+}
 
-  const runner = new MigrationRunner(new SqliteAdapter(db));
+let database: DatabaseSync | null = null;
+
+/**
+ * Prepared-statement cache keyed by SQL text. node:sqlite has no equivalent of
+ * Bun's `db.query()`, which doubled as a statement cache keyed by SQL string;
+ * preparing on every call is measurably slower, so the cache lives here instead.
+ */
+const stmtCache = new Map<string, StatementSync>();
+
+function conn(): DatabaseSync {
+  if (!database) {
+    throw new Error("Database is not open — call initDb(repoPath) first");
+  }
+  return database;
+}
+
+function q<Row = unknown>(sql: string): Stmt<Row> {
+  let stmt = stmtCache.get(sql);
+  if (!stmt) {
+    stmt = conn().prepare(sql);
+    stmtCache.set(sql, stmt);
+  }
+  return stmt as unknown as Stmt<Row>;
+}
+
+/**
+ * Open the database under `repoPath`, apply pragmas and run migrations.
+ *
+ * Must be called before any statement below. Nothing in this module touches the
+ * filesystem at import time: a packaged app launched from the Finder has cwd
+ * `/`, so resolving the DB path at import would try to create `/.agentforge`.
+ */
+export function initDb(repoPath: string): void {
+  if (database) {
+    throw new Error("Database is already open — call closeDb() before re-opening");
+  }
+
+  const dataDir = join(repoPath, ".agentforge/data");
+  mkdirSync(dataDir, { recursive: true });
+
+  database = new DatabaseSync(join(dataDir, "agentforge.db"));
+
+  database.exec("PRAGMA journal_mode = WAL;");
+  database.exec("PRAGMA synchronous = NORMAL;");
+  database.exec("PRAGMA foreign_keys = ON;");
+  database.exec("PRAGMA busy_timeout = 10000;");
+
+  const runner = new MigrationRunner(new SqliteAdapter(database));
   runner.run(migrations);
+}
+
+/** Close the database and drop every cached statement. */
+export function closeDb(): void {
+  stmtCache.clear();
+  database?.close();
+  database = null;
 }
 
 interface RawTicket {
@@ -92,14 +160,12 @@ function mapAgent(row: RawAgent): Agent {
 export const ticketStmts = {
   delete: {
     run: (id: string): void => {
-      db.query<void, [string]>("DELETE FROM tickets WHERE id = ?").run(id);
+      q("DELETE FROM tickets WHERE id = ?").run(id);
     },
   },
   get: {
     get: (id: string): Ticket | null => {
-      const row = db
-        .query<RawTicket, [string]>(`SELECT ${TICKET_COLS} FROM tickets WHERE id = ?`)
-        .get(id);
+      const row = q<RawTicket>(`SELECT ${TICKET_COLS} FROM tickets WHERE id = ?`).get(id);
       return row ? mapTicket(row) : null;
     },
   },
@@ -113,7 +179,7 @@ export const ticketStmts = {
       $createdAt: number;
       $updatedAt: number;
     }): void => {
-      db.query(
+      q(
         `INSERT INTO tickets (id, title, description, status, base_branch, created_at, updated_at)
          VALUES ($id, $title, $description, $status, $baseBranch, $createdAt, $updatedAt)`,
       ).run(args);
@@ -127,7 +193,7 @@ export const ticketStmts = {
       $updatedAt: number;
       $ticketId: string;
     }): void => {
-      db.query(
+      q(
         `UPDATE tickets
          SET agent_id = $agentId, branch = $branch, worktree = $worktree, updated_at = $updatedAt
          WHERE id = $ticketId`,
@@ -136,70 +202,60 @@ export const ticketStmts = {
   },
   archive: {
     run: (args: { $archivedAt: number; $id: string }): Changes => {
-      return db
-        .query(
-          `UPDATE tickets
+      return q(
+        `UPDATE tickets
            SET archived_at = $archivedAt, updated_at = $archivedAt
            WHERE id = $id AND archived_at IS NULL`,
-        )
-        .run(args);
+      ).run(args);
     },
   },
   list: {
     all: (): Ticket[] =>
-      db
-        .query<RawTicket, []>(
-          `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NULL ORDER BY created_at DESC`,
-        )
+      q<RawTicket>(
+        `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NULL ORDER BY created_at DESC`,
+      )
         .all()
         .map(mapTicket),
   },
   listArchived: {
     all: (): Ticket[] =>
-      db
-        .query<RawTicket, []>(
-          `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`,
-        )
+      q<RawTicket>(
+        `SELECT ${TICKET_COLS} FROM tickets WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`,
+      )
         .all()
         .map(mapTicket),
   },
   unarchive: {
     run: (args: { $updatedAt: number; $id: string }): Changes => {
-      return db
-        .query(
-          `UPDATE tickets
+      return q(
+        `UPDATE tickets
            SET archived_at = NULL, updated_at = $updatedAt
            WHERE id = $id AND archived_at IS NOT NULL`,
-        )
-        .run(args);
+      ).run(args);
     },
   },
   updateAgentTitle: {
     run: (args: { $agentTitle: string; $updatedAt: number; $id: string }): void => {
-      db.query(
-        "UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id",
-      ).run(args);
+      q("UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id").run(
+        args,
+      );
     },
   },
   updateBaseBranch: {
     run: (args: { $baseBranch: string; $updatedAt: number; $id: string }): void => {
-      db.query(
-        "UPDATE tickets SET base_branch = $baseBranch, updated_at = $updatedAt WHERE id = $id",
-      ).run(args);
+      q("UPDATE tickets SET base_branch = $baseBranch, updated_at = $updatedAt WHERE id = $id").run(
+        args,
+      );
     },
   },
   updateStatus: {
     run: (args: { $status: string; $updatedAt: number; $id: string }): void => {
-      db.query("UPDATE tickets SET status = $status, updated_at = $updatedAt WHERE id = $id").run(
-        args,
-      );
+      q("UPDATE tickets SET status = $status, updated_at = $updatedAt WHERE id = $id").run(args);
     },
   },
   updateTitle: {
     run: (args: { $title: string; $updatedAt: number; $id: string }): void => {
-      db.query("UPDATE tickets SET title = $title, updated_at = $updatedAt WHERE id = $id").run(
-        args,
-      );
+      q("UPDATE tickets SET title = $title, updated_at = $updatedAt WHERE id = $id").run(args);
     },
   },
 };
@@ -207,9 +263,7 @@ export const ticketStmts = {
 export const agentStmts = {
   get: {
     get: (id: string): Agent | null => {
-      const row = db
-        .query<RawAgent, [string]>(`SELECT ${AGENT_COLS} FROM agents WHERE id = ?`)
-        .get(id);
+      const row = q<RawAgent>(`SELECT ${AGENT_COLS} FROM agents WHERE id = ?`).get(id);
       return row ? mapAgent(row) : null;
     },
   },
@@ -225,7 +279,7 @@ export const agentStmts = {
       $baseBranch: string;
       $startedAt: number;
     }): void => {
-      db.query(
+      q(
         `INSERT INTO agents (id, ticket_id, type, command, status, worktree_path, branch, base_branch, started_at)
          VALUES ($id, $ticketId, $type, $command, $status, $worktreePath, $branch, $baseBranch, $startedAt)`,
       ).run(args);
@@ -233,86 +287,76 @@ export const agentStmts = {
   },
   listByTicket: {
     all: (ticketId: string): Agent[] =>
-      db
-        .query<RawAgent, [string]>(
-          `SELECT ${AGENT_COLS} FROM agents WHERE ticket_id = ? ORDER BY started_at DESC LIMIT 1`,
-        )
+      q<RawAgent>(
+        `SELECT ${AGENT_COLS} FROM agents WHERE ticket_id = ? ORDER BY started_at DESC LIMIT 1`,
+      )
         .all(ticketId)
         .map(mapAgent),
   },
   listRunning: {
     all: (): Agent[] =>
-      db
-        .query<RawAgent, []>(`SELECT ${AGENT_COLS} FROM agents WHERE status = 'running'`)
-        .all()
-        .map(mapAgent),
+      q<RawAgent>(`SELECT ${AGENT_COLS} FROM agents WHERE status = 'running'`).all().map(mapAgent),
   },
   loadAgentState: {
     get: (id: string): string | null => {
-      const row = db
-        .query<{ agent_state: string | null }, [string]>(
-          "SELECT agent_state FROM agents WHERE id = ?",
-        )
-        .get(id);
+      const row = q<{ agent_state: string | null }>(
+        "SELECT agent_state FROM agents WHERE id = ?",
+      ).get(id);
       return row?.agent_state ?? null;
     },
   },
   overwriteSessionId: {
     run: (args: { $sessionId: string; $id: string }): void => {
-      db.query("UPDATE agents SET session_id = $sessionId WHERE id = $id").run(args);
+      q("UPDATE agents SET session_id = $sessionId WHERE id = $id").run(args);
     },
   },
   saveAgentState: {
     run: (args: { $id: string; $agentState: string }): void => {
-      db.query("UPDATE agents SET agent_state = $agentState WHERE id = $id").run(args);
+      q("UPDATE agents SET agent_state = $agentState WHERE id = $id").run(args);
     },
   },
   updateBaseBranch: {
     run: (args: { $baseBranch: string; $id: string }): void => {
-      db.query("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
+      q("UPDATE agents SET base_branch = $baseBranch WHERE id = $id").run(args);
     },
   },
   updatePid: {
     run: (args: { $pid: number; $id: string }): void => {
-      db.query("UPDATE agents SET pid = $pid WHERE id = $id").run(args);
+      q("UPDATE agents SET pid = $pid WHERE id = $id").run(args);
     },
   },
   updateSessionId: {
     run: (args: { $sessionId: string; $id: string }): void => {
-      db.query(
-        "UPDATE agents SET session_id = $sessionId WHERE id = $id AND session_id IS NULL",
-      ).run(args);
+      q("UPDATE agents SET session_id = $sessionId WHERE id = $id AND session_id IS NULL").run(
+        args,
+      );
     },
   },
   updateStatus: {
     run: (args: { $id: string; $status: string; $endedAt: number | null }): void => {
-      db.query(`UPDATE agents SET status = $status, ended_at = $endedAt WHERE id = $id`).run(args);
+      q(`UPDATE agents SET status = $status, ended_at = $endedAt WHERE id = $id`).run(args);
     },
   },
 };
 
 export const integrationStmts = {
   deleteAll: (provider: string): void => {
-    db.query("DELETE FROM integration_configs WHERE provider = ?").run(provider);
+    q("DELETE FROM integration_configs WHERE provider = ?").run(provider);
   },
   get: (provider: string, key: string): string | null => {
-    const row = db
-      .query<{ value: string }, [string, string]>(
-        "SELECT value FROM integration_configs WHERE provider = ? AND key = ?",
-      )
-      .get(provider, key);
+    const row = q<{ value: string }>(
+      "SELECT value FROM integration_configs WHERE provider = ? AND key = ?",
+    ).get(provider, key);
     return row?.value ?? null;
   },
   getAll: (provider: string): Record<string, string> => {
-    const rows = db
-      .query<{ key: string; value: string }, [string]>(
-        "SELECT key, value FROM integration_configs WHERE provider = ?",
-      )
-      .all(provider);
+    const rows = q<{ key: string; value: string }>(
+      "SELECT key, value FROM integration_configs WHERE provider = ?",
+    ).all(provider);
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   },
   set: (provider: string, key: string, value: string): void => {
-    db.query(
+    q(
       `INSERT INTO integration_configs (provider, key, value)
        VALUES (?, ?, ?)
        ON CONFLICT (provider, key) DO UPDATE SET value = excluded.value`,
@@ -323,14 +367,12 @@ export const integrationStmts = {
 export const diffCommentStmts = {
   delete: {
     run: (id: string, agentId: string): void => {
-      db.query<void, [string, string]>(
-        "DELETE FROM diff_comments WHERE id = ? AND agent_id = ?",
-      ).run(id, agentId);
+      q("DELETE FROM diff_comments WHERE id = ? AND agent_id = ?").run(id, agentId);
     },
   },
   deleteByAgent: {
     run: (agentId: string): void => {
-      db.query<void, [string]>("DELETE FROM diff_comments WHERE agent_id = ?").run(agentId);
+      q("DELETE FROM diff_comments WHERE agent_id = ?").run(agentId);
     },
   },
   insert: {
@@ -344,7 +386,7 @@ export const diffCommentStmts = {
       $content: string;
       $createdAt: number;
     }): void => {
-      db.query(
+      q(
         `INSERT INTO diff_comments (id, agent_id, file_path, side, start_line, end_line, content, created_at)
          VALUES ($id, $agentId, $filePath, $side, $startLine, $endLine, $content, $createdAt)`,
       ).run(args);
@@ -352,29 +394,31 @@ export const diffCommentStmts = {
   },
   listByAgent: {
     all: (agentId: string): DiffComment[] =>
-      db
-        .query<DiffComment, [string]>(
-          `SELECT id, agent_id AS agentId, file_path AS filePath, side,
+      q<DiffComment>(
+        `SELECT id, agent_id AS agentId, file_path AS filePath, side,
                   start_line AS startLine, end_line AS endLine,
                   content, created_at AS createdAt
            FROM diff_comments WHERE agent_id = ? ORDER BY created_at ASC`,
-        )
-        .all(agentId),
+      )
+        .all(agentId)
+        // node:sqlite rows have a null prototype; hand callers ordinary objects.
+        .map((row) => Object.assign({}, row)),
   },
 };
 
 export const remoteStmts = {
   get: {
-    get: (): RemoteConfig | null =>
-      db
-        .query<RemoteConfig, []>(
-          "SELECT repo_url AS repoUrl, base_branch AS baseBranch, local_path AS localPath FROM remote_config WHERE id = 1",
-        )
-        .get() ?? null,
+    get: (): RemoteConfig | null => {
+      const row = q<RemoteConfig>(
+        "SELECT repo_url AS repoUrl, base_branch AS baseBranch, local_path AS localPath FROM remote_config WHERE id = 1",
+      ).get();
+      // node:sqlite rows have a null prototype; hand callers an ordinary object.
+      return row ? { ...row } : null;
+    },
   },
   upsert: {
     run: (args: { $repoUrl: string; $baseBranch: string; $localPath: string }): void => {
-      db.query(
+      q(
         `INSERT INTO remote_config (id, repo_url, base_branch, local_path)
          VALUES (1, $repoUrl, $baseBranch, $localPath)
          ON CONFLICT (id) DO UPDATE SET

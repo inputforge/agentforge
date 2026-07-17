@@ -4,11 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AgentForge</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
-      rel="stylesheet"
-    />
+    <!--
+      No remote font link. @fontsource/jetbrains-mono is a dependency and
+      src/frontend/index.css already imports 400/400-italic/700 from the bundle, so
+      the Google Fonts stylesheet was dead weight and an offline dependency.
+
+      This does NOT remove the need for a `font-src` CSP exception: Vite inlines
+      font subsets under assetsInlineLimit as data: URIs, so the CSP in
+      src/electron/window.ts still allows `font-src 'self' data:`.
+    -->
   </head>
   <body>
     <div id="root"></div>

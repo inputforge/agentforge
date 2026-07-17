@@ -6,13 +6,20 @@
     "lib": ["ES2022"],
     "strict": true,
     "skipLibCheck": true,
-    "types": ["bun"],
+    // Node, NOT bun. The backend runs in Electron's main process (Node 24.18.0) and
+    // cannot run on Bun at all: Bun does not implement `node:sqlite`, and node-pty's
+    // spawn-helper never reaches execvp under Bun. Declaring "node" turns any
+    // residual `Bun.*` into a compile error, which is what proves the cutover is
+    // complete rather than assumed.
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "composite": true,
     "declaration": true,
-    "noEmit": true,
+    // `noEmit` removed: it contradicts `emitDeclarationOnly` and, with `composite`,
+    // suppresses the .d.ts output that src/electron now consumes as a project
+    // reference. Declarations only — Bun.build does the real bundling.
     "emitDeclarationOnly": true,
-    "outDir": "../../out/backend"
+    "outDir": "../../out/types/backend"
   },
   "references": [{ "path": "../common" }],
   "include": ["./**/*"]

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    // Node, NOT bun. This process is Electron's main (Node 24.18.0 / ABI 148), so
+    // Bun's globals and builtins must be *compile errors* here — under "bun" they
+    // would type-check happily and then crash at runtime, since no Bun runtime
+    // exists in this process. Bun only bundles this code; it never runs it.
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../../out/types/electron"
+  },
+  // ../backend as well as ../common: main.ts imports `startBackend` from
+  // ../backend/bootstrap.ts — the backend runs *in* this process, so it is a real
+  // compile-time dependency, not just a type-level one.
+  "references": [{ "path": "../common" }, { "path": "../backend" }],
+  "include": ["./**/*"]
+}

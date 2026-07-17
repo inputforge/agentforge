@@ -1,38 +1,26 @@
+import { BRIDGE_KEY } from "../../common/ipc";
 import type {
-  Agent,
-  AcpAgentState,
-  DiffComment,
-  DiffResult,
-  GitBranchInfo,
-  GitHubIssue,
-  IntegrationConfig,
-  CodexStatus,
-  LinearIssue,
-  LinearTeam,
-  MergeResult,
-  RemoteConfig,
-  Ticket,
-  TicketStatus,
-} from "../types";
+  AgentTypeArg,
+  GitHubIssueState,
+  IntegrationProvider,
+  IpcArgs,
+  IpcMethod,
+  IpcResult,
+} from "../../common/ipc";
+import type { RemoteConfig, TicketStatus } from "../types";
 
-const BASE = "/api";
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${text}`);
-  }
-  if (res.status === 204 || res.headers.get("content-length") === "0") {
-    return undefined as T;
-  }
-  return res.json() as Promise<T>;
+/**
+ * Every call goes through the preload bridge. Method names and their arg/result
+ * types come from `IpcMethods` in `src/common/ipc.ts`, so a typo or a signature
+ * drift is a compile error rather than a runtime 404.
+ *
+ * Rejections propagate untouched: main throws, `invoke` rejects with that Error,
+ * and callers read `.message` exactly as they did with the old fetch wrapper.
+ */
+function invoke<M extends IpcMethod>(method: M, ...args: IpcArgs<M>): Promise<IpcResult<M>> {
+  return window[BRIDGE_KEY].invoke(method, ...args);
 }
 
-// Tickets
 export const api = {
   agents: {
     addComment: (
@@ -42,133 +30,70 @@ export const api = {
       startLine: number,
       endLine: number,
       content: string,
-    ) =>
-      request<DiffComment>(`/agents/${id}/comments`, {
-        body: JSON.stringify({ filePath, side, startLine, endLine, content }),
-        method: "POST",
-      }),
-    commit: (id: string, message?: string) =>
-      request<void>(`/agents/${id}/commit`, {
-        body: JSON.stringify({ message }),
-        method: "POST",
-      }),
-    createShell: (id: string) =>
-      request<{ id: string; cwd: string }>(`/agents/${id}/shell`, {
-        method: "POST",
-      }),
-    deleteComment: (id: string, commentId: string) =>
-      request<void>(`/agents/${id}/comments/${commentId}`, {
-        method: "DELETE",
-      }),
-    get: (id: string) => request<Agent>(`/agents/${id}`),
-    getAcpState: (id: string) => request<AcpAgentState>(`/agents/${id}/acp-state`),
-    getDiff: (id: string) => request<DiffResult>(`/agents/${id}/diff`),
-    interrupt: (id: string) => request<void>(`/agents/${id}/interrupt`, { method: "POST" }),
-    kill: (id: string) => request<void>(`/agents/${id}/kill`, { method: "POST" }),
-    listComments: (id: string) => request<DiffComment[]>(`/agents/${id}/comments`),
-    merge: (id: string) => request<MergeResult>(`/agents/${id}/merge`, { method: "POST" }),
-    rebase: (id: string) =>
-      request<{ success: boolean; conflicted: boolean; resolving: boolean }>(
-        `/agents/${id}/rebase`,
-        { method: "POST" },
-      ),
-    restart: (id: string) => request<void>(`/agents/${id}/restart`, { method: "POST" }),
+    ) => invoke("agents.addComment", id, filePath, side, startLine, endLine, content),
+    commit: (id: string, message?: string) => invoke("agents.commit", id, message),
+    createShell: (id: string) => invoke("agents.createShell", id),
+    deleteComment: (id: string, commentId: string) => invoke("agents.deleteComment", id, commentId),
+    get: (id: string) => invoke("agents.get", id),
+    getAcpState: (id: string) => invoke("agents.getAcpState", id),
+    getDiff: (id: string) => invoke("agents.getDiff", id),
+    interrupt: (id: string) => invoke("agents.interrupt", id),
+    kill: (id: string) => invoke("agents.kill", id),
+    listComments: (id: string) => invoke("agents.listComments", id),
+    merge: (id: string) => invoke("agents.merge", id),
+    rebase: (id: string) => invoke("agents.rebase", id),
+    restart: (id: string) => invoke("agents.restart", id),
     sendInput: (id: string, input: string, clientId?: string) =>
-      request<void>(`/agents/${id}/input`, {
-        body: JSON.stringify({ input, ...(clientId && { clientId }) }),
-        method: "POST",
-      }),
-    submitReview: (id: string) =>
-      request<{ ok: boolean; message: string }>(`/agents/${id}/review`, {
-        method: "POST",
-      }),
+      invoke("agents.sendInput", id, input, clientId),
+    submitReview: (id: string) => invoke("agents.submitReview", id),
   },
 
   integrations: {
     codex: {
-      status: () => request<CodexStatus>("/integrations/codex/status"),
+      status: () => invoke("integrations.codex.status"),
     },
-    deleteConfig: (provider: "github" | "linear") =>
-      request<{ ok: boolean }>(`/integrations/${provider}/config`, {
-        method: "DELETE",
-      }),
-    disconnectAccount: (provider: "github" | "linear") =>
-      request<{ ok: boolean }>(`/integrations/${provider}/account`, {
-        method: "DELETE",
-      }),
-    getConfig: (provider: "github" | "linear") =>
-      request<IntegrationConfig>(`/integrations/${provider}/config`),
+    deleteConfig: (provider: IntegrationProvider) => invoke("integrations.deleteConfig", provider),
+    disconnectAccount: (provider: IntegrationProvider) =>
+      invoke("integrations.disconnectAccount", provider),
+    getConfig: (provider: IntegrationProvider) => invoke("integrations.getConfig", provider),
     github: {
-      listIssues: (state: "open" | "closed" | "all" = "open") =>
-        request<GitHubIssue[]>(`/integrations/github/issues?state=${state}`),
+      listIssues: (state: GitHubIssueState = "open") =>
+        invoke("integrations.github.listIssues", state),
     },
     linear: {
-      listIssues: () => request<LinearIssue[]>("/integrations/linear/issues"),
-      listTeams: () => request<LinearTeam[]>("/integrations/linear/teams"),
+      listIssues: () => invoke("integrations.linear.listIssues"),
+      listTeams: () => invoke("integrations.linear.listTeams"),
     },
-    saveConfig: (provider: "github" | "linear", data: Record<string, string>) =>
-      request<{ ok: boolean }>(`/integrations/${provider}/config`, {
-        body: JSON.stringify(data),
-        method: "POST",
-      }),
+    saveConfig: (provider: IntegrationProvider, data: Record<string, string>) =>
+      invoke("integrations.saveConfig", provider, data),
   },
 
   remote: {
-    clone: (config: RemoteConfig) =>
-      request<void>("/remote/clone", {
-        body: JSON.stringify(config),
-        method: "POST",
-      }),
-    detect: (path?: string) =>
-      request<RemoteConfig>("/remote/detect", {
-        body: JSON.stringify({ path }),
-        method: "POST",
-      }),
-    getBranch: () => request<{ branch: string | null }>("/remote/branch"),
-    getConfig: () => request<RemoteConfig | null>("/remote/config"),
-    listBranches: () => request<{ branches: GitBranchInfo[] }>("/remote/branches"),
-    pull: (localPath: string) =>
-      request<void>("/remote/pull", {
-        body: JSON.stringify({ localPath }),
-        method: "POST",
-      }),
-    push: (branch: string, localPath: string) =>
-      request<void>("/remote/push", {
-        body: JSON.stringify({ branch, localPath }),
-        method: "POST",
-      }),
+    clone: (config: RemoteConfig) => invoke("remote.clone", config),
+    detect: (path?: string) => invoke("remote.detect", path),
+    getBranch: () => invoke("remote.getBranch"),
+    getConfig: () => invoke("remote.getConfig"),
+    listBranches: () => invoke("remote.listBranches"),
+    pull: (localPath: string) => invoke("remote.pull", localPath),
+    push: (branch: string, localPath: string) => invoke("remote.push", branch, localPath),
   },
 
   shell: {
-    create: () => request<{ id: string; cwd: string }>("/shell", { method: "POST" }),
-    kill: (id: string) => request<void>(`/shell/${id}`, { method: "DELETE" }),
+    create: () => invoke("shell.create"),
+    kill: (id: string) => invoke("shell.kill", id),
   },
 
   tickets: {
-    archive: (id: string) => request<Ticket>(`/tickets/${id}/archive`, { method: "POST" }),
-    create: (data: { title: string; description: string }) =>
-      request<Ticket>("/tickets", {
-        body: JSON.stringify(data),
-        method: "POST",
-      }),
-    delete: (id: string) => request<void>(`/tickets/${id}`, { method: "DELETE" }),
-    list: () => request<Ticket[]>("/tickets"),
-    listArchived: () => request<Ticket[]>("/tickets/archived"),
-    spawn: (id: string, agentType: "claude-code" | "codex" | "custom", customCommand?: string) =>
-      request<{ ticket: Ticket; agent: Agent | null }>(`/tickets/${id}/spawn`, {
-        body: JSON.stringify({ agentType, customCommand }),
-        method: "POST",
-      }),
-    unarchive: (id: string) => request<Ticket>(`/tickets/${id}/unarchive`, { method: "POST" }),
+    archive: (id: string) => invoke("tickets.archive", id),
+    create: (data: { title: string; description: string }) => invoke("tickets.create", data),
+    delete: (id: string) => invoke("tickets.delete", id),
+    list: () => invoke("tickets.list"),
+    listArchived: () => invoke("tickets.listArchived"),
+    spawn: (id: string, agentType: AgentTypeArg, customCommand?: string) =>
+      invoke("tickets.spawn", id, agentType, customCommand),
+    unarchive: (id: string) => invoke("tickets.unarchive", id),
     updateBaseBranch: (id: string, baseBranch: string) =>
-      request<{ ticket: Ticket | null; agent: Agent | null }>(`/tickets/${id}/base-branch`, {
-        body: JSON.stringify({ baseBranch }),
-        method: "PATCH",
-      }),
-    updateStatus: (id: string, status: TicketStatus) =>
-      request<Ticket>(`/tickets/${id}/status`, {
-        body: JSON.stringify({ status }),
-        method: "PATCH",
-      }),
+      invoke("tickets.updateBaseBranch", id, baseBranch),
+    updateStatus: (id: string, status: TicketStatus) => invoke("tickets.updateStatus", id, status),
   },
 };

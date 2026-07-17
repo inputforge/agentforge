@@ -32,7 +32,6 @@ interface AppState {
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
   isCreateModalOpen: boolean;
-  isConnected: boolean;
   isFetchingTickets: boolean;
 
   // Derived helpers (computed from activeTicketId)
@@ -79,7 +78,6 @@ interface AppState {
   closeTicket: () => void;
   openCreateModal: () => void;
   closeCreateModal: () => void;
-  setConnected: (connected: boolean) => void;
   setRemoteConfig: (config: RemoteConfig | null) => void;
 }
 
@@ -255,7 +253,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { activeTicketId, tickets } = get();
     return activeTicketId ? (tickets.find((t) => t.id === activeTicketId) ?? null) : null;
   },
-  isConnected: false,
   isCreateModalOpen: false,
   isFetchingTickets: false,
   moveTicket: async (ticketId, newStatus) => {
@@ -307,7 +304,6 @@ export const useStore = create<AppState>((set, get) => ({
   setAgent: (agent) => set((s) => ({ agents: { ...s.agents, [agent.id]: agent } })),
   setAgentDiff: (agentId, diff) =>
     set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
-  setConnected: (isConnected) => set({ isConnected }),
   setCurrentBranch: (currentBranch) => set({ currentBranch }),
   setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
   tickets: [],

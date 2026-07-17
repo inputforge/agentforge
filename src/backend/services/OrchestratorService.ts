@@ -4,7 +4,7 @@ import { mkdirSync } from "node:fs";
 import type { Agent, AgentType } from "../../common/types.ts";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-import { broadcastNotification } from "../ws/hub.ts";
+import { broadcastNotification } from "../ipc/broadcast.ts";
 import { acpClientManager } from "./AcpClientManager.ts";
 import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";

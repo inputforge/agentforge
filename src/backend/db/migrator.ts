@@ -21,7 +21,11 @@ export interface Migration {
 }
 
 export class MigrationRunner {
-  constructor(private readonly adapter: DatabaseAdapter) {}
+  private readonly adapter: DatabaseAdapter;
+
+  constructor(adapter: DatabaseAdapter) {
+    this.adapter = adapter;
+  }
 
   run(migrations: Migration[]): void {
     this.adapter.run(`
@@ -52,23 +56,54 @@ export class MigrationRunner {
 }
 
 // ---------------------------------------------------------------------------
-// SQLite adapter (bun:sqlite)
+// SQLite adapter (node:sqlite)
 // ---------------------------------------------------------------------------
 
-import type { Database, SQLQueryBindings } from "bun:sqlite";
+import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
 export class SqliteAdapter implements DatabaseAdapter {
-  constructor(private readonly db: Database) {}
+  private readonly db: DatabaseSync;
+
+  constructor(db: DatabaseSync) {
+    this.db = db;
+  }
 
   run(sql: string, ...params: unknown[]): void {
-    this.db.prepare(sql).run(...(params as SQLQueryBindings[]));
+    this.db.prepare(sql).run(...(params as SQLInputValue[]));
   }
 
   query<T extends Record<string, unknown>>(sql: string, ...params: unknown[]): T[] {
-    return this.db.prepare(sql).all(...(params as SQLQueryBindings[])) as T[];
+    return this.db.prepare(sql).all(...(params as SQLInputValue[])) as T[];
   }
 
+  /**
+   * node:sqlite has no `db.transaction()` helper (that was Bun's driver), so the
+   * BEGIN/COMMIT/ROLLBACK cycle is driven by hand.
+   */
   transaction(fn: () => void): void {
-    this.db.transaction(fn)();
+    // SQLite has no nested transactions; join the enclosing one instead, so the
+    // outermost caller keeps control of COMMIT/ROLLBACK.
+    if (this.db.isTransaction) {
+      fn();
+      return;
+    }
+
+    this.db.exec("BEGIN");
+    try {
+      fn();
+      this.db.exec("COMMIT");
+    } catch (error) {
+      try {
+        // Some errors (e.g. SQLITE_FULL) make SQLite roll back on its own, which
+        // would make an unconditional ROLLBACK throw "no transaction is active"
+        // and mask the real failure.
+        if (this.db.isTransaction) {
+          this.db.exec("ROLLBACK");
+        }
+      } catch {
+        // Rolling back failed; the original error below is the useful one.
+      }
+      throw error;
+    }
   }
 }

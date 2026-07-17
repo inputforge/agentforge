@@ -148,6 +148,39 @@
 }
 
 @layer components {
+  /**
+   * A window title bar: draggable, and clear of the macOS traffic lights.
+   *
+   * `titleBarStyle: "hiddenInset"` (src/electron/window.ts) removes the OS title bar and
+   * floats the traffic lights over the renderer's top-left. Two consequences a browser
+   * never has, both handled here:
+   *
+   *  1. Nothing reserves that space, so the lights get drawn straight over whatever is at
+   *     top-left. `env(titlebar-area-x)` — populated by `titleBarOverlay` — is the x where
+   *     the free title bar area begins, i.e. exactly the width to keep clear. `max()` keeps
+   *     the normal 1rem gutter as a floor, so this collapses to a plain `px-4` equivalent
+   *     wherever the var is absent: Windows' native title bar, and macOS fullscreen (where
+   *     the lights move into a slide-down NSView and reserving for them would strand a
+   *     dead gutter).
+   *  2. No OS title bar means no drag handle. Without an explicit drag region the window
+   *     cannot be moved at all — `-webkit-app-region: drag` is what makes it a title bar
+   *     rather than a strip that happens to sit at the top.
+   *
+   * Interactive descendants opt back out below; a drag region swallows their clicks.
+   * Left padding lives here rather than in a `pl-*` utility because Tailwind's `utilities`
+   * layer would override this `components` rule.
+   */
+  .app-titlebar {
+    -webkit-app-region: drag;
+    padding-left: max(1rem, env(titlebar-area-x, 0px));
+  }
+
+  /* Zero-specificity (`:where`) so component classes still win, and inherited by anything
+     the title bar grows later — a button added here stays clickable by default. */
+  .app-titlebar :where(a, button, input, select, textarea, label, [role="button"]) {
+    -webkit-app-region: no-drag;
+  }
+
   .forge-panel {
     @apply bg-forge-panel border border-forge-border;
   }

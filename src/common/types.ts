@@ -184,3 +184,16 @@ export interface CodexStatus {
   loginStatusText: string | null;
   error: string | null;
 }
+
+export type NotificationType = "agent-done" | "merge-conflict" | "error" | "info";
+
+/**
+ * A notification as emitted by the backend. `id` and `timestamp` are assigned
+ * by the renderer's store on receipt — see the frontend's `AppNotification`.
+ */
+export interface NotificationPayload {
+  type: NotificationType;
+  message: string;
+  ticketId?: string;
+  agentId?: string;
+}

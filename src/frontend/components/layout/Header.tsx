@@ -12,10 +12,10 @@ export function Header({
   onOpenIntegrations: () => void;
   onOpenArchive: () => void;
 }) {
-  const { isConnected, openCreateModal } = useStore();
+  const openCreateModal = useStore((s) => s.openCreateModal);
 
   return (
-    <header className="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-forge-border bg-forge-panel">
+    <header className="app-titlebar flex-shrink-0 h-10 flex items-center justify-between pr-4 border-b border-forge-border bg-forge-panel">
       {/* Left: Logo */}
       <div className="flex items-center gap-5">
         <div className="flex items-center">
@@ -29,7 +29,7 @@ export function Header({
         </div>
       </div>
 
-      {/* Right: Remote bar + create button + connection status */}
+      {/* Right: Remote bar + actions */}
       <div className="flex items-center gap-4">
         <RemoteBar />
 
@@ -69,13 +69,6 @@ export function Header({
           <Plus size={13} />
           <span>TICKET</span>
         </button>
-
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`status-dot ${isConnected ? "bg-forge-green" : "bg-forge-red animate-blink"}`}
-          />
-          <span className="text-forge-text-dim text-xs">{isConnected ? "LIVE" : "OFFLINE"}</span>
-        </div>
       </div>
     </header>
   );
