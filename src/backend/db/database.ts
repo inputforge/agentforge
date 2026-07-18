@@ -285,6 +285,25 @@ export const agentStmts = {
       ).run(args);
     },
   },
+  /**
+   * Every agent currently referenced by a live ticket — the exact set the board needs.
+   *
+   * Scoped to `tickets.agent_id` on non-archived tickets so it mirrors `ticketStmts.list`:
+   * the two together describe one consistent working set. Not "all agents ever", which
+   * would grow without bound and ship superseded agents from restarted tickets.
+   */
+  list: {
+    all: (): Agent[] =>
+      q<RawAgent>(
+        `SELECT ${AGENT_COLS} FROM agents
+         WHERE id IN (
+           SELECT agent_id FROM tickets WHERE agent_id IS NOT NULL AND archived_at IS NULL
+         )
+         ORDER BY started_at DESC`,
+      )
+        .all()
+        .map(mapAgent),
+  },
   listByTicket: {
     all: (ticketId: string): Agent[] =>
       q<RawAgent>(

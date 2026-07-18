@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Backend test config.
+ * Node-side test config: `src/backend` and `src/common`.
  *
  * Deliberately separate from vite.config.ts: vitest would otherwise inherit the
  * renderer's React and Tailwind plugins, which have nothing to do with backend code
@@ -10,11 +10,16 @@ import { defineConfig } from "vitest/config";
  * The backend's target runtime is Electron's main process (Node 24), not Bun — Bun
  * implements neither `node:sqlite` nor a working `node-pty` spawn. So these tests run
  * on Node, which is also what we ship.
+ *
+ * `src/common` is included because it is plain Node-compatible TypeScript — shared types
+ * and pure functions, no React, no DOM. Its consumers are main and the renderer rather
+ * than the backend, so filing its tests under `src/backend/` would misstate what owns
+ * them; they belong beside the code.
  */
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/backend/**/*.test.ts"],
+    include: ["src/{backend,common}/**/*.test.ts"],
     // Native N-API addons (node-pty) are loaded per-test-file. Worker threads and
     // native addons are a known hazard; a forked child process is a plain Node process,
     // which is exactly what the addon expects. This is also vitest's default — pinned

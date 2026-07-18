@@ -36,6 +36,7 @@ export const api = {
     deleteComment: (id: string, commentId: string) => invoke("agents.deleteComment", id, commentId),
     get: (id: string) => invoke("agents.get", id),
     getAcpState: (id: string) => invoke("agents.getAcpState", id),
+    list: () => invoke("agents.list"),
     getDiff: (id: string) => invoke("agents.getDiff", id),
     interrupt: (id: string) => invoke("agents.interrupt", id),
     kill: (id: string) => invoke("agents.kill", id),

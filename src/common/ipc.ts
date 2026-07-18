@@ -80,6 +80,14 @@ export interface IpcMethods {
   "agents.deleteComment": (id: string, commentId: string) => void;
   "agents.get": (id: string) => Agent;
   "agents.getAcpState": (id: string) => AcpAgentState;
+  /**
+   * Every agent referenced by a live ticket, in one call.
+   *
+   * Mirrors `tickets.list` (both exclude archived), so the two hydrate one consistent
+   * working set. Replaces fetching agents one-per-ticket, and lets the main process
+   * derive the Dock badge without N round-trips.
+   */
+  "agents.list": () => Agent[];
   "agents.getDiff": (id: string) => DiffResult;
   "agents.interrupt": (id: string) => void;
   "agents.kill": (id: string) => void;
@@ -162,6 +170,7 @@ export const IPC_METHOD_NAMES: readonly IpcMethod[] = [
   "agents.getDiff",
   "agents.interrupt",
   "agents.kill",
+  "agents.list",
   "agents.listComments",
   "agents.merge",
   "agents.rebase",

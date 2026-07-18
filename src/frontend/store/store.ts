@@ -59,7 +59,6 @@ interface AppState {
   // Agent actions
   setAgent: (agent: Agent) => void;
   updateAgent: (id: string, updates: Partial<Agent>) => void;
-  fetchAgentForTicket: (ticketId: string) => Promise<void>;
 
   // Notification actions
   addNotification: (n: Omit<AppNotification, "id" | "timestamp">) => void;
@@ -202,18 +201,6 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
   },
-  fetchAgentForTicket: async (ticketId) => {
-    const ticket = get().tickets.find((t) => t.id === ticketId);
-    if (!ticket?.agentId) {
-      return;
-    }
-    try {
-      const agent = await api.agents.get(ticket.agentId);
-      set((s) => ({ agents: { ...s.agents, [agent.id]: agent } }));
-    } catch {
-      // agent may not exist yet — that's OK
-    }
-  },
   fetchBranches: async () => {
     const id = (branchFetchId += 1);
     try {
@@ -228,11 +215,18 @@ export const useStore = create<AppState>((set, get) => ({
   fetchTickets: async () => {
     set({ isFetchingTickets: true });
     try {
-      const tickets = await api.tickets.list();
-      set({ tickets });
-      // Also load agents for every ticket with history so older review/done tickets hydrate.
-      const needAgents = tickets.filter((t) => t.agentId);
-      await Promise.all(needAgents.map((t) => get().fetchAgentForTicket(t.id)));
+      // One call each, not one per ticket: `agents.list` mirrors `tickets.list` (both
+      // exclude archived), so this hydrates every agent the board can show. Previously
+      // this fanned out an `agents.get` per ticket with history — 20 tickets meant 20
+      // IPC round-trips on every mount.
+      const [tickets, agentList] = await Promise.all([api.tickets.list(), api.agents.list()]);
+      // Merged, not replaced: this is a hydrate, so it must not evict an agent the store
+      // already holds (one pushed by an `agent-updated` event, or one whose ticket was
+      // archived while its detail panel is open — both are absent from the lists above).
+      set((s) => ({
+        agents: { ...s.agents, ...Object.fromEntries(agentList.map((a) => [a.id, a])) },
+        tickets,
+      }));
     } catch (error) {
       get().addNotification({
         type: "error",

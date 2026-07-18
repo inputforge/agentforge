@@ -185,6 +185,8 @@ export function createHandlers({ orchestrator, repoPath }: HandlerDeps): IpcHand
 
     "agents.getAcpState": (id) => acpClientManager.getState(requireAgent(id).id),
 
+    "agents.list": () => agentStmts.list.all(),
+
     "agents.getDiff": async (id) => {
       const agent = requireAgent(id);
       const remoteConfig = requireRemote();
