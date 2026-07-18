@@ -334,12 +334,64 @@ function spawnProcess(
 
 // ─── ACP client factory ───────────────────────────────────────────────────────
 
+/**
+ * Options whose `optionId` escalates the session's *mode* rather than approving the
+ * one tool call in front of us. The agent offers these on `ExitPlanMode`, where every
+ * choice is phrased as a permission but actually reassigns the permission mode for the
+ * rest of the session — `bypassPermissions` disables prompting entirely.
+ *
+ * Verified against a live claude-agent-acp session; `ExitPlanMode` offers, in order:
+ *   [0] allow_always  bypassPermissions  "Yes, and bypass permissions"
+ *   [1] allow_always  auto
+ *   [2] allow_always  acceptEdits
+ *   [3] allow_once    default
+ *   [4] reject_once   plan               "No, keep planning"
+ * `bypassPermissions` is unshifted to the front for any non-root user
+ * (`ALLOW_BYPASS = !IS_ROOT || IS_SANDBOX`), so picking the first allow option picks
+ * the single most permissive one on offer.
+ */
+const MODE_ESCALATING_OPTION_IDS = new Set(["bypassPermissions", "acceptEdits", "auto"]);
+
+/**
+ * Pick an option that approves *this* tool call and nothing beyond it.
+ *
+ * Order matters. `allow_once` is preferred over `allow_always` because it grants the
+ * narrowest thing that unblocks the agent: "always" persists for the session, and on
+ * `ExitPlanMode` it is also a mode switch. Mode-escalating ids are excluded outright —
+ * granting them here would silently widen the agent's authority far past the call being
+ * asked about, which no caller of this function is asking for.
+ *
+ * Returns null when nothing safe is on offer, rather than falling back to
+ * `options[0]` — that fallback is what selected `bypassPermissions`.
+ */
+export function pickNarrowestAllow(options: RequestPermissionRequest["options"]) {
+  const safe = options.filter((o) => !MODE_ESCALATING_OPTION_IDS.has(o.optionId));
+  return (
+    safe.find((o) => o.kind === "allow_once") ?? safe.find((o) => o.kind === "allow_always") ?? null
+  );
+}
+
 function makeClient(session: AcpSession): Client {
   return {
     requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-      const allowOpt =
-        params.options.find((o) => o.kind === "allow_always" || o.kind === "allow_once") ??
-        params.options[0];
+      const allowOpt = pickNarrowestAllow(params.options);
+      if (!allowOpt) {
+        // Every allow option was a mode escalation (or there were none). Refuse rather
+        // than escalate: an agent told "no" retries or explains, but one silently handed
+        // bypassPermissions keeps that authority for every later call in the session.
+        const reject =
+          params.options.find((o) => o.kind === "reject_once") ??
+          params.options.find((o) => o.kind === "reject_always");
+        log.warn("no narrow allow option offered; rejecting", {
+          agentId: session.agentId,
+          offered: params.options.map((o) => `${o.kind}:${o.optionId}`),
+        });
+        return Promise.resolve(
+          reject
+            ? { outcome: { optionId: reject.optionId, outcome: "selected" } }
+            : { outcome: { outcome: "cancelled" } },
+        );
+      }
       return Promise.resolve({
         outcome: { optionId: allowOpt.optionId, outcome: "selected" },
       });
