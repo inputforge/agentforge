@@ -15,11 +15,16 @@ import { defineConfig } from "vitest/config";
  * and pure functions, no React, no DOM. Its consumers are main and the renderer rather
  * than the backend, so filing its tests under `src/backend/` would misstate what owns
  * them; they belong beside the code.
+ *
+ * `src/electron` is included too, but its tests must mock `electron` wholesale: imported
+ * outside an Electron process the module resolves to the executable's path, not the API.
+ * That limits what is worth testing here to decision logic (which notification to show,
+ * what the badge should count) rather than anything that needs a real window.
  */
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/{backend,common}/**/*.test.ts"],
+    include: ["src/{backend,common,electron}/**/*.test.ts"],
     // Native N-API addons (node-pty) are loaded per-test-file. Worker threads and
     // native addons are a known hazard; a forked child process is a plain Node process,
     // which is exactly what the addon expects. This is also vitest's default — pinned

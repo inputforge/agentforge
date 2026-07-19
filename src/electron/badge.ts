@@ -40,7 +40,9 @@ export async function refreshBadge(handlers: IpcHandlers): Promise<void> {
       handlers["tickets.list"](),
       handlers["agents.list"](),
     ]);
-    app.setBadgeCount(countNeedsAttention(tickets, agents));
+    const count = countNeedsAttention(tickets, agents);
+    app.setBadgeCount(count);
+    log.debug("badge set", { agents: agents.length, count, tickets: tickets.length });
   } catch (error) {
     // A badge is never worth failing a real operation over: this runs off the back of
     // every outgoing event, so a throw here would poison the push path itself.
