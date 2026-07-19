@@ -4,7 +4,6 @@ import { mkdirSync } from "node:fs";
 import type { Agent, AgentType } from "../../common/types.ts";
 import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-import { broadcastNotification } from "../ipc/broadcast.ts";
 import { acpClientManager } from "./AcpClientManager.ts";
 import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
@@ -27,6 +26,15 @@ function titleFromDescription(description: string): string | null {
   return candidate.length > 72 ? `${candidate.slice(0, 69).trimEnd()}…` : candidate;
 }
 
+/**
+ * How this service reaches the renderer. Injected via the constructor rather than imported
+ * so it is substitutable in tests — `bootstrap.ts` passes the real `broadcastNotification`.
+ *
+ * Every broadcast in this class must go through `this.broadcast`. `handleAgentExit` used to
+ * call the imported `broadcastNotification` directly: identical at runtime (bootstrap injects
+ * that very function), but it silently bypassed the seam, so a test substituting a fake
+ * captured nothing from the exit path — the one path most worth asserting on.
+ */
 type BroadcastFn = (event: object) => void;
 
 function buildCommand(agentType: AgentType, customCommand?: string): string {
@@ -216,32 +224,57 @@ export class OrchestratorService {
     gitWatcher.unwatchWorktree(agentId);
     const updatedAgent = agentStmts.get.get(agentId);
     if (updatedAgent) {
-      broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+      this.broadcast({ agent: updatedAgent, type: "agent-updated" });
     }
 
     const currentTicket = ticketStmts.get.get(ticketId);
-    if (exitCode === 0 && currentTicket?.status === "in-progress") {
-      ticketStmts.updateStatus.run({
-        $id: ticketId,
-        $status: "review",
-        $updatedAt: Date.now(),
-      });
-      const ticket = ticketStmts.get.get(ticketId);
-      if (ticket) {
-        broadcastNotification({ ticket, type: "ticket-updated" });
+    // Only speak up while the ticket still claims to be in progress. If it has been moved
+    // on (dragged to done, merged), the user has already dealt with it and how the agent
+    // exited is moot.
+    if (currentTicket?.status === "in-progress") {
+      if (exitCode === 0) {
+        ticketStmts.updateStatus.run({
+          $id: ticketId,
+          $status: "review",
+          $updatedAt: Date.now(),
+        });
+        const ticket = ticketStmts.get.get(ticketId);
+        if (ticket) {
+          this.broadcast({ ticket, type: "ticket-updated" });
+        }
+        this.broadcast({
+          notification: {
+            agentId,
+            message: `Agent on "${ticketTitle}" finished — ready for review`,
+            ticketId,
+            type: "agent-done",
+          },
+          type: "notification",
+        });
+      } else {
+        // The agent died on its own. Previously this branch did not exist: only a clean
+        // exit was announced, so the outcome you most need to hear about — it broke while
+        // you were away — was the one that said nothing at all. The ticket stays in
+        // `in-progress` (the agent row is already `error`), which is what surfaces the
+        // RELAUNCH button and what countNeedsAttention() counts.
+        //
+        // Any non-zero exit reaching here is a genuine failure, never a user-initiated
+        // kill: kill() sets session.finalized before killing, and every exit callback in
+        // AcpClientManager is guarded on !finalized, so a deliberate kill never fires one.
+        log.warn("agent exited non-zero", { agentId, exitCode, ticketId });
+        this.broadcast({
+          notification: {
+            agentId,
+            message: `Agent on "${ticketTitle}" failed (exit ${exitCode}) — needs attention`,
+            ticketId,
+            type: "error",
+          },
+          type: "notification",
+        });
       }
-      broadcastNotification({
-        notification: {
-          agentId,
-          message: `Agent on "${ticketTitle}" finished — ready for review`,
-          ticketId,
-          type: "agent-done",
-        },
-        type: "notification",
-      });
     }
 
-    broadcastNotification({
+    this.broadcast({
       tickets: ticketStmts.list.all(),
       type: "kanban-sync",
     });

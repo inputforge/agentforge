@@ -58,7 +58,16 @@ export type SessionEvent =
   | { type: "branch-updated"; branch: string | null }
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
   | { type: "acp-state-updated"; agentId: string; state: AcpAgentState }
-  | { type: "branches-updated" };
+  | { type: "branches-updated" }
+  /**
+   * Open a ticket, asked for by the main process rather than the user.
+   *
+   * The only emitter is a click on an OS notification: main focuses the window, then
+   * tells the renderer where to go. Unlike every other event here this carries no state
+   * — it is an instruction, because routing lives in the renderer (`store.openTicket`)
+   * and main has no way to reach it otherwise.
+   */
+  | { type: "focus-ticket"; ticketId: string };
 
 // ─── Method surface (renderer → main) ─────────────────────────────────────────
 

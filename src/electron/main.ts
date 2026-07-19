@@ -23,8 +23,11 @@
 import { app, BrowserWindow, dialog, type BrowserWindow as Win } from "electron";
 
 import { startBackend, type BackendBridge } from "../backend/bootstrap.ts";
+import { IPC_EVENT, type SessionEvent } from "../common/ipc.ts";
+import { refreshBadge } from "./badge.ts";
 import { createLogger, logFilePath } from "./logger.ts";
 import { buildMenu } from "./menu.ts";
+import { notifyIfUnfocused } from "./osNotifications.ts";
 import { registerIpc } from "./registerIpc.ts";
 import { resolveRepoPath } from "./repoRegistry.ts";
 import { assertGit, resolveUserPath } from "./resolveUserPath.ts";
@@ -153,6 +156,80 @@ function requestQuit(): void {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Focus the window and tell the renderer to open `ticketId`.
+ *
+ * Only called from an OS notification click. Focus first, so the renderer navigates inside
+ * a window the user can already see.
+ *
+ * `webContents.send` before the renderer has loaded is dropped silently, and a notification
+ * can fire before the window exists at all (the backend starts at step 6, the window at
+ * step 8, and a resumed agent can fail immediately). So delivery waits for the load when
+ * one is in flight rather than firing into a void.
+ */
+function focusTicket(ticketId: string): void {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
+    // window-all-closed quits, so no window means the app is starting or going away.
+    // Nothing to focus and nowhere to route: dropping is the honest outcome.
+    log.debug("notification click with no window; ignoring", { ticketId });
+    return;
+  }
+
+  const window = mainWindow;
+  if (window.isMinimized()) {
+    window.restore();
+  }
+  window.show();
+  window.focus();
+
+  const event: SessionEvent = { ticketId, type: "focus-ticket" };
+  if (window.webContents.isLoading()) {
+    window.webContents.once("did-finish-load", () => {
+      window.webContents.send(IPC_EVENT, event);
+    });
+    return;
+  }
+  window.webContents.send(IPC_EVENT, event);
+}
+
+/**
+ * React to an event on its way to the renderer.
+ *
+ * Taps `send` rather than adding a backend hook, because `send` is the single push path and
+ * `src/backend/` may not import `electron`. Everything the OS surface needs is already
+ * flowing through here.
+ *
+ * Runs before the window check in `send`: a notification matters *most* when there is no
+ * window to receive the renderer copy.
+ */
+function reactToEvent(channel: string, args: unknown[]): void {
+  if (channel !== IPC_EVENT) {
+    return;
+  }
+  const event = args[0] as SessionEvent | undefined;
+  if (event === undefined) {
+    return;
+  }
+
+  if (event.type === "notification") {
+    notifyIfUnfocused(event.notification, mainWindow, focusTicket);
+    return;
+  }
+
+  // Anything that can change what is waiting on the user. Notifications deliberately are
+  // not in this list: they announce state, they do not change it.
+  if (
+    backend !== null &&
+    (event.type === "ticket-updated" ||
+      event.type === "agent-updated" ||
+      event.type === "kanban-sync")
+  ) {
+    // Fire-and-forget: `send` is synchronous and must stay that way — the renderer copy
+    // cannot wait on a badge. refreshBadge swallows its own errors.
+    void refreshBadge(backend.handlers);
+  }
+}
+
+/**
  * The backend's only push path to the renderer.
  *
  * Injected rather than imported so `src/backend/` stays Electron-free. Resolves
@@ -160,6 +237,7 @@ function requestQuit(): void {
  * window never sees a half-initialised IPC surface).
  */
 function send(channel: string, ...args: unknown[]): void {
+  reactToEvent(channel, args);
   if (mainWindow === null || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
     return;
   }
@@ -208,6 +286,11 @@ async function boot(): Promise<void> {
 
   // Step 7 — before the window exists, so the renderer cannot invoke into a void.
   registerIpc(backend);
+
+  // Seed the badge before the window opens. `reactToEvent` only refreshes it on state
+  // changes, and there may be none for a while: agents resumed above can already be in
+  // `review` from a previous session, so waiting for an event would show 0 over real work.
+  await refreshBadge(backend.handlers);
 
   // Step 8
   mainWindow = createWindow();

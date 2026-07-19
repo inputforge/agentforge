@@ -21,6 +21,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgentDiff,
     setAcpState,
     fetchBranches,
+    openTicket,
   } = useStore();
 
   useEffect(() => {
@@ -58,6 +59,12 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
           fetchBranches();
           break;
         }
+        case "focus-ticket": {
+          // An OS notification was clicked. Main has already focused the window; routing
+          // is ours. Same action the toast's "OPEN →" uses, so both land identically.
+          openTicket(event.ticketId);
+          break;
+        }
       }
     });
   }, [
@@ -68,6 +75,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAgentDiff,
     setAcpState,
     fetchBranches,
+    openTicket,
   ]);
 
   return <>{children}</>;
