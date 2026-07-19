@@ -139,7 +139,7 @@ describe("initDb", () => {
     ).toStrictEqual(migrations.map((m) => ({ name: m.name })));
   });
 
-  test("applies all 11 migrations once and is a no-op on the second run", () => {
+  test("applies every migration once and is a no-op on the second run", () => {
     const repo = makeRepo();
     initDb(repo);
 
@@ -151,7 +151,9 @@ describe("initDb", () => {
       );
 
     const first = readApplied();
-    expect(first.length).toBe(11);
+    // Derived, not hardcoded: a literal count here fails on every migration added, which
+    // says nothing about whether the migrator works.
+    expect(first.length).toBe(migrations.length);
 
     closeDb();
     // A re-applied migration would hit the _migrations PRIMARY KEY and throw.
