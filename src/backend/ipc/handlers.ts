@@ -25,11 +25,15 @@ import {
   agentStmts,
   diffCommentStmts,
   integrationStmts,
+  planningStmts,
   remoteStmts,
+  ticketDependencyStmts,
   ticketStmts,
 } from "../db/index.ts";
+import { parsePlan } from "../../common/planParse.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 import { acpClientManager } from "../services/AcpClientManager.ts";
+import { planningService } from "../services/PlanningService.ts";
 import { codexService } from "../services/CodexService.ts";
 import { GitHubService } from "../services/GitHubService.ts";
 import { gitWatcher } from "../services/GitWatcher.ts";
@@ -538,6 +542,102 @@ export function createHandlers({ orchestrator, repoPath }: HandlerDeps): IpcHand
       const updated = requireTicket(id);
       broadcastNotification({ tickets: ticketStmts.list.all(), type: "kanban-sync" });
       return updated;
+    },
+
+    "planning.start": () => {
+      const remoteConfig = requireRemote();
+      // The repo root, not a worktree: planning has to read the real code, and it never
+      // writes (plan mode), so it needs no isolation.
+      return planningService.start(remoteConfig.localPath);
+    },
+
+    "planning.send": (id, text) => {
+      const trimmed = text?.trim();
+      if (!trimmed) {
+        throw new Error("message is required");
+      }
+      return planningService.send(id, trimmed);
+    },
+
+    "planning.latest": () => planningService.latest(),
+
+    "planning.toTickets": (id) => {
+      const state = planningService.getState(id);
+      if (!state) {
+        throw new Error("planning session not found");
+      }
+      if (!state.plan) {
+        throw new Error("this session has no plan yet — ask the agent to finish planning first");
+      }
+
+      const parsed = parsePlan(state.plan);
+      if (parsed.units.length === 0) {
+        // The deterministic parse found nothing. The format drifted, or the model changed.
+        // An LLM structuring pass belongs here; until then, say so rather than silently
+        // creating zero tickets and looking like it worked.
+        throw new Error(
+          "could not find any '## Unit N — Title' sections in the plan; nothing to create",
+        );
+      }
+
+      const baseBranch = remoteStmts.get.get()?.baseBranch ?? null;
+      // Shared framing, prepended to every ticket: each unit is executed by its own agent in
+      // its own worktree with no sight of the others, so without this the agent for "add a
+      // focus-ticket event" has no idea why that event should exist.
+      const preamble = [parsed.title && `# ${parsed.title}`, parsed.context]
+        .filter(Boolean)
+        .join("\n\n");
+
+      // Created in the plan's own order so `created_at` ascends with unit number: the board
+      // sorts by created_at, and a plan read top-to-bottom should look like one.
+      const byUnit = new Map<number, string>();
+      const created: Ticket[] = [];
+      for (const unit of parsed.units) {
+        const now = Date.now();
+        const ticket: Ticket = {
+          baseBranch,
+          createdAt: now,
+          description: preamble ? `${preamble}\n\n---\n\n${unit.body}` : unit.body,
+          id: randomUUID(),
+          status: "backlog",
+          title: unit.title,
+          updatedAt: now,
+        };
+        ticketStmts.insert.run({
+          $baseBranch: ticket.baseBranch ?? null,
+          $createdAt: ticket.createdAt,
+          $description: ticket.description,
+          $id: ticket.id,
+          $status: ticket.status,
+          $title: ticket.title,
+          $updatedAt: ticket.updatedAt,
+        });
+        byUnit.set(unit.number, ticket.id);
+        created.push(ticket);
+      }
+
+      // Edges second: every ticket must exist before any edge can reference it, or the FK
+      // rejects it. A dependency on a unit the plan never defined is dropped, not fatal —
+      // one bad reference should not throw away an otherwise good plan.
+      for (const unit of parsed.units) {
+        const ticketId = byUnit.get(unit.number)!;
+        for (const dependsOnNumber of unit.dependsOn) {
+          const blockerId = byUnit.get(dependsOnNumber);
+          if (!blockerId) {
+            log.warn("plan references an undefined unit; dropping the edge", {
+              from: unit.number,
+              to: dependsOnNumber,
+            });
+            continue;
+          }
+          ticketDependencyStmts.add.run(ticketId, blockerId);
+        }
+      }
+
+      planningStmts.setStatus.run({ $endedAt: Date.now(), $id: id, $status: "completed" });
+      log.info("plan converted to tickets", { count: created.length, id });
+      broadcastNotification({ tickets: ticketStmts.list.all(), type: "kanban-sync" });
+      return created;
     },
 
     "tickets.create": (data) => {

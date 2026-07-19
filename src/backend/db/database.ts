@@ -120,6 +120,25 @@ interface RawAgent {
   sessionId: string | null;
 }
 
+/**
+ * A planning session row.
+ *
+ * Not mapped to a `common/` domain type: `state` and `plan` are opaque blobs here (the
+ * serialised ACP conversation and the plan markdown), and only PlanningService knows how to
+ * read them. The renderer gets the parsed shape, not this.
+ */
+interface RawPlanningSession {
+  id: string;
+  cwd: string;
+  acpSessionId: string | null;
+  status: string;
+  state: string | null;
+  plan: string | null;
+  planFilePath: string | null;
+  startedAt: number;
+  endedAt: number | null;
+}
+
 const TICKET_COLS = `
   id, title, description, status,
   base_branch  AS baseBranch,
@@ -445,6 +464,100 @@ export const remoteStmts = {
            base_branch = excluded.base_branch,
            local_path  = excluded.local_path`,
       ).run(args);
+    },
+  },
+};
+
+/**
+ * Ticket dependency edges. `depends_on_ticket_id` must land before `ticket_id` can start.
+ *
+ * Both columns FK to `tickets` with ON DELETE CASCADE, so deleting a ticket drops its edges
+ * without any bookkeeping here.
+ */
+export const ticketDependencyStmts = {
+  /**
+   * Idempotent: the PK already rejects duplicates, and re-adding an edge is not an error
+   * worth surfacing to a caller who just wants the edge to exist.
+   */
+  add: {
+    run: (ticketId: string, dependsOnTicketId: string): void => {
+      q(
+        `INSERT OR IGNORE INTO ticket_dependencies (ticket_id, depends_on_ticket_id)
+         VALUES (?, ?)`,
+      ).run(ticketId, dependsOnTicketId);
+    },
+  },
+  /** Everything `ticketId` is waiting on. */
+  listBlockers: {
+    all: (ticketId: string): string[] =>
+      q<{ depends_on_ticket_id: string }>(
+        "SELECT depends_on_ticket_id FROM ticket_dependencies WHERE ticket_id = ?",
+      )
+        .all(ticketId)
+        .map((row) => row.depends_on_ticket_id),
+  },
+  /** Everything waiting on `ticketId` — the question auto-start asks when a ticket lands. */
+  listDependents: {
+    all: (ticketId: string): string[] =>
+      q<{ ticket_id: string }>(
+        "SELECT ticket_id FROM ticket_dependencies WHERE depends_on_ticket_id = ?",
+      )
+        .all(ticketId)
+        .map((row) => row.ticket_id),
+  },
+};
+
+/** An interactive planning session: the conversation that produces tickets. */
+export const planningStmts = {
+  get: {
+    get: (id: string): RawPlanningSession | null =>
+      q<RawPlanningSession>(
+        `SELECT id, cwd, acp_session_id AS acpSessionId, status, state, plan,
+                plan_file_path AS planFilePath, started_at AS startedAt, ended_at AS endedAt
+         FROM planning_sessions WHERE id = ?`,
+      ).get(id) ?? null,
+  },
+  insert: {
+    run: (args: { $id: string; $cwd: string; $startedAt: number }): void => {
+      q(
+        `INSERT INTO planning_sessions (id, cwd, status, started_at)
+         VALUES ($id, $cwd, 'idle', $startedAt)`,
+      ).run(args);
+    },
+  },
+  /** The most recent session, for reattaching the UI after a reload or restart. */
+  latest: {
+    get: (): RawPlanningSession | null =>
+      q<RawPlanningSession>(
+        `SELECT id, cwd, acp_session_id AS acpSessionId, status, state, plan,
+                plan_file_path AS planFilePath, started_at AS startedAt, ended_at AS endedAt
+         FROM planning_sessions ORDER BY started_at DESC LIMIT 1`,
+      ).get() ?? null,
+  },
+  /** The plan itself, captured from ExitPlanMode. */
+  savePlan: {
+    run: (args: { $id: string; $plan: string; $planFilePath: string | null }): void => {
+      q(
+        `UPDATE planning_sessions
+         SET plan = $plan, plan_file_path = $planFilePath
+         WHERE id = $id`,
+      ).run(args);
+    },
+  },
+  saveState: {
+    run: (args: { $id: string; $state: string; $acpSessionId: string | null }): void => {
+      q(
+        `UPDATE planning_sessions
+         SET state = $state, acp_session_id = $acpSessionId
+         WHERE id = $id`,
+      ).run(args);
+    },
+  },
+  setStatus: {
+    run: (args: { $id: string; $status: string; $endedAt: number | null }): void => {
+      q("UPDATE planning_sessions SET status = $status, ended_at = $endedAt WHERE id = $id").run(
+        args,
+      );
     },
   },
 };

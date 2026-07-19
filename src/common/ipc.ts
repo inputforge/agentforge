@@ -21,6 +21,7 @@ import type {
   LinearTeam,
   MergeResult,
   NotificationPayload,
+  PlanningSessionState,
   RemoteConfig,
   Ticket,
   TicketStatus,
@@ -59,6 +60,11 @@ export type SessionEvent =
   | { type: "diff-updated"; agentId: string; diff: DiffResult }
   | { type: "acp-state-updated"; agentId: string; state: AcpAgentState }
   | { type: "branches-updated" }
+  /**
+   * The planning conversation advanced. Carries no id because there is one planning session
+   * at a time — unlike agents, which are per-ticket and concurrent.
+   */
+  | { type: "planning-state-updated"; state: PlanningSessionState }
   /**
    * Open a ticket, asked for by the main process rather than the user.
    *
@@ -131,6 +137,19 @@ export interface IpcMethods {
   "shell.kill": (id: string) => void;
 
   "tickets.archive": (id: string) => Ticket;
+  /** Open a planning session in the repo, read-only, in plan mode. */
+  "planning.start": () => PlanningSessionState;
+  /** Send a turn. Resolves when the agent stops. */
+  "planning.send": (id: string, text: string) => void;
+  /** The most recent session, so the UI can reattach after a reload or restart. */
+  "planning.latest": () => PlanningSessionState | null;
+  /**
+   * Turn the captured plan into backlog tickets.
+   *
+   * Returns the created tickets. Dependencies between them come from the plan itself and are
+   * recorded as `ticket_dependencies` edges.
+   */
+  "planning.toTickets": (id: string) => Ticket[];
   "tickets.create": (data: { title: string; description: string }) => Ticket;
   "tickets.delete": (id: string) => void;
   "tickets.list": () => Ticket[];
@@ -181,6 +200,10 @@ export const IPC_METHOD_NAMES: readonly IpcMethod[] = [
   "agents.kill",
   "agents.list",
   "agents.listComments",
+  "planning.latest",
+  "planning.send",
+  "planning.start",
+  "planning.toTickets",
   "agents.merge",
   "agents.rebase",
   "agents.restart",

@@ -7,6 +7,7 @@ import type {
   AppNotification,
   DiffResult,
   GitBranchInfo,
+  PlanningSessionState,
   RemoteConfig,
   Ticket,
   TicketStatus,
@@ -28,6 +29,8 @@ interface AppState {
   agentDiffs: Record<string, DiffResult>;
   branches: GitBranchInfo[];
   acpStates: Record<string, AcpAgentState>;
+  /** One planning session at a time, unlike agents which are per-ticket and concurrent. */
+  planningState: PlanningSessionState | null;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
@@ -68,6 +71,7 @@ interface AppState {
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
   setAcpState: (agentId: string, state: AcpAgentState) => void;
+  setPlanningState: (state: PlanningSessionState) => void;
 
   // Branch actions
   fetchBranches: () => Promise<void>;
@@ -85,6 +89,7 @@ let branchFetchId = 0;
 
 export const useStore = create<AppState>((set, get) => ({
   acpStates: {},
+  planningState: null,
   activeTicketId: null,
   archivedTickets: [],
   isArchiveOpen: false,
@@ -294,6 +299,15 @@ export const useStore = create<AppState>((set, get) => ({
         return s;
       }
       return { acpStates: { ...s.acpStates, [agentId]: state } };
+    }),
+  setPlanningState: (state) =>
+    set((s) => {
+      // Same staleness guard as setAcpState: a planning turn streams many updates and
+      // ordering is not guaranteed, so an older snapshot must not clobber a newer one.
+      if (s.planningState && s.planningState.updatedAt > state.updatedAt) {
+        return s;
+      }
+      return { planningState: state };
     }),
   setAgent: (agent) => set((s) => ({ agents: { ...s.agents, [agent.id]: agent } })),
   setAgentDiff: (agentId, diff) =>

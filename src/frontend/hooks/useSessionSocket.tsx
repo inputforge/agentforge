@@ -22,6 +22,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAcpState,
     fetchBranches,
     openTicket,
+    setPlanningState,
   } = useStore();
 
   useEffect(() => {
@@ -65,6 +66,10 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
           openTicket(event.ticketId);
           break;
         }
+        case "planning-state-updated": {
+          setPlanningState(event.state);
+          break;
+        }
       }
     });
   }, [
@@ -76,6 +81,7 @@ export function SessionSocketProvider({ children }: { children: ReactNode }) {
     setAcpState,
     fetchBranches,
     openTicket,
+    setPlanningState,
   ]);
 
   return <>{children}</>;

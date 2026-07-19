@@ -84,6 +84,12 @@ export const api = {
     kill: (id: string) => invoke("shell.kill", id),
   },
 
+  planning: {
+    latest: () => invoke("planning.latest"),
+    send: (id: string, text: string) => invoke("planning.send", id, text),
+    start: () => invoke("planning.start"),
+    toTickets: (id: string) => invoke("planning.toTickets", id),
+  },
   tickets: {
     archive: (id: string) => invoke("tickets.archive", id),
     create: (data: { title: string; description: string }) => invoke("tickets.create", data),
