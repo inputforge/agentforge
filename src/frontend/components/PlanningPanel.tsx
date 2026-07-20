@@ -9,9 +9,11 @@ import {
   Send,
   Sparkles,
   Terminal,
+  X,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { parsePlan } from "../../common/planParse";
 import { api } from "../lib/api";
@@ -225,6 +227,8 @@ function PlanReadyPanel({
 }
 
 export function PlanningPanel() {
+  const navigate = useNavigate();
+  const closeToBoard = useCallback(() => navigate("/"), [navigate]);
   const planningState = useStore((s) => s.planningState);
   const setPlanningState = useStore((s) => s.setPlanningState);
   const addNotification = useStore((s) => s.addNotification);
@@ -408,6 +412,13 @@ export function PlanningPanel() {
         <span className="ml-auto text-[9px] uppercase tracking-widest text-forge-text-muted">
           read-only — no edits, no worktree
         </span>
+        <button
+          className="forge-btn-ghost py-0.5 px-2"
+          onClick={closeToBoard}
+          title="Back to board"
+        >
+          <X size={13} />
+        </button>
       </div>
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto bg-forge-black pb-2">

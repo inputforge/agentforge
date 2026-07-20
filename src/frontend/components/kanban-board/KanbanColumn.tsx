@@ -1,7 +1,9 @@
 import { useDroppable } from "@dnd-kit/core";
 import { clsx } from "clsx";
-import { Check, CirclePlay, Eye, Inbox } from "lucide-react";
+import { Check, CirclePlay, ClipboardList, Eye, Inbox } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
@@ -23,6 +25,8 @@ interface Props {
 export function KanbanColumn({ status, tickets }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const agents = useStore((s) => s.agents);
+  const navigate = useNavigate();
+  const openPlanning = useCallback(() => navigate("/plan"), [navigate]);
   const meta = COLUMN_META[status];
   const Icon = COLUMN_ICONS[status];
 
@@ -61,11 +65,26 @@ export function KanbanColumn({ status, tickets }: Props) {
           isOver ? "bg-forge-surface-bright" : "bg-forge-dark",
         )}
       >
-        {tickets.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
-          </div>
-        )}
+        {tickets.length === 0 &&
+          (status === "backlog" ? (
+            // Empty backlog is precisely when planning matters most — the CTA here is the
+            // only route into /plan besides the header button, and this is where a new
+            // user actually lands first.
+            <div className="flex flex-col items-center justify-center h-full gap-3">
+              <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
+              <button
+                className="forge-btn-ghost py-1 px-2.5 flex items-center gap-1.5"
+                onClick={openPlanning}
+              >
+                <ClipboardList size={11} />
+                <span className="text-[10px] uppercase tracking-widest">PLAN SOMETHING</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
+            </div>
+          ))}
         {tickets.map((ticket) => (
           <TicketCard
             key={ticket.id}
