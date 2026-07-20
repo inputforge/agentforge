@@ -562,6 +562,18 @@ export function createHandlers({ orchestrator, repoPath }: HandlerDeps): IpcHand
     "planning.latest": () => planningService.latest(),
 
     "planning.toTickets": (id) => {
+      // Guards against double-conversion: PlanningSessionState.status is the ACP TURN
+      // status (idle/running/completed/failed), which says nothing about whether this
+      // plan already became tickets. The DB row's status is the session lifecycle
+      // (idle -> completed, set below), and it is what tells us that.
+      const row = planningStmts.get.get(id);
+      if (!row) {
+        throw new Error("planning session not found");
+      }
+      if (row.status === "completed") {
+        throw new Error("tickets were already created from this plan");
+      }
+
       const state = planningService.getState(id);
       if (!state) {
         throw new Error("planning session not found");

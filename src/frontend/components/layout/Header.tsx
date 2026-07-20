@@ -1,4 +1,6 @@
-import { Archive, Plug, Plus, TerminalSquare } from "lucide-react";
+import { Archive, ClipboardList, Plug, Plus, TerminalSquare } from "lucide-react";
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useStore } from "../../store";
 import { RemoteBar } from "../RemoteBar";
@@ -13,6 +15,8 @@ export function Header({
   onOpenArchive: () => void;
 }) {
   const openCreateModal = useStore((s) => s.openCreateModal);
+  const navigate = useNavigate();
+  const openPlanning = useCallback(() => navigate("/plan"), [navigate]);
 
   return (
     <header className="app-titlebar flex-shrink-0 h-10 flex items-center justify-between pr-4 border-b border-forge-border bg-forge-panel">
@@ -34,6 +38,15 @@ export function Header({
         <RemoteBar />
 
         <div className="w-px h-4 bg-forge-border" />
+
+        <button
+          className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"
+          onClick={openPlanning}
+          title="Plan what to build next"
+        >
+          <ClipboardList size={13} />
+          <span className="text-xs">PLAN</span>
+        </button>
 
         <button
           className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"

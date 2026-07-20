@@ -348,10 +348,22 @@ export class PlanningService {
     return row?.state ? (JSON.parse(row.state) as PlanningSessionState) : null;
   }
 
-  /** The most recent session, so the UI can reattach after a reload. */
+  /**
+   * The most recent session that is still open for conversation, so the UI can reattach
+   * after a reload or restart — but only while there is something to reattach to.
+   *
+   * `row.status` is the session lifecycle (idle -> completed once toTickets runs, or
+   * failed if start() threw), set only at those two points and otherwise left at 'idle'
+   * for the session's whole conversation. A completed or failed session is excluded on
+   * purpose: without this, re-opening /plan after converting a plan reattached to the
+   * same session with its "CREATE N TICKETS" button live again, and clicking it hit the
+   * double-conversion guard in planning.toTickets with no way to start a fresh
+   * conversation at all. Returning null here makes the caller start a new session
+   * instead — exactly the fallback it already has for "no session exists".
+   */
   latest(): PlanningSessionState | null {
     const row = planningStmts.latest.get();
-    if (!row) {
+    if (!row || row.status !== "idle") {
       return null;
     }
     const live = sessions.get(row.id);

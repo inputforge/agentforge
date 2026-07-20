@@ -10,6 +10,7 @@ import { NotificationToast } from "./components/NotificationToast";
 import { ShellTerminal } from "./components/ShellTerminal";
 import { SessionSocketProvider } from "./hooks/useSessionSocket";
 import { AgentPage } from "./pages/AgentPage";
+import { PlanningPage } from "./pages/PlanningPage";
 import { registerNavigate, useStore } from "./store";
 
 function NavigateFnRegistrar() {
@@ -57,6 +58,7 @@ export function App() {
 
   const kanbanElement = useMemo(() => <KanbanPage />, []);
   const agentElement = useMemo(() => <AgentPage />, []);
+  const planningElement = useMemo(() => <PlanningPage />, []);
 
   return (
     <SessionSocketProvider>
@@ -64,6 +66,7 @@ export function App() {
       <Routes>
         <Route path="/" element={kanbanElement} />
         <Route path="/agent/:ticketId" element={agentElement} />
+        <Route path="/plan" element={planningElement} />
       </Routes>
       <NotificationToast />
     </SessionSocketProvider>

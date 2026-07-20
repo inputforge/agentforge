@@ -110,6 +110,9 @@ function extractDependsOn(body: string, selfNumber: number): number[] {
     }
   }
 
+  // `.sort()` mutates, but `[...found]` is a fresh array with no other reference — nothing
+  // to alias. `.toSorted()` would need an ES2023 lib bump not otherwise justified here.
+  // oxlint-disable-next-line unicorn/no-array-sort
   return [...found].sort((a, b) => a - b);
 }
 
