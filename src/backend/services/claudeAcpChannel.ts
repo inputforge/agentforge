@@ -1,5 +1,5 @@
 /**
- * Wiring for an in-process Claude Code ACP connection.
+ * Wiring and small parsing helpers for an in-process Claude Code ACP connection.
  *
  * Extracted so both consumers share it rather than duplicating the subtleties below:
  *   - AcpClientManager — execution agents, one per ticket, in a git worktree.
@@ -7,8 +7,8 @@
  *
  * The two differ in almost everything that matters (worktree vs repo root, editing vs plan
  * mode, exit-to-review vs exit-to-tickets, and crucially how they answer permission
- * requests), so they own separate `Client` implementations. This module is only the
- * transport they have in common.
+ * requests), so they own separate `Client` implementations. This module is the transport
+ * and response-parsing logic they have in common.
  */
 
 import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
@@ -68,4 +68,24 @@ export function buildClaudeInProcessChannel(): {
   const agentSideConn = new AgentSideConnection((conn) => new ClaudeAcpAgent(conn), agentStream);
 
   return { agentSideConn, stream: clientStream };
+}
+
+/**
+ * Pull the first text block out of a `tool_call_update`'s content — what a tool actually
+ * returned, truncated to 300 chars. Both AcpClientManager and PlanningService receive the
+ * identical ACP shape here; this was previously defined only in AcpClientManager, so
+ * PlanningService's own tool calls never got a resultSummary at all.
+ */
+export function extractResultSummary(update: {
+  content?: { type: string; content?: { type: string; text?: string } }[] | null;
+}): string | null {
+  if (!update.content) {
+    return null;
+  }
+  for (const item of update.content) {
+    if (item.type === "content" && item.content?.type === "text" && item.content.text) {
+      return item.content.text.slice(0, 300);
+    }
+  }
+  return null;
 }

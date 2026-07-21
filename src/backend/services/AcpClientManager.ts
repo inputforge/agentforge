@@ -26,7 +26,7 @@ import { agentStmts } from "../db/index.ts";
 import { logger, errorMeta } from "../lib/logger.ts";
 import { broadcastNotification } from "../ipc/broadcast.ts";
 import type { IAgentManager } from "./AgentManager.ts";
-import { buildClaudeInProcessChannel } from "./claudeAcpChannel.ts";
+import { buildClaudeInProcessChannel, extractResultSummary } from "./claudeAcpChannel.ts";
 import { codexService, NOT_INSTALLED_ERROR } from "./CodexService.ts";
 
 const log = logger.child("acp");
@@ -201,20 +201,6 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
   }
 
   pushState(session);
-}
-
-function extractResultSummary(update: {
-  content?: { type: string; content?: { type: string; text?: string } }[] | null;
-}): string | null {
-  if (!update.content) {
-    return null;
-  }
-  for (const item of update.content) {
-    if (item.type === "content" && item.content?.type === "text" && item.content.text) {
-      return item.content.text.slice(0, 300);
-    }
-  }
-  return null;
 }
 
 // ─── Channel builders ─────────────────────────────────────────────────────────

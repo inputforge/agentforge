@@ -44,7 +44,7 @@ import type { AcpToolCall, PlanningSessionState } from "../../common/types.ts";
 import { planningStmts } from "../db/index.ts";
 import { broadcastNotification } from "../ipc/broadcast.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-import { buildClaudeInProcessChannel } from "./claudeAcpChannel.ts";
+import { buildClaudeInProcessChannel, extractResultSummary } from "./claudeAcpChannel.ts";
 
 const log = logger.child("planning");
 
@@ -172,8 +172,15 @@ function handleSessionUpdate(session: PlanningSession, update: SessionUpdate): v
     }
 
     case "tool_call_update": {
+      const resultSummary = extractResultSummary(update);
       session.state.toolCalls = session.state.toolCalls.map((call) =>
-        call.id === update.toolCallId ? { ...call, status: update.status ?? call.status } : call,
+        call.id === update.toolCallId
+          ? {
+              ...call,
+              status: update.status ?? call.status,
+              ...(resultSummary !== null && { resultSummary }),
+            }
+          : call,
       );
       break;
     }

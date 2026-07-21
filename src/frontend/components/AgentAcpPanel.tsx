@@ -146,7 +146,7 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
 
   return (
     <div
-      className={`animate-fade-in border-l-2 px-3 py-1.5 flex items-center gap-2 ${
+      className={`animate-fade-in border-l-2 px-3 py-1.5 ${
         isRunning
           ? "border-l-forge-amber/50 bg-forge-amber/4"
           : isError
@@ -154,33 +154,44 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
             : "border-l-forge-accent/20 bg-white/[0.015]"
       }`}
     >
-      <Icon
-        size={9}
-        className={`flex-shrink-0 ${
-          isRunning
-            ? "text-forge-amber animate-status-blink"
-            : isError
-              ? "text-forge-red/60"
-              : "text-forge-accent/50"
-        }`}
-      />
-      <span className="text-xs text-forge-text truncate flex-1">{toolCall.title}</span>
-      {toolCall.location && (
-        <span className="text-[10px] text-forge-text-dim/70 font-mono truncate max-w-[160px]">
-          {toolCall.location.split("/").slice(-2).join("/")}
+      <div className="flex items-center gap-2">
+        <Icon
+          size={9}
+          className={`flex-shrink-0 ${
+            isRunning
+              ? "text-forge-amber animate-status-blink"
+              : isError
+                ? "text-forge-red/60"
+                : "text-forge-accent/50"
+          }`}
+        />
+        <span className="text-xs text-forge-text truncate flex-1">{toolCall.title}</span>
+        {toolCall.location && (
+          <span className="text-[10px] text-forge-text-dim/70 font-mono truncate max-w-[160px]">
+            {toolCall.location.split("/").slice(-2).join("/")}
+          </span>
+        )}
+        <span
+          className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${
+            isRunning
+              ? "text-forge-amber/70"
+              : isError
+                ? "text-forge-red/60"
+                : "text-forge-text-dim/50"
+          }`}
+        >
+          {isRunning ? "RUNNING" : toolCall.status}
         </span>
+      </div>
+      {/* Captured, persisted and broadcast by the backend (extractResultSummary, up to
+          300 chars) but never rendered until now: the card said a tool ran, never what it
+          returned. Hidden while running — resultSummary is only ever set by
+          tool_call_update, so there is nothing to show yet. */}
+      {toolCall.resultSummary && (
+        <p className="mt-1 pl-[17px] text-[10px] text-forge-text-dim/60 font-mono leading-relaxed line-clamp-2 whitespace-pre-wrap">
+          {toolCall.resultSummary}
+        </p>
       )}
-      <span
-        className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${
-          isRunning
-            ? "text-forge-amber/70"
-            : isError
-              ? "text-forge-red/60"
-              : "text-forge-text-dim/50"
-        }`}
-      >
-        {isRunning ? "RUNNING" : toolCall.status}
-      </span>
     </div>
   );
 }
