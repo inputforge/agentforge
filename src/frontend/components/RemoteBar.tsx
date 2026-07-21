@@ -1,5 +1,5 @@
 import { SiBitbucket, SiGit, SiGithub, SiGitlab } from "@icons-pack/react-simple-icons";
-import { GitBranch, RefreshCw, Upload } from "lucide-react";
+import { Download, GitBranch, RefreshCw, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
@@ -45,6 +45,7 @@ export function RemoteBar() {
   const { remoteConfig, setRemoteConfig, currentBranch, setCurrentBranch, addNotification } =
     useStore();
   const [isPushing, setIsPushing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
 
   const handlePush = useCallback(async () => {
     if (!remoteConfig || !currentBranch) {
@@ -63,6 +64,29 @@ export function RemoteBar() {
       setIsPushing(false);
     }
   }, [remoteConfig, currentBranch, addNotification]);
+
+  const handlePull = useCallback(async () => {
+    if (!remoteConfig) {
+      return;
+    }
+    setIsPulling(true);
+    try {
+      await api.remote.pull(remoteConfig.localPath);
+      // pull() checks out baseBranch in the main worktree before fast-forwarding it, so
+      // HEAD may have just changed even if this was the only visible effect of the action
+      // — refresh it rather than let the display go stale.
+      const { branch } = await api.remote.getBranch();
+      setCurrentBranch(branch);
+      addNotification({
+        message: `Pulled ${remoteConfig.baseBranch} from origin`,
+        type: "info",
+      });
+    } catch (error) {
+      addNotification({ message: `Pull failed: ${(error as Error).message}`, type: "error" });
+    } finally {
+      setIsPulling(false);
+    }
+  }, [remoteConfig, setCurrentBranch, addNotification]);
 
   useEffect(() => {
     api.remote
@@ -118,6 +142,15 @@ export function RemoteBar() {
           <span className="text-forge-border">·</span>
           <GitBranch size={11} className="flex-shrink-0" />
           <span className="text-forge-text-dim text-xs">HEAD {currentBranch}</span>
+          <button
+            className="forge-btn-ghost py-0.5 px-1.5 flex items-center gap-1 disabled:opacity-50"
+            onClick={handlePull}
+            disabled={isPulling}
+            title={`Pull ${remoteConfig.baseBranch} from origin`}
+          >
+            {isPulling ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
+            <span className="text-xs">{isPulling ? "PULLING…" : "PULL"}</span>
+          </button>
           <button
             className="forge-btn-ghost py-0.5 px-1.5 flex items-center gap-1 disabled:opacity-50"
             onClick={handlePush}
