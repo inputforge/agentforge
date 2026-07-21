@@ -3,12 +3,9 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
-  FileText,
   RefreshCw,
-  Search,
   Send,
   Sparkles,
-  Terminal,
   X,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 
 import { parsePlan } from "../../common/planParse";
 import { api } from "../lib/api";
+import { toolKindIcon } from "../lib/toolKindIcon";
 import { useStore } from "../store";
 import type { AcpMessage, AcpToolCall, AcpTurnStatus, Ticket } from "../types";
 import { MarkdownContent } from "./Markdown";
@@ -71,25 +69,6 @@ function AgentMessageBlock({ message, isFinal }: { message: AcpMessage; isFinal:
       </div>
     </div>
   );
-}
-
-function toolKindIcon(kind: string) {
-  switch (kind) {
-    case "edit":
-    case "delete":
-    case "move": {
-      return FileText;
-    }
-    case "execute": {
-      return Terminal;
-    }
-    case "search": {
-      return Search;
-    }
-    default: {
-      return Terminal;
-    }
-  }
 }
 
 /** Deliberately terser than AgentAcpPanel's ToolCallItem: these are always reads (the

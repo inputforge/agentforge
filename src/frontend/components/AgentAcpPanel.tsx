@@ -4,19 +4,16 @@ import {
   CheckCircle,
   Circle,
   Clock,
-  FileText,
-  Globe,
   RefreshCw,
-  Search,
   Send,
   Square,
-  Terminal,
   Zap,
 } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { api } from "../lib/api";
+import { toolKindIcon } from "../lib/toolKindIcon";
 import { useStore } from "../store";
 import type { AcpMessage, AcpToolCall, AcpTurnStatus, AcpPlanStep } from "../types";
 import { MarkdownContent } from "./Markdown";
@@ -140,28 +137,6 @@ function StatusBadge({ status }: { status: AcpTurnStatus }) {
       <span className={`text-[9px] uppercase tracking-widest ${c.labelClass}`}>{c.label}</span>
     </div>
   );
-}
-
-function toolKindIcon(kind: string) {
-  switch (kind) {
-    case "edit":
-    case "delete":
-    case "move": {
-      return FileText;
-    }
-    case "execute": {
-      return Terminal;
-    }
-    case "search": {
-      return Search;
-    }
-    case "fetch": {
-      return Globe;
-    }
-    default: {
-      return Terminal;
-    }
-  }
 }
 
 function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
