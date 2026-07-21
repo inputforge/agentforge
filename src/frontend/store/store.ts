@@ -59,6 +59,14 @@ interface AppState {
   openArchive: () => void;
   closeArchive: () => void;
 
+  // Shell state. Lifted to the store (not local KanbanPage state, unlike Integrations)
+  // because ShellTerminal holds a live PTY that is killed on unmount — if it only
+  // rendered inside KanbanPage, navigating to /agent/:id or /plan (e.g. via an OS
+  // notification click) would silently kill an open shell out from under the user.
+  isShellOpen: boolean;
+  openShell: () => void;
+  closeShell: () => void;
+
   // Agent actions
   setAgent: (agent: Agent) => void;
   updateAgent: (id: string, updates: Partial<Agent>) => void;
@@ -94,6 +102,7 @@ export const useStore = create<AppState>((set, get) => ({
   archivedTickets: [],
   isArchiveOpen: false,
   isFetchingArchived: false,
+  isShellOpen: false,
   addNotification: (n) => {
     const id = `notif-${(notifCounter += 1)}`;
     const notif: AppNotification = { ...n, id, timestamp: Date.now() };
@@ -167,6 +176,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   closeArchive: () => set({ isArchiveOpen: false }),
+  closeShell: () => set({ isShellOpen: false }),
   dismissNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
   fetchArchivedTickets: async () => {
@@ -187,6 +197,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isArchiveOpen: true });
     get().fetchArchivedTickets();
   },
+  openShell: () => set({ isShellOpen: true }),
   unarchiveTicket: async (ticketId) => {
     const { archivedTickets } = get();
     const ticket = archivedTickets.find((t) => t.id === ticketId);

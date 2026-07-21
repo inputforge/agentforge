@@ -22,34 +22,26 @@ function NavigateFnRegistrar() {
 }
 
 function KanbanPage() {
-  const [shellOpen, setShellOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const { isArchiveOpen, openArchive, closeArchive } = useStore();
-  const openShell = useCallback(() => setShellOpen(true), []);
-  const closeShell = useCallback(() => setShellOpen(false), []);
   const openIntegrations = useCallback(() => setIntegrationsOpen(true), []);
   const closeIntegrations = useCallback(() => setIntegrationsOpen(false), []);
 
   return (
     <div className="h-full flex flex-col bg-forge-black overflow-hidden">
-      <Header
-        onOpenShell={openShell}
-        onOpenIntegrations={openIntegrations}
-        onOpenArchive={openArchive}
-      />
+      <Header onOpenIntegrations={openIntegrations} onOpenArchive={openArchive} />
       <main className="flex-1 overflow-hidden">
         <KanbanBoard />
       </main>
       <CreateTicketModal />
       <IntegrationsModal open={integrationsOpen} onClose={closeIntegrations} />
-      {shellOpen && <ShellTerminal onClose={closeShell} />}
       {isArchiveOpen && <ArchiveDrawer onClose={closeArchive} />}
     </div>
   );
 }
 
 export function App() {
-  const { fetchTickets, fetchBranches } = useStore();
+  const { fetchTickets, fetchBranches, isShellOpen, closeShell } = useStore();
 
   useEffect(() => {
     fetchTickets();
@@ -68,6 +60,12 @@ export function App() {
         <Route path="/agent/:ticketId" element={agentElement} />
         <Route path="/plan" element={planningElement} />
       </Routes>
+      {/* Rendered here, not inside KanbanPage: ShellTerminal holds a live PTY that is
+          killed on unmount. If it only rendered on the "/" route, navigating to an
+          agent or the planning route — including via an OS notification's deep link —
+          would silently kill an open shell. It is a viewport-fixed overlay (see its own
+          `fixed bottom-0` styling), so rendering it here works unchanged over any route. */}
+      {isShellOpen && <ShellTerminal onClose={closeShell} />}
       <NotificationToast />
     </SessionSocketProvider>
   );

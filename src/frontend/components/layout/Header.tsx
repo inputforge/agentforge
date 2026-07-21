@@ -6,15 +6,14 @@ import { useStore } from "../../store";
 import { RemoteBar } from "../RemoteBar";
 
 export function Header({
-  onOpenShell,
   onOpenIntegrations,
   onOpenArchive,
 }: {
-  onOpenShell: () => void;
   onOpenIntegrations: () => void;
   onOpenArchive: () => void;
 }) {
   const openCreateModal = useStore((s) => s.openCreateModal);
+  const openShell = useStore((s) => s.openShell);
   const navigate = useNavigate();
   const openPlanning = useCallback(() => navigate("/plan"), [navigate]);
 
@@ -68,7 +67,7 @@ export function Header({
 
         <button
           className="forge-btn-ghost py-0.5 px-2 flex items-center gap-1.5"
-          onClick={onOpenShell}
+          onClick={openShell}
           title="Open shell terminal"
         >
           <TerminalSquare size={13} />
