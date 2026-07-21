@@ -1,6 +1,6 @@
 import { SiBitbucket, SiGit, SiGithub, SiGitlab } from "@icons-pack/react-simple-icons";
-import { GitBranch } from "lucide-react";
-import { useEffect } from "react";
+import { GitBranch, RefreshCw, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import { useStore } from "../store";
@@ -42,7 +42,27 @@ function parseRepo(url: string): { label: string; href?: string } {
 }
 
 export function RemoteBar() {
-  const { remoteConfig, setRemoteConfig, currentBranch, setCurrentBranch } = useStore();
+  const { remoteConfig, setRemoteConfig, currentBranch, setCurrentBranch, addNotification } =
+    useStore();
+  const [isPushing, setIsPushing] = useState(false);
+
+  const handlePush = useCallback(async () => {
+    if (!remoteConfig || !currentBranch) {
+      return;
+    }
+    setIsPushing(true);
+    try {
+      await api.remote.push(currentBranch, remoteConfig.localPath);
+      // Push has no other visible effect in this UI — nothing on screen changes the way
+      // a merge (ticket moves to done) or commit (diff shrinks) does — so unlike those,
+      // silence here would look identical to nothing having happened at all.
+      addNotification({ message: `Pushed ${currentBranch} to origin`, type: "info" });
+    } catch (error) {
+      addNotification({ message: `Push failed: ${(error as Error).message}`, type: "error" });
+    } finally {
+      setIsPushing(false);
+    }
+  }, [remoteConfig, currentBranch, addNotification]);
 
   useEffect(() => {
     api.remote
@@ -98,6 +118,15 @@ export function RemoteBar() {
           <span className="text-forge-border">·</span>
           <GitBranch size={11} className="flex-shrink-0" />
           <span className="text-forge-text-dim text-xs">HEAD {currentBranch}</span>
+          <button
+            className="forge-btn-ghost py-0.5 px-1.5 flex items-center gap-1 disabled:opacity-50"
+            onClick={handlePush}
+            disabled={isPushing}
+            title={`Push ${currentBranch} to origin`}
+          >
+            {isPushing ? <RefreshCw size={11} className="animate-spin" /> : <Upload size={11} />}
+            <span className="text-xs">{isPushing ? "PUSHING…" : "PUSH"}</span>
+          </button>
         </>
       )}
     </div>
