@@ -505,6 +505,20 @@ export const ticketDependencyStmts = {
         .all(ticketId)
         .map((row) => row.ticket_id),
   },
+  /**
+   * Every edge on the board, for `ticketsToAutoStart` (common/autoStart.ts) — that function
+   * takes the full graph rather than one ticket's blockers, the same shape
+   * `countNeedsAttention` takes full tickets/agents arrays, so it stays a pure, testable
+   * function instead of a callback threaded through DB queries.
+   */
+  listAll: {
+    all: (): { ticketId: string; dependsOnTicketId: string }[] =>
+      q<{ ticket_id: string; depends_on_ticket_id: string }>(
+        "SELECT ticket_id, depends_on_ticket_id FROM ticket_dependencies",
+      )
+        .all()
+        .map((row) => ({ dependsOnTicketId: row.depends_on_ticket_id, ticketId: row.ticket_id })),
+  },
 };
 
 /** An interactive planning session: the conversation that produces tickets. */
