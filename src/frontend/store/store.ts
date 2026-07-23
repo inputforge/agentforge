@@ -5,6 +5,7 @@ import type {
   Agent,
   AcpAgentState,
   AppNotification,
+  DependencyEdge,
   DiffResult,
   GitBranchInfo,
   PlanningSessionState,
@@ -23,6 +24,10 @@ interface AppState {
   // Data
   tickets: Ticket[];
   agents: Record<string, Agent>;
+  /** Every ticket_dependencies edge on the board. Fetched alongside tickets/agents so
+   * TicketCard can compute "is this ticket blocked" (common/blocked.ts) without a
+   * per-card round-trip. */
+  dependencyEdges: DependencyEdge[];
   notifications: AppNotification[];
   remoteConfig: RemoteConfig | null;
   currentBranch: string | null;
@@ -43,6 +48,7 @@ interface AppState {
 
   // Ticket actions
   fetchTickets: () => Promise<void>;
+  fetchDependencyEdges: () => Promise<void>;
   addTicket: (ticket: Ticket) => void;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   removeTicket: (id: string) => void;
@@ -115,6 +121,7 @@ export const useStore = create<AppState>((set, get) => ({
   agentDiffs: {},
   agents: {},
   branches: [],
+  dependencyEdges: [],
   closeCreateModal: () => set({ isCreateModalOpen: false }),
   closeTicket: () => {
     set({ activeTicketId: null });
@@ -228,6 +235,14 @@ export const useStore = create<AppState>((set, get) => ({
       // ignore transient errors
     }
   },
+  fetchDependencyEdges: async () => {
+    try {
+      const dependencyEdges = await api.tickets.listDependencies();
+      set({ dependencyEdges });
+    } catch {
+      // A stale BLOCKED badge is a cosmetic miss, not worth a toast over.
+    }
+  },
   fetchTickets: async () => {
     set({ isFetchingTickets: true });
     try {
@@ -243,6 +258,9 @@ export const useStore = create<AppState>((set, get) => ({
         agents: { ...s.agents, ...Object.fromEntries(agentList.map((a) => [a.id, a])) },
         tickets,
       }));
+      // Fire-and-forget: dependency edges are needed for the BLOCKED badge, but nothing
+      // else on this initial load depends on them, so they should not delay it.
+      void get().fetchDependencyEdges();
     } catch (error) {
       get().addNotification({
         type: "error",

@@ -12,6 +12,7 @@ import type {
   AcpAgentState,
   Agent,
   CodexStatus,
+  DependencyEdge,
   DiffComment,
   DiffResult,
   GitBranchInfo,
@@ -153,6 +154,10 @@ export interface IpcMethods {
   "tickets.create": (data: { title: string; description: string }) => Ticket;
   "tickets.delete": (id: string) => void;
   "tickets.list": () => Ticket[];
+  /** Every dependency edge on the board — the same shape ticketsToAutoStart and
+   * getUnresolvedBlockers (both in common/) consume, so the renderer can compute "is
+   * this ticket blocked" itself rather than needing a second, backend-only answer. */
+  "tickets.listDependencies": () => DependencyEdge[];
   "tickets.listArchived": () => Ticket[];
   "tickets.spawn": (
     id: string,
@@ -231,6 +236,7 @@ export const IPC_METHOD_NAMES: readonly IpcMethod[] = [
   "tickets.delete",
   "tickets.list",
   "tickets.listArchived",
+  "tickets.listDependencies",
   "tickets.spawn",
   "tickets.unarchive",
   "tickets.updateBaseBranch",

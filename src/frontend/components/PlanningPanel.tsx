@@ -220,6 +220,7 @@ export function PlanningPanel() {
   const planningState = useStore((s) => s.planningState);
   const setPlanningState = useStore((s) => s.setPlanningState);
   const addNotification = useStore((s) => s.addNotification);
+  const fetchDependencyEdges = useStore((s) => s.fetchDependencyEdges);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
@@ -327,12 +328,16 @@ export function PlanningPanel() {
     try {
       const tickets = await api.planning.toTickets(sessionId);
       setCreatedTickets(tickets);
+      // The only path that can create new ticket_dependencies edges — refresh them here
+      // rather than on every kanban-sync (which fires far more often and almost never
+      // means the dependency graph actually changed).
+      void fetchDependencyEdges();
     } catch (error) {
       addNotification({ message: (error as Error).message, type: "error" });
     } finally {
       setIsCreatingTickets(false);
     }
-  }, [sessionId, addNotification]);
+  }, [sessionId, addNotification, fetchDependencyEdges]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {

@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
-import { Archive, ChevronRight, Play, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Lock, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { latestToolCall } from "../../../common/latestToolCall";
@@ -12,6 +12,9 @@ import type { Agent, Ticket } from "../../types";
 interface Props {
   ticket: Ticket;
   agent?: Agent;
+  /** Unresolved blockers (common/blocked.ts) — undefined for any non-backlog ticket,
+   * whose column never computes this in the first place. */
+  blockedBy?: Ticket[];
 }
 
 const AGENT_STATUS_CLASSES: Record<string, string> = {
@@ -67,7 +70,7 @@ function AgentActivityLine({ agentId }: { agentId: string }) {
   );
 }
 
-export function TicketCard({ ticket, agent }: Props) {
+export function TicketCard({ ticket, agent, blockedBy }: Props) {
   const { openTicket, activeTicketId, discardTicket, moveTicket, archiveTicket } = useStore();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -195,6 +198,18 @@ export function TicketCard({ ticket, agent }: Props) {
         <p className="text-forge-text-bright text-xs leading-snug mb-1.5 font-medium">
           {ticket.title}
         </p>
+
+        {blockedBy && blockedBy.length > 0 && (
+          <div
+            className="flex items-center gap-1.5 mb-1.5 min-w-0"
+            title={`Waiting on: ${blockedBy.map((b) => b.title).join(", ")}`}
+          >
+            <Lock size={10} className="text-forge-amber/70 flex-shrink-0" />
+            <span className="text-forge-amber/80 text-xs truncate">
+              BLOCKED · waiting on {blockedBy.map((b) => b.title).join(", ")}
+            </span>
+          </div>
+        )}
 
         {ticket.agentTitle && (
           <p className="text-forge-accent text-xs leading-snug mb-1.5 font-mono opacity-80">

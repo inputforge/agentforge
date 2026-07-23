@@ -96,6 +96,7 @@ export const api = {
     delete: (id: string) => invoke("tickets.delete", id),
     list: () => invoke("tickets.list"),
     listArchived: () => invoke("tickets.listArchived"),
+    listDependencies: () => invoke("tickets.listDependencies"),
     spawn: (id: string, agentType: AgentTypeArg, customCommand?: string) =>
       invoke("tickets.spawn", id, agentType, customCommand),
     unarchive: (id: string) => invoke("tickets.unarchive", id),

@@ -56,6 +56,12 @@ export interface Ticket {
   updatedAt: number;
 }
 
+/** `ticketId` needs `dependsOnTicketId` to land (reach `review` or `done`) first. */
+export interface DependencyEdge {
+  ticketId: string;
+  dependsOnTicketId: string;
+}
+
 export interface Agent {
   id: string;
   ticketId: string;

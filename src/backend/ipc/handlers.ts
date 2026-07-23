@@ -700,6 +700,8 @@ export function createHandlers({ orchestrator, repoPath }: HandlerDeps): IpcHand
 
     "tickets.list": () => ticketStmts.list.all(),
 
+    "tickets.listDependencies": () => ticketDependencyStmts.listAll.all(),
+
     "tickets.listArchived": () => ticketStmts.listArchived.all(),
 
     // Explicit agent launch — called after the user picks Claude or Codex in the UI

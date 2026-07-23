@@ -2,9 +2,10 @@ import { useDroppable } from "@dnd-kit/core";
 import { clsx } from "clsx";
 import { Check, CirclePlay, ClipboardList, Eye, Inbox } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { getUnresolvedBlockers } from "../../../common/blocked";
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
 import { COLUMN_META } from "../../types";
@@ -25,10 +26,32 @@ interface Props {
 export function KanbanColumn({ status, tickets }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const agents = useStore((s) => s.agents);
+  // Board-wide, not this column's own `tickets` prop: a blocker can sit in any column
+  // (in-progress, review — even another backlog ticket), so resolving "is this blocked"
+  // needs the full board, the same reason ticketsToAutoStart and countNeedsAttention do.
+  const allTickets = useStore((s) => s.tickets);
+  const dependencyEdges = useStore((s) => s.dependencyEdges);
   const navigate = useNavigate();
   const openPlanning = useCallback(() => navigate("/plan"), [navigate]);
   const meta = COLUMN_META[status];
   const Icon = COLUMN_ICONS[status];
+
+  // Only backlog tickets can meaningfully be "blocked" (see getUnresolvedBlockers'
+  // docstring), so the other three columns skip this entirely rather than compute an
+  // answer nothing will render.
+  const blockersByTicketId = useMemo(() => {
+    if (status !== "backlog") {
+      return null;
+    }
+    const map = new Map<string, Ticket[]>();
+    for (const ticket of tickets) {
+      const blockers = getUnresolvedBlockers(ticket.id, allTickets, dependencyEdges);
+      if (blockers.length > 0) {
+        map.set(ticket.id, blockers);
+      }
+    }
+    return map;
+  }, [status, tickets, allTickets, dependencyEdges]);
 
   return (
     /* `flex-1` so the four columns divide the window rather than stopping at a fixed
@@ -90,6 +113,7 @@ export function KanbanColumn({ status, tickets }: Props) {
             key={ticket.id}
             ticket={ticket}
             agent={ticket.agentId ? agents[ticket.agentId] : undefined}
+            blockedBy={blockersByTicketId?.get(ticket.id)}
           />
         ))}
       </div>

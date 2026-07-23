@@ -1,9 +1,4 @@
-import type { Agent, Ticket } from "./types.ts";
-
-export interface DependencyEdge {
-  ticketId: string;
-  dependsOnTicketId: string;
-}
+import type { Agent, DependencyEdge, Ticket } from "./types.ts";
 
 export interface AutoStart {
   ticketId: string;
