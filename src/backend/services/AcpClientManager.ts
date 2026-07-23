@@ -15,13 +15,7 @@ import type {
   Stream,
 } from "@agentclientprotocol/sdk";
 
-import type {
-  Agent,
-  AgentType,
-  AcpAgentState,
-  AcpToolCall,
-  AcpPlanStep,
-} from "../../common/types.ts";
+import type { Agent, AgentType, AcpAgentState, AcpToolCall } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
 import { logger, errorMeta } from "../lib/logger.ts";
 import { broadcastNotification } from "../ipc/broadcast.ts";
@@ -65,7 +59,6 @@ function initialState(agentId: string): AcpAgentState {
     agentId,
     lastError: null,
     messages: [],
-    plan: [],
     sessionId: null,
     status: "idle",
     toolCalls: [],
@@ -78,7 +71,6 @@ function cloneState(state: AcpAgentState): AcpAgentState {
   return {
     ...state,
     messages: [...state.messages],
-    plan: [...state.plan],
     toolCalls: [...state.toolCalls],
     userMessages: [...state.userMessages],
   };
@@ -183,19 +175,10 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       break;
     }
 
-    case "plan": {
-      session.state.plan = update.entries.map(
-        (entry, idx): AcpPlanStep => ({
-          id: `plan-${idx}`,
-          priority: entry.priority,
-          status: entry.status,
-          title: entry.content,
-        }),
-      );
-      break;
-    }
-
     default: {
+      // ACP's `plan` update is deliberately unhandled here (was, and is now removed):
+      // it only ever comes from Claude's TodoWrite tool, which is not in the tool set
+      // (verified against a live session) — so it never fires in practice.
       break;
     }
   }
@@ -611,7 +594,6 @@ export class AcpClientManager implements IAgentManager {
         state.messages = [...prior.messages];
         state.userMessages = [...prior.userMessages];
         state.toolCalls = [...prior.toolCalls];
-        state.plan = [...prior.plan];
       }
 
       let proc: ChildProcess | null = null;
@@ -857,7 +839,6 @@ export class AcpClientManager implements IAgentManager {
       state.messages = [...prior.messages];
       state.userMessages = [...prior.userMessages];
       state.toolCalls = [...prior.toolCalls];
-      state.plan = [...prior.plan];
       state.status = prior.status === "running" ? "idle" : prior.status;
     }
 

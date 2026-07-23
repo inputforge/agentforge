@@ -4,7 +4,8 @@
  * Claude Code's plan mode delivers its plan as markdown, via `ExitPlanMode`. It does *not*
  * emit ACP `plan` updates: those come only from `TodoWrite` (see acp-agent.js), and
  * TodoWrite is not in the tool set — verified against a live session, in both `plan` and
- * `default` mode. So `AcpPlanStep[]` is never populated and markdown is the only source.
+ * `default` mode. So a structured plan array is never populated (AcpAgentState carried one
+ * for this reason and it has since been removed) and markdown is the only source.
  *
  * This is not "parsing arbitrary prose". We own the planning prompt, so we ask for the
  * shape below and parse exactly that. A real session, asked to decompose work into

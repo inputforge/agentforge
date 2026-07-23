@@ -30,13 +30,6 @@ export interface AcpToolCall {
   seq?: number;
 }
 
-export interface AcpPlanStep {
-  id: string;
-  title: string;
-  priority?: string | null;
-  status: string;
-}
-
 export interface AcpAgentState {
   agentId: string;
   sessionId: string | null;
@@ -44,7 +37,6 @@ export interface AcpAgentState {
   userMessages: AcpUserMessage[];
   messages: AcpMessage[];
   toolCalls: AcpToolCall[];
-  plan: AcpPlanStep[];
   lastError: string | null;
   updatedAt: number;
 }
@@ -207,11 +199,11 @@ export interface NotificationPayload {
  * agent, no ticket, no worktree and no branch — it runs read-only in the repo root and its
  * output is a plan, not a diff.
  *
- * The important difference is `plan`. An execution agent's `AcpAgentState.plan` is
- * `AcpPlanStep[]`, populated from ACP `plan` updates — which only ever come from Claude's
- * TodoWrite tool, and TodoWrite is not in the tool set (verified against a live session in
- * both `plan` and `default` mode), so that field is never populated. Plan mode delivers its
- * plan as markdown via `ExitPlanMode` instead, which is what this holds.
+ * `AcpAgentState` (execution agents) used to carry a `plan` field of its own, populated
+ * from ACP `plan` updates — which only ever come from Claude's TodoWrite tool. TodoWrite
+ * is not in the tool set (verified against a live session in both `plan` and `default`
+ * mode), so that field was never once populated and has since been removed. Plan mode
+ * delivers its plan as markdown via `ExitPlanMode` instead, which is what this holds.
  */
 export interface PlanningSessionState {
   id: string;

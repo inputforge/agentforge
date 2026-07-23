@@ -1,21 +1,11 @@
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle,
-  Circle,
-  Clock,
-  RefreshCw,
-  Send,
-  Square,
-  Zap,
-} from "lucide-react";
+import { AlertTriangle, Bot, RefreshCw, Send, Square, Zap } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { api } from "../lib/api";
 import { toolKindIcon } from "../lib/toolKindIcon";
 import { useStore } from "../store";
-import type { AcpMessage, AcpToolCall, AcpTurnStatus, AcpPlanStep } from "../types";
+import type { AcpMessage, AcpToolCall, AcpTurnStatus } from "../types";
 import { MarkdownContent } from "./Markdown";
 
 interface AgentAcpPanelProps {
@@ -196,55 +186,6 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
   );
 }
 
-function PlanPanel({ plan }: { plan: AcpPlanStep[] }) {
-  if (plan.length === 0) {
-    return null;
-  }
-  return (
-    <div className="mx-4 mt-3 mb-1 border border-forge-border bg-forge-panel/50">
-      <div className="px-3 py-1.5 border-b border-forge-border">
-        <span className="text-[9px] uppercase tracking-widest text-forge-text-dim">PLAN</span>
-      </div>
-      <div className="flex flex-col">
-        {plan.map((step) => {
-          const StatusIcon =
-            step.status === "completed"
-              ? CheckCircle
-              : step.status === "in_progress"
-                ? Clock
-                : Circle;
-          return (
-            <div
-              key={step.id}
-              className="flex items-start gap-2 px-3 py-1.5 border-b border-forge-border/50 last:border-b-0"
-            >
-              <StatusIcon
-                size={10}
-                className={`flex-shrink-0 mt-0.5 ${
-                  step.status === "completed"
-                    ? "text-forge-green"
-                    : step.status === "in_progress"
-                      ? "text-forge-amber animate-status-blink"
-                      : "text-forge-text-dim/40"
-                }`}
-              />
-              <span
-                className={`text-xs leading-relaxed ${
-                  step.status === "completed"
-                    ? "text-forge-text-dim/60 line-through"
-                    : "text-forge-text"
-                }`}
-              >
-                {step.title}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
@@ -262,7 +203,6 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
 
   const allMessages = useMemo<AcpMessage[]>(() => acpState?.messages ?? [], [acpState?.messages]);
   const toolCalls = useMemo(() => acpState?.toolCalls ?? [], [acpState?.toolCalls]);
-  const plan = useMemo(() => acpState?.plan ?? [], [acpState?.plan]);
 
   const status = acpState?.status ?? "idle";
   const isRunning = status === "running";
@@ -430,9 +370,6 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
 
       {/* Scrollable area */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto bg-forge-black pb-2">
-        {/* Plan */}
-        <PlanPanel plan={plan} />
-
         {/* Interleaved timeline */}
         {timeline.length > 0 || pendingTurns.length > 0 ? (
           <div className="flex flex-col gap-3 pt-4 px-4">
