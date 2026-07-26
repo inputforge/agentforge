@@ -220,6 +220,20 @@ function spawnProcess(
 ): ChildProcess {
   const spawnOpts = {
     cwd: worktreePath,
+    // On POSIX, `detached` makes this process the leader of its OWN process group
+    // (group id == pid) rather than sharing Electron's. That is what lets
+    // killProcessTree() below signal the whole group — the agent process and any
+    // grandchildren it shells out to (a custom command running `git`, for instance) —
+    // without touching Electron itself or sibling agents, which share Electron's group
+    // and would otherwise also be hit by a group-wide signal.
+    //
+    // Windows has no equivalent of negative-PID group signalling; `detached` there only
+    // affects whether the child gets its own console. killProcessTree() falls back to
+    // killing just this one process on win32 — grandchildren a Windows agent spawns can
+    // still be orphaned. Not fixed here: doing this properly needs `taskkill /pid <pid>
+    // /t /f`, and this codebase has no Windows install to verify that against (Linux is
+    // gated out of packaging for the same reason — no way to verify here).
+    detached: process.platform !== "win32",
     env: { ...process.env, TERM: "xterm-256color" },
     stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
   };
@@ -240,6 +254,31 @@ function spawnProcess(
     throw new Error("Invalid or empty custom command");
   }
   return spawn(parsed.executable, parsed.args, spawnOpts);
+}
+
+/**
+ * Kill `proc` and everything it spawned, not just `proc` itself.
+ *
+ * `proc.kill()` alone signals only that one pid. Since spawnProcess() makes this process
+ * its own group leader (POSIX only — see the comment there), signalling the *negative* of
+ * its pid delivers to the whole group: the agent process and any grandchildren it shelled
+ * out to. Falls back to a plain `proc.kill()` — on win32, where negative-pid group
+ * semantics do not exist, or if the group is already gone (ESRCH, ignored: killAndWait's
+ * caller only cares that the process is no longer running, which it is either way).
+ */
+export function killProcessTree(proc: ChildProcess | null): void {
+  if (!proc) {
+    return;
+  }
+  if (process.platform !== "win32" && proc.pid) {
+    try {
+      process.kill(-proc.pid, "SIGTERM");
+      return;
+    } catch {
+      // Fall through to killing just the direct child.
+    }
+  }
+  proc.kill();
 }
 
 // ─── ACP client factory ───────────────────────────────────────────────────────
@@ -561,7 +600,7 @@ export class AcpClientManager implements IAgentManager {
           $status: "error",
         });
         sessions.delete(agentId);
-        proc?.kill();
+        killProcessTree(proc);
         onExit(agentId, 1);
       }
     });
@@ -753,7 +792,7 @@ export class AcpClientManager implements IAgentManager {
         /* empty */
       });
     }
-    session.proc?.kill();
+    killProcessTree(session.proc);
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
     agentStmts.updateStatus.run({
@@ -805,6 +844,18 @@ export class AcpClientManager implements IAgentManager {
 
   isRunning(agentId: string): boolean {
     return sessions.has(agentId);
+  }
+
+  /**
+   * Every agent this process actually has a live session for right now — for shutdown,
+   * which needs to kill what is really running, not what the DB's `status` column last
+   * said. The two can disagree: a crash between a status write and the real exit, a
+   * resumed-but-not-yet-persisted session, or any other window where the DB update and
+   * the process state fall out of step. `sessions` (in-memory, this module) is the one
+   * place that cannot be stale — a session either is in this map or it is not running.
+   */
+  listRunningAgentIds(): string[] {
+    return [...sessions.keys()];
   }
 
   restore(

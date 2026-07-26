@@ -107,11 +107,16 @@ async function teardown(): Promise<void> {
   gitWatcher.stop();
   killAllShellSessions();
 
-  const running = agentStmts.listRunning.all();
-  const kills = running.map((agent) =>
-    acpClientManager.killAndWait(agent.id).catch((error: Error) =>
+  // In-memory, not agentStmts.listRunning.all(): the DB's `status` column and the real
+  // process state can fall out of step (a crash between a status write and the actual
+  // exit, a resumed session, any other such window), and a stale DB-derived list would
+  // either try to kill an agent that already exited or miss one that is genuinely still
+  // running. listRunningAgentIds() is the one place that cannot be stale.
+  const runningAgentIds = acpClientManager.listRunningAgentIds();
+  const kills = runningAgentIds.map((agentId) =>
+    acpClientManager.killAndWait(agentId).catch((error: Error) =>
       log.warn("failed to kill agent during shutdown", {
-        agentId: agent.id,
+        agentId,
         ...errorMeta(error),
       }),
     ),
@@ -129,7 +134,7 @@ async function teardown(): Promise<void> {
   }
 
   resetBroadcast();
-  log.info("backend shutdown complete", { agents: running.length });
+  log.info("backend shutdown complete", { agents: runningAgentIds.length });
 }
 
 export async function startBackend(opts: StartBackendOptions): Promise<BackendBridge> {
