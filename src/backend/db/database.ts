@@ -99,7 +99,6 @@ interface RawTicket {
   agentId: string | null;
   worktree: string | null;
   branch: string | null;
-  agentTitle: string | null;
   archivedAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -145,7 +144,6 @@ const TICKET_COLS = `
   agent_id     AS agentId,
   worktree,
   branch,
-  agent_title  AS agentTitle,
   archived_at  AS archivedAt,
   created_at   AS createdAt,
   updated_at   AS updatedAt
@@ -251,13 +249,6 @@ export const ticketStmts = {
            SET archived_at = NULL, updated_at = $updatedAt
            WHERE id = $id AND archived_at IS NOT NULL`,
       ).run(args);
-    },
-  },
-  updateAgentTitle: {
-    run: (args: { $agentTitle: string; $updatedAt: number; $id: string }): void => {
-      q("UPDATE tickets SET agent_title = $agentTitle, updated_at = $updatedAt WHERE id = $id").run(
-        args,
-      );
     },
   },
   updateBaseBranch: {

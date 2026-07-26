@@ -211,12 +211,6 @@ export function TicketCard({ ticket, agent, blockedBy }: Props) {
           </div>
         )}
 
-        {ticket.agentTitle && (
-          <p className="text-forge-accent text-xs leading-snug mb-1.5 font-mono opacity-80">
-            ↳ {ticket.agentTitle}
-          </p>
-        )}
-
         {agent?.status === "running" && <AgentActivityLine agentId={agent.id} />}
 
         {ticket.description && (

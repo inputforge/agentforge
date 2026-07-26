@@ -12,6 +12,7 @@ import m010 from "./010_add_diff_comments.ts";
 import m011 from "./011_add_archive.ts";
 import m012 from "./012_add_ticket_dependencies.ts";
 import m013 from "./013_add_planning_sessions.ts";
+import m014 from "./014_drop_agent_title.ts";
 export const migrations: Migration[] = [
   m001,
   m002,
@@ -26,4 +27,5 @@ export const migrations: Migration[] = [
   m011,
   m012,
   m013,
+  m014,
 ];

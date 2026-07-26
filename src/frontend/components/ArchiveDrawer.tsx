@@ -93,11 +93,6 @@ export function ArchiveDrawer({ onClose }: Props) {
                   </button>
                 </div>
                 <div className="px-3 pb-3">
-                  {ticket.agentTitle && (
-                    <p className="text-forge-accent text-xs leading-snug mb-1 font-mono opacity-80">
-                      ↳ {ticket.agentTitle}
-                    </p>
-                  )}
                   {ticket.description && (
                     <p className="text-forge-text-dim text-xs leading-relaxed line-clamp-2 mb-2">
                       {ticket.description}

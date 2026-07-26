@@ -212,7 +212,6 @@ describe("statements", () => {
     // Proves node:sqlite binds "$foo" keys verbatim, exactly as Bun's driver did.
     expect(ticketStmts.get.get("t1")).toStrictEqual({
       agentId: null,
-      agentTitle: null,
       archivedAt: null,
       baseBranch: "main",
       branch: null,
@@ -232,7 +231,6 @@ describe("statements", () => {
 
     ticketStmts.updateTitle.run({ $id: "t1", $title: "renamed", $updatedAt: 1100 });
     ticketStmts.updateStatus.run({ $id: "t1", $status: "in-progress", $updatedAt: 1200 });
-    ticketStmts.updateAgentTitle.run({ $agentTitle: "agent says hi", $id: "t1", $updatedAt: 1300 });
     ticketStmts.updateBaseBranch.run({ $baseBranch: "develop", $id: "t1", $updatedAt: 1400 });
     ticketStmts.linkAgent.run({
       $agentId: "a1",
@@ -245,7 +243,6 @@ describe("statements", () => {
     const ticket = ticketStmts.get.get("t1");
     expect(ticket?.title).toBe("renamed");
     expect(ticket?.status).toBe("in-progress");
-    expect(ticket?.agentTitle).toBe("agent says hi");
     expect(ticket?.baseBranch).toBe("develop");
     expect(ticket?.agentId).toBe("a1");
     expect(ticket?.branch).toBe("agent/t1");
