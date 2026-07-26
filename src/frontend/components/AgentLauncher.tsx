@@ -1,9 +1,9 @@
-import { ChevronRight, GitBranch, Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { AlertTriangle, ChevronRight, GitBranch, Plus, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import { useStore } from "../store";
-import type { AgentType, Ticket, TicketStatus } from "../types";
+import type { AgentType, CodexStatus, Ticket, TicketStatus } from "../types";
 
 const AGENTS: { type: AgentType; label: string; command: string }[] = [
   { command: "claude-agent-acp", label: "CLAUDE", type: "claude-code" },
@@ -38,25 +38,36 @@ function AgentLaunchButton({
   agent,
   launching,
   onLaunch,
+  disabledReason,
 }: {
   agent: { type: AgentType; label: string; command: string };
   launching: AgentType | null;
   onLaunch: (type: AgentType) => void;
+  /** Set when a readiness probe (currently only Codex's) says this agent cannot run —
+   * shown instead of letting the user discover it at spawn time, mid-launch. */
+  disabledReason?: string | null;
 }) {
   const handleClick = useCallback(() => onLaunch(agent.type), [agent.type, onLaunch]);
   return (
     <button
-      className="w-full flex items-center justify-between px-3 py-2.5 border border-forge-border bg-forge-black hover:border-forge-accent group transition-colors disabled:opacity-40"
+      className="w-full flex items-center justify-between px-3 py-2.5 border border-forge-border bg-forge-black hover:border-forge-accent group transition-colors disabled:opacity-40 disabled:hover:border-forge-border"
       onClick={handleClick}
-      disabled={!!launching}
+      disabled={!!launching || !!disabledReason}
+      title={disabledReason ?? undefined}
     >
-      <div className="flex items-center gap-2.5">
-        <span className="text-xs font-mono text-forge-text-dim group-hover:text-forge-accent transition-colors uppercase tracking-widest">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className="text-xs font-mono text-forge-text-dim group-hover:text-forge-accent transition-colors uppercase tracking-widest flex-shrink-0">
           {launching === agent.type ? "Launching…" : agent.label}
         </span>
-        <span className="text-[10px] text-forge-text-muted font-mono">{agent.command}</span>
+        {disabledReason ? (
+          <span className="text-[10px] text-forge-red/80 truncate">{disabledReason}</span>
+        ) : (
+          <span className="text-[10px] text-forge-text-muted font-mono">{agent.command}</span>
+        )}
       </div>
-      {launching === agent.type ? (
+      {disabledReason ? (
+        <AlertTriangle size={12} className="text-forge-red/70 flex-shrink-0" />
+      ) : launching === agent.type ? (
         <span className="status-dot-running" />
       ) : (
         <ChevronRight
@@ -74,6 +85,28 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
   const [showCustom, setShowCustom] = useState(false);
   const [customCmd, setCustomCmd] = useState("");
   const [isUpdatingBaseBranch, setIsUpdatingBaseBranch] = useState(false);
+  const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Best-effort: Claude is checked implicitly (it fails at spawn with a clear error
+    // already), but Codex previously had no equivalent — its button just attempted the
+    // spawn and failed with a raw ACP error later. A failed probe here is not worth a
+    // toast; the button simply stays enabled and behaves as it always did.
+    api.integrations.codex
+      .status()
+      .then((status) => {
+        if (!cancelled) {
+          setCodexStatus(status);
+        }
+      })
+      .catch(() => {
+        /* leave codexStatus null — the button falls back to its old, unchecked behavior */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const launch = useCallback(
     async (type: AgentType, custom?: string) => {
@@ -243,7 +276,17 @@ export function AgentLauncher({ ticket, onClose }: { ticket: Ticket; onClose: ()
 
         <div className="flex flex-col gap-2">
           {AGENTS.map((a) => (
-            <AgentLaunchButton key={a.type} agent={a} launching={launching} onLaunch={launch} />
+            <AgentLaunchButton
+              key={a.type}
+              agent={a}
+              launching={launching}
+              onLaunch={launch}
+              disabledReason={
+                a.type === "codex" && codexStatus && !codexStatus.ready
+                  ? (codexStatus.error ?? "Codex is not ready")
+                  : null
+              }
+            />
           ))}
 
           {/* Custom command */}
