@@ -79,11 +79,14 @@ export function KanbanColumn({ status, tickets }: Props) {
         />
       </div>
 
-      {/* Drop zone */}
+      {/* Drop zone. No min-h here on purpose: measured at the window's own enforced
+          floor (940x600, windowState.ts's MIN_SIZE) the zone's real height is ~497px —
+          flex-1 alone never lets it shrink smaller than that, so a min-h-[400px] here
+          would be a floor that can never bind. */}
       <div
         ref={setNodeRef}
         className={clsx(
-          "flex-1 flex flex-col gap-2 p-2 border overflow-y-auto min-h-[400px] transition-colors",
+          "flex-1 flex flex-col gap-2 p-2 border overflow-y-auto transition-colors",
           "border-forge-border",
           isOver ? "bg-forge-surface-bright" : "bg-forge-dark",
         )}
