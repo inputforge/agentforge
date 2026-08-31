@@ -10,8 +10,7 @@ const DEFAULT_ROWS = 24;
 export interface ShellSession {
   id: string;
   /**
-   * node-pty fuses Bun's separate `Terminal` + `Subprocess` pair into a single
-   * handle: it owns the pty master, the child process, and their lifecycle.
+   * This handle owns the pty master, child process, and their lifecycle.
    */
   pty: IPty;
   emitter: EventEmitter;

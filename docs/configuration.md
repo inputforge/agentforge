@@ -19,7 +19,7 @@ pinned to a single row, and worktrees live under that repo).
 Set `REPO_PATH` to override the remembered choice:
 
 ```bash
-REPO_PATH=/path/to/myproject bun run dev
+REPO_PATH=/path/to/myproject npm run dev
 ```
 
 Note that a repository is now required — AgentForge no longer falls back to the
@@ -38,7 +38,7 @@ directory of `/`.
 
 ```bash
 # Example: target a specific repo
-REPO_PATH=/home/user/myproject bun run dev
+REPO_PATH=/home/user/myproject npm run dev
 ```
 
 ## Data storage

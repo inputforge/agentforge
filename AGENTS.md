@@ -6,36 +6,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Development (Vite dev server + Electron, concurrently)
-bun run dev
+npm run dev
 
 # Electron only (rebuilds main/preload first; renderer comes from the Vite dev server)
-bun run dev:electron
+npm run dev:electron
 
 # Electron with a launchd-like environment — reproduces a Dock/Finder launch from a
 # terminal. This is the ONLY regression test for the PATH-resolution code path.
-bun run dev:electron:clean
+npm run dev:electron:clean
 
 # Frontend only (Vite dev server on :5173)
-bun run dev:frontend
+npm run dev:frontend
 
 # Type-check all four projects
-bun run typecheck
+npm run typecheck
 
-# Backend tests — vitest on Node, not Bun (see "Runtime" below)
-bun run test
-bun run test:watch
+# Backend tests — vitest on Node (see "Runtime" below)
+npm test
+npm run test:watch
 
 # Format + lint (oxfmt/oxlint, not prettier/eslint)
-bun run check
+npm run check
 
 # Production build (renderer + main/preload bundles)
-bun run build
+npm run build
 
 # Package an unsigned .app for local testing
-bun run package:dir
+npm run package:dir
 ```
 
-Package manager: **bun** (not npm/pnpm). Use `bun add` to install dependencies.
+Package manager: **npm**. Use `npm install` to add dependencies.
 
 ## Runtime — read this first
 
@@ -43,21 +43,19 @@ AgentForge is an **Electron app**. There is **no HTTP server and no WebSocket**;
 renderer talks to the backend over Electron IPC.
 
 The backend runs **inside Electron's main process**, on Electron's bundled **Node**
-(24.18.0 / ABI 148 for Electron 43) — _not_ on Bun. Bun is only the dev-time package
-manager, bundler (`Bun.build`), and script runner. Two hard consequences:
+(24.18.0 / ABI 148 for Electron 43). Development scripts also run on Node, and
+esbuild bundles the Electron entrypoints. Two hard consequences:
 
-- **`bun test` cannot run the backend.** Bun does not implement `node:sqlite` at all
-  (`Could not resolve: "node:sqlite"`), and `node-pty` cannot spawn under Bun — its
-  `spawn-helper` never reaches `execvp`, so the shell never starts and the pty yields
-  zero bytes forever. Backend tests therefore run under **vitest on Node**, which is
-  also the runtime we actually ship. Do not reintroduce `bun:test` for backend code.
+- Backend tests run under **vitest on Node**, the same runtime family we ship.
+  `node:sqlite` and node-pty are both runtime dependencies, so do not introduce a
+  test runner that executes backend tests outside Node.
   `vitest.config.ts` is separate from `vite.config.ts` on purpose (vitest prefers it):
   the renderer's React/Tailwind plugins have no business loading for Node tests. It
   pins `pool: "forks"` — node-pty is a native N-API addon, and a forked child is a
   plain Node process, which is what the addon expects — and raises the timeout, since
   the pty suite polls real shells.
-- **`src/backend` must never use a `Bun.*` API or a `bun:` import.** `src/backend/tsconfig.json`
-  sets `"types": ["node"]` specifically so that any `Bun.*` becomes a compile error.
+- **`src/backend` must use Node APIs.** `src/backend/tsconfig.json` sets
+  `"types": ["node"]` so incompatible runtime globals become compile errors.
 
 `src/backend` must also never import `electron` — main injects a `send` callback into
 `startBackend()`. That keeps the backend testable and Electron-agnostic.
@@ -154,10 +152,10 @@ breaks `react-router-dom`'s history API. Dev loads `http://localhost:5173` (Vite
   `/`, so an import-time `mkdirSync` would EACCES before any code could intervene). DB lives
   at `<repo>/.agentforge/data/agentforge.db`. Six tables: `tickets`, `agents`, `remote_config`,
   `integration_configs`, `diff_comments`, `_migrations`.
-  - `node:sqlite` has **no** `db.query()` and **no** `db.transaction()` — both are Bun-only.
-    A module-level statement cache provides `q()` (Bun's `db.query` was itself a cache;
-    a naive prepare-per-call is measurably slower), and `migrator.ts` hand-rolls
-    BEGIN/COMMIT/ROLLBACK. Named params bind `$`-prefixed verbatim, same as `bun:sqlite`.
+  - `node:sqlite` has **no** `db.query()` and **no** `db.transaction()` helpers.
+    A module-level statement cache provides `q()` (a naive prepare-per-call is measurably
+    slower), and `migrator.ts` hand-rolls BEGIN/COMMIT/ROLLBACK. Named params bind
+    `$`-prefixed keys verbatim.
 - `services/ShellSessionManager.ts` — PTYs via **node-pty**. `onData` delivers `string`
   (already UTF-8 decoded — do not add a decoder). `onExit(sessionId, exitCode)`.
 - `services/AcpClientManager.ts` — ACP sessions; in-process for `claude-code`, child
@@ -187,8 +185,8 @@ breaks `react-router-dom`'s history API. Dev loads `http://localhost:5173` (Vite
 ### TypeScript project references
 
 Four `tsconfig.json` files (`src/common`, `src/frontend`, `src/backend`, `src/electron`)
-linked via project references from the root. `bun run typecheck` checks all four.
-Backend and electron use `"types": ["node"]`; only `scripts/` uses Bun's types.
+linked via project references from the root. `npm run typecheck` checks all four.
+Backend and electron use `"types": ["node"]`.
 
 ## Code conventions
 
@@ -233,6 +231,6 @@ Contract: `src/common/ipc.ts`. The renderer reaches it only through the preload 
   and win32-arm64/x64 only); Linux needs a from-source `node-gyp` build.
 - **node-pty's `spawn-helper` ships mode 644** (upstream microsoft/node-pty#919). Without
   the execute bit every spawn dies with `posix_spawnp failed.` `scripts/fix-node-pty.ts`
-  runs on `postinstall` because bun's package cache restores 644 on every install;
+  runs on `postinstall` because package installation can restore mode 644;
   packaging additionally needs `asarUnpack` + an `afterPack` chmod, as the bit does not
   survive asar.

@@ -5,7 +5,7 @@
  * be able to tell you when something finished OR broke. Only the clean-exit path used to
  * broadcast anything, which meant the outcome you most need to hear about said nothing.
  *
- * Runner note: vitest on Node, not Bun — this reaches the `node:sqlite` layer. See
+ * Runner note: vitest on Node — this reaches the `node:sqlite` layer. See
  * db/database.test.ts.
  */
 

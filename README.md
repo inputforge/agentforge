@@ -5,15 +5,15 @@ A Kanban board that spawns AI coding agents (Claude Code, Codex, or any CLI) in 
 ## Getting started
 
 ```bash
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
 An AgentForge window opens. On first run it asks you to pick a git repository.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) — package manager and build tool (the app itself runs on Electron's Node)
+- [Node.js](https://nodejs.org/) 24 or later, including npm
 - `git`
 - At least one agent CLI on your `PATH` — AgentForge does not ship them:
   - **Claude Code** → `claude`
@@ -54,13 +54,13 @@ You can also drag tickets between columns manually at any point, **KILL** a runn
 ## Commands
 
 ```bash
-bun run dev           # Vite dev server + Electron
-bun run dev:frontend  # renderer only (Vite on :5173)
-bun run typecheck     # type-check all four projects
-bun run test          # backend tests (node --test)
-bun run check         # format + lint
-bun run build         # production build
-bun run package:dir   # unsigned .app for local testing
+npm run dev           # Vite dev server + Electron
+npm run dev:frontend  # renderer only (Vite on :5173)
+npm run typecheck     # type-check all four projects
+npm test              # backend tests (vitest on Node)
+npm run check         # format + lint
+npm run build         # production build
+npm run package:dir   # unsigned .app for local testing
 ```
 
 ## Configuration

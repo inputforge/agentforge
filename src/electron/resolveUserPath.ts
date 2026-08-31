@@ -12,7 +12,7 @@
  * assign it before anything spawns. This must run before `startBackend()`.
  *
  * Reproduce the broken environment from a terminal with:
- *   bun run dev:electron:clean
+ *   npm run dev:electron:clean
  */
 
 import { spawn } from "node:child_process";

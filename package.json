@@ -8,16 +8,16 @@
   "main": "out/electron/main.js",
   "scripts": {
     "clean": "rm -rf dist/ out/",
-    "dev": "concurrently -n vite,electron -c magenta,cyan \"bun run dev:frontend\" \"bun run dev:electron\"",
+    "dev": "concurrently -n vite,electron -c magenta,cyan \"npm run dev:frontend\" \"npm run dev:electron\"",
     "dev:frontend": "vite",
-    "dev:electron": "bun run build:electron && AGENTFORGE_DEV=1 electron .",
-    "dev:electron:clean": "bun run build:electron && env -i HOME=\"$HOME\" USER=\"$USER\" SHELL=\"$SHELL\" PATH=/usr/bin:/bin:/usr/sbin:/sbin AGENTFORGE_DEV=1 ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
+    "dev:electron": "npm run build:electron && AGENTFORGE_DEV=1 electron .",
+    "dev:electron:clean": "npm run build:electron && env -i HOME=\"$HOME\" USER=\"$USER\" SHELL=\"$SHELL\" PATH=/usr/bin:/bin:/usr/sbin:/sbin AGENTFORGE_DEV=1 ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron .",
     "build:frontend": "vite build",
-    "build:electron": "bun scripts/build-electron.ts",
-    "build": "bun run build:frontend && bun run build:electron",
+    "build:electron": "node scripts/build-electron.ts",
+    "build": "npm run build:frontend && npm run build:electron",
     "start": "electron .",
-    "package:dir": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
-    "package:mac": "bun run build && electron-builder --mac",
+    "package:dir": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
+    "package:mac": "npm run build && electron-builder --mac",
     "typecheck:frontend": "tsc --build src/frontend/tsconfig.json",
     "typecheck:backend": "tsc --build src/backend/tsconfig.json",
     "typecheck:common": "tsc --build src/common/tsconfig.json",
@@ -30,7 +30,7 @@
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "postinstall": "bun scripts/fix-node-pty.ts",
+    "postinstall": "node scripts/fix-node-pty.ts",
     "prepare": "git config core.hooksPath scripts/githooks"
   },
   "dependencies": {
@@ -61,7 +61,6 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.12",
     "@types/node": "^24.13.3",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -69,11 +68,18 @@
     "concurrently": "^9.0.0",
     "electron": "43.1.1",
     "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
     "oxfmt": "^0.45.0",
     "oxlint": "^1.60.0",
     "typescript": "^5.5.3",
     "vite": "8.1.4",
     "vitest": "4.1.10"
   },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "npm@11.19.0",
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "node-pty@1.1.0": true,
+    "electron-winstaller@5.4.0": true,
+    "fsevents@2.3.3": true
+  }
 }

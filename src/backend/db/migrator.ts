@@ -77,8 +77,8 @@ export class SqliteAdapter implements DatabaseAdapter {
   }
 
   /**
-   * node:sqlite has no `db.transaction()` helper (that was Bun's driver), so the
-   * BEGIN/COMMIT/ROLLBACK cycle is driven by hand.
+   * node:sqlite has no `db.transaction()` helper, so the BEGIN/COMMIT/ROLLBACK cycle
+   * is driven by hand.
    */
   transaction(fn: () => void): void {
     // SQLite has no nested transactions; join the enclosing one instead, so the

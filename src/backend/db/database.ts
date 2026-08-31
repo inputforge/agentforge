@@ -35,9 +35,8 @@ interface Stmt<Row> {
 let database: DatabaseSync | null = null;
 
 /**
- * Prepared-statement cache keyed by SQL text. node:sqlite has no equivalent of
- * Bun's `db.query()`, which doubled as a statement cache keyed by SQL string;
- * preparing on every call is measurably slower, so the cache lives here instead.
+ * Prepared-statement cache keyed by SQL text. Preparing on every call is measurably
+ * slower, so the cache lives here instead.
  */
 const stmtCache = new Map<string, StatementSync>();
 

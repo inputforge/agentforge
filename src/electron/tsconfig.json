@@ -6,10 +6,8 @@
     "lib": ["ES2022"],
     "strict": true,
     "skipLibCheck": true,
-    // Node, NOT bun. This process is Electron's main (Node 24.18.0 / ABI 148), so
-    // Bun's globals and builtins must be *compile errors* here — under "bun" they
-    // would type-check happily and then crash at runtime, since no Bun runtime
-    // exists in this process. Bun only bundles this code; it never runs it.
+    // This process is Electron's main (Node 24.18.0 / ABI 148). Restrict globals
+    // and builtins to the runtime we ship; esbuild only bundles this code.
     "types": ["node"],
     "allowImportingTsExtensions": true,
     "composite": true,

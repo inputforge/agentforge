@@ -25,7 +25,7 @@ files:
   # dependency into the asar by default, no matter what `files` lists. Measured
   # without it — a 152MB asar with 27,786 entries: 10,246 from @icons-pack, 3,927
   # from lucide-react, 3,886 from date-fns, plus shiki, zod and even hono. Every one
-  # is already inlined into out/electron/main.js by Bun.build, so all of it is dead
+  # is already inlined into out/electron/main.js by esbuild, so all of it is dead
   # weight shipped twice.
   #
   # Order matters: later patterns win, so node-pty must come after the negation.

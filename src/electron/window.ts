@@ -112,15 +112,9 @@ export function registerAppScheme(): void {
 /**
  * Directory containing package.json — the anchor for every bundled path.
  *
- * `app.getAppPath()`, NOT `__dirname`: Bun's bundler *inlines* `__dirname` as a
- * string literal of the SOURCE directory at build time, so a bundled
- * `resolve(__dirname, "..", "client")` becomes the build machine's
- * `<repo>/src/client` — a path that is wrong in dev and does not exist at all on a
- * user's machine. Verified in the emitted bundle:
- *
- *     var __dirname = "/Users/…/agentforge/src/electron";
- *
- * `getAppPath()` is resolved by Electron at runtime and is symmetric across dev
+ * `app.getAppPath()`, not a source-relative directory: build-time paths point into
+ * the source tree and do not exist on a user's machine. `getAppPath()` is resolved
+ * by Electron at runtime and is symmetric across dev
  * and packaged *provided* Electron is pointed at the project (`electron .`) rather
  * than at the script (`electron out/electron/main.cjs`) — the latter returns
  * out/electron instead of the root. Both `dev:electron` scripts use `electron .`
@@ -194,8 +188,8 @@ export function registerAppProtocol(): void {
 
   if (!existsSync(indexHtml)) {
     log.error(
-      `renderer bundle missing at ${indexHtml}. Run \`bun run build:frontend\` ` +
-        "(or `bun run build`) before starting Electron in production mode.",
+      `renderer bundle missing at ${indexHtml}. Run \`npm run build:frontend\` ` +
+        "(or `npm run build`) before starting Electron in production mode.",
     );
   }
 

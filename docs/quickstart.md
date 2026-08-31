@@ -4,7 +4,7 @@ Get AgentForge running in under five minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.0 or later — package manager and build tool
+- [Node.js](https://nodejs.org/) 24 or later, including npm
 - `git`
 - A git repository you want agents to work on
 - **At least one agent CLI, installed by you and on your `PATH`.** AgentForge does not
@@ -24,8 +24,8 @@ missing, that agent type reports unavailable in the UI; the rest of the app work
 ```bash
 git clone https://github.com/your-org/agentforge
 cd agentforge
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
 An AgentForge window opens.
@@ -37,7 +37,7 @@ remembers it for next time. The header shows the repo URL and current branch onc
 detected. To point AgentForge at a different repository, set `REPO_PATH`:
 
 ```bash
-REPO_PATH=/path/to/myproject bun run dev
+REPO_PATH=/path/to/myproject npm run dev
 ```
 
 ## Create your first ticket

@@ -1,10 +1,8 @@
 /**
  * Tests for the node:sqlite database layer.
  *
- * Runner note: these run on vitest under Node, not under Bun. Bun (1.3.14, incl.
- * canary) does not implement `node:sqlite` — `require("node:sqlite")` fails with "No
- * such built-in module" — so no Bun-hosted test can import this module at all. The DB
- * layer runs in Electron's main process (Node 24.18), so it is tested on Node:
+ * These run on vitest under Node because the database layer runs in Electron's main
+ * process (Node 24.18):
  *
  *   vitest run src/backend/db/
  */
@@ -209,7 +207,7 @@ describe("statements", () => {
   test("round-trips a ticket through $-prefixed named parameters", () => {
     seedTicket("t1", { $title: "Fix login" });
 
-    // Proves node:sqlite binds "$foo" keys verbatim, exactly as Bun's driver did.
+    // Proves node:sqlite binds "$foo" keys verbatim.
     expect(ticketStmts.get.get("t1")).toStrictEqual({
       agentId: null,
       archivedAt: null,

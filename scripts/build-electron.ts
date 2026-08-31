@@ -1,81 +1,55 @@
 /**
  * Bundle Electron's main and preload.
  *
- * ── Bundling is mandatory, not stylistic ───────────────────────────────────────
- * ~29 files under src/backend/ and src/common/ import each other with explicit
- * `.ts` specifiers (`allowImportingTsExtensions`). Node cannot resolve those, and
- * Electron 43's Node (24.18.0) has no type-stripping for them. So main is not
- * runnable as loose files under any configuration — it has to be bundled.
+ * Bundling is mandatory: backend and common modules use explicit `.ts` imports,
+ * and the shipped Electron runtime executes JavaScript rather than loose TypeScript.
  *
- * ── Formats differ per entrypoint, and both are forced ─────────────────────────
- * main → ESM (`main.js`; package.json is `type: module`, so `.js` is ESM).
- *   Required, not a preference: `@agentclientprotocol/claude-agent-acp` contains
- *     const req = createRequire(import.meta.resolve("@anthropic-ai/claude-agent-sdk"));
- *   inside `claudeCliPath()`. Bundled as CJS that is a *parse-time* SyntaxError
- *   ("Cannot use 'import.meta' outside a module"), so the whole bundle fails to
- *   load and the app dies at startup. Note the call is dead code whenever
- *   CLAUDE_CODE_EXECUTABLE is set (it early-returns above this line) — but a syntax
- *   error does not care about reachability. Electron >= 28 supports an ESM main.
- *
- * preload → CJS (`preload.cjs`).
- *   Also forced: Electron's ESM preload support requires `sandbox: false`, and
- *   window.ts runs `sandbox: true`. The `.cjs` extension is what opts it out of
- *   package.json's `type: module`.
- *
- * ── Externals ──────────────────────────────────────────────────────────────────
- *   electron  — resolved from the runtime, never bundleable.
- *   node-pty  — a native N-API addon (.node binaries cannot be inlined). Being
- *               external means it must exist in node_modules inside the packaged
- *               app: hence `files` + `asarUnpack` in electron-builder.yml.
+ * The main bundle is ESM because claude-agent-acp contains an import.meta expression
+ * that is a parse-time error in CJS. The preload bundle is CJS because sandboxed
+ * Electron preload scripts cannot use ESM. Electron and node-pty stay external:
+ * Electron provides its own API at runtime, while native addons cannot be inlined.
  */
 
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { build, type BuildOptions } from "esbuild";
 
-const projectRoot = join(import.meta.dir, "..");
+const projectRoot = join(import.meta.dirname, "..");
 const outDir = join(projectRoot, "out/electron");
 
-// Stale output is worse than none: a rename would otherwise leave the old module
-// behind and Electron would happily load it.
+// Do not leave renamed or removed modules in the output directory.
 await rm(outDir, { force: true, recursive: true });
 
 const shared = {
+  bundle: true,
   external: ["electron", "node-pty"],
-  outdir: outDir,
+  logLevel: "warning",
+  metafile: true,
+  platform: "node",
   sourcemap: "linked",
-  target: "node",
-} as const;
+  target: "node24",
+} satisfies BuildOptions;
 
 const builds = await Promise.all([
-  Bun.build({
+  build({
     ...shared,
-    entrypoints: [join(projectRoot, "src/electron/main.ts")],
+    entryPoints: [join(projectRoot, "src/electron/main.ts")],
     format: "esm",
-    naming: "[dir]/[name].js",
+    outfile: join(outDir, "main.js"),
   }),
-  Bun.build({
+  build({
     ...shared,
-    entrypoints: [join(projectRoot, "src/electron/preload.ts")],
+    entryPoints: [join(projectRoot, "src/electron/preload.ts")],
     format: "cjs",
-    naming: "[dir]/[name].cjs",
+    outfile: join(outDir, "preload.cjs"),
   }),
 ]);
 
-let failed = false;
 for (const result of builds) {
-  if (!result.success) {
-    failed = true;
-    for (const message of result.logs) {
-      console.error(message);
-    }
+  for (const [path, output] of Object.entries(result.metafile.outputs)) {
+    const relativePath = path.startsWith(`${projectRoot}/`)
+      ? path.slice(projectRoot.length + 1)
+      : path;
+    console.log(`build-electron: ${relativePath} (${(output.bytes / 1024).toFixed(1)} kB)`);
   }
-}
-if (failed) {
-  console.error("build-electron: bundling failed");
-  process.exit(1);
-}
-
-for (const output of builds.flatMap((b) => b.outputs)) {
-  const sizeKb = (output.size / 1024).toFixed(1);
-  console.log(`build-electron: ${output.path.replace(`${projectRoot}/`, "")} (${sizeKb} kB)`);
 }

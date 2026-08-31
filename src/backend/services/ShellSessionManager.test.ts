@@ -5,13 +5,8 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { ShellSessionManager } from "./ShellSessionManager.ts";
 
 /**
- * These tests drive a real pty. They run under Node (vitest, `pool: "forks"`), which is
- * the backend's actual target runtime now that it lives in Electron's main process.
- *
- * Note: node-pty cannot spawn under Bun at all — its `spawn-helper` never reaches
- * `execvp`, so the shell never starts and the pty yields zero bytes forever. That is one
- * of two reasons these tests do not run under `bun test` (the other being that Bun does
- * not implement `node:sqlite`).
+ * These tests drive a real pty. They run under Node (vitest, `pool: "forks"`), matching
+ * the Electron main-process runtime that owns node-pty in production.
  */
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

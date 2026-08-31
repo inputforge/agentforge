@@ -7,9 +7,8 @@ import { defineConfig } from "vitest/config";
  * renderer's React and Tailwind plugins, which have nothing to do with backend code
  * running in Node. Vitest prefers vitest.config.* over vite.config.*, so this wins.
  *
- * The backend's target runtime is Electron's main process (Node 24), not Bun — Bun
- * implements neither `node:sqlite` nor a working `node-pty` spawn. So these tests run
- * on Node, which is also what we ship.
+ * The backend's target runtime is Electron's main process (Node 24), so these tests
+ * run on Node as well.
  *
  * `src/common` is included because it is plain Node-compatible TypeScript — shared types
  * and pure functions, no React, no DOM. Its consumers are main and the renderer rather
