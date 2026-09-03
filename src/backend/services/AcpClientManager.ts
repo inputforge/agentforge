@@ -1,19 +1,11 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 
-import { ClaudeAcpAgent } from "@agentclientprotocol/claude-agent-acp";
-import {
-  AgentSideConnection,
-  ClientSideConnection,
-  ndJsonStream,
-  PROTOCOL_VERSION,
-} from "@agentclientprotocol/sdk";
+import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type {
-  AnyMessage,
+  AgentSideConnection,
   SessionNotification,
   RequestPermissionRequest,
   RequestPermissionResponse,
@@ -23,17 +15,13 @@ import type {
   Stream,
 } from "@agentclientprotocol/sdk";
 
-import type {
-  Agent,
-  AgentType,
-  AcpAgentState,
-  AcpToolCall,
-  AcpPlanStep,
-} from "../../common/types.ts";
+import type { Agent, AgentType, AcpAgentState, AcpToolCall } from "../../common/types.ts";
 import { agentStmts } from "../db/index.ts";
 import { logger, errorMeta } from "../lib/logger.ts";
-import { broadcastNotification } from "../ws/hub.ts";
+import { broadcastNotification } from "../ipc/broadcast.ts";
 import type { IAgentManager } from "./AgentManager.ts";
+import { buildClaudeInProcessChannel, extractResultSummary } from "./claudeAcpChannel.ts";
+import { codexService, NOT_INSTALLED_ERROR } from "./CodexService.ts";
 
 const log = logger.child("acp");
 
@@ -71,7 +59,6 @@ function initialState(agentId: string): AcpAgentState {
     agentId,
     lastError: null,
     messages: [],
-    plan: [],
     sessionId: null,
     status: "idle",
     toolCalls: [],
@@ -84,7 +71,6 @@ function cloneState(state: AcpAgentState): AcpAgentState {
   return {
     ...state,
     messages: [...state.messages],
-    plan: [...state.plan],
     toolCalls: [...state.toolCalls],
     userMessages: [...state.userMessages],
   };
@@ -189,19 +175,10 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
       break;
     }
 
-    case "plan": {
-      session.state.plan = update.entries.map(
-        (entry, idx): AcpPlanStep => ({
-          id: `plan-${idx}`,
-          priority: entry.priority,
-          status: entry.status,
-          title: entry.content,
-        }),
-      );
-      break;
-    }
-
     default: {
+      // ACP's `plan` update is deliberately unhandled here (was, and is now removed):
+      // it only ever comes from Claude's TodoWrite tool, which is not in the tool set
+      // (verified against a live session) — so it never fires in practice.
       break;
     }
   }
@@ -209,47 +186,7 @@ function handleSessionUpdate(session: AcpSession, update: SessionUpdate): void {
   pushState(session);
 }
 
-function extractResultSummary(update: {
-  content?: { type: string; content?: { type: string; text?: string } }[] | null;
-}): string | null {
-  if (!update.content) {
-    return null;
-  }
-  for (const item of update.content) {
-    if (item.type === "content" && item.content?.type === "text" && item.content.text) {
-      return item.content.text.slice(0, 300);
-    }
-  }
-  return null;
-}
-
 // ─── Channel builders ─────────────────────────────────────────────────────────
-
-/**
- * Wires ClaudeAcpAgent in-process via a paired TransformStream, avoiding any
- * subprocess. Returns the client-facing Stream and the AgentSideConnection
- * reference (must be kept alive to prevent GC of its stream listeners).
- */
-function buildClaudeInProcessChannel(): {
-  stream: Stream;
-  agentSideConn: AgentSideConnection;
-} {
-  const clientToAgent = new TransformStream<AnyMessage, AnyMessage>();
-  const agentToClient = new TransformStream<AnyMessage, AnyMessage>();
-
-  const clientStream: Stream = {
-    readable: agentToClient.readable,
-    writable: clientToAgent.writable,
-  };
-  const agentStream: Stream = {
-    readable: clientToAgent.readable,
-    writable: agentToClient.writable,
-  };
-
-  const agentSideConn = new AgentSideConnection((conn) => new ClaudeAcpAgent(conn), agentStream);
-
-  return { agentSideConn, stream: clientStream };
-}
 
 function parseCommand(cmd: string): { executable: string; args: string[] } | null {
   const parts: string[] = [];
@@ -283,13 +220,32 @@ function spawnProcess(
 ): ChildProcess {
   const spawnOpts = {
     cwd: worktreePath,
+    // On POSIX, `detached` makes this process the leader of its OWN process group
+    // (group id == pid) rather than sharing Electron's. That is what lets
+    // killProcessTree() below signal the whole group — the agent process and any
+    // grandchildren it shells out to (a custom command running `git`, for instance) —
+    // without touching Electron itself or sibling agents, which share Electron's group
+    // and would otherwise also be hit by a group-wide signal.
+    //
+    // Windows has no equivalent of negative-PID group signalling; `detached` there only
+    // affects whether the child gets its own console. killProcessTree() falls back to
+    // killing just this one process on win32 — grandchildren a Windows agent spawns can
+    // still be orphaned. Not fixed here: doing this properly needs `taskkill /pid <pid>
+    // /t /f`, and this codebase has no Windows install to verify that against (Linux is
+    // gated out of packaging for the same reason — no way to verify here).
+    detached: process.platform !== "win32",
     env: { ...process.env, TERM: "xterm-256color" },
     stdio: ["pipe", "pipe", "pipe"] as ["pipe", "pipe", "pipe"],
   };
 
   if (agentType === "codex") {
-    const localBin = join(process.cwd(), "node_modules/.bin/codex-acp");
-    const executable = existsSync(localBin) ? localBin : "codex-acp";
+    // Single source of truth for resolution (CODEX_ACP_PATH → PATH). A packaged app
+    // has cwd `/` and a Dock PATH of `/usr/bin:/bin:/usr/sbin:/sbin`, so neither a
+    // cwd-relative node_modules/.bin path nor a bare name resolves there.
+    const executable = codexService.resolveBinaryPath();
+    if (!executable) {
+      throw new Error(NOT_INSTALLED_ERROR);
+    }
     return spawn(executable, [], spawnOpts);
   }
 
@@ -300,14 +256,91 @@ function spawnProcess(
   return spawn(parsed.executable, parsed.args, spawnOpts);
 }
 
+/**
+ * Kill `proc` and everything it spawned, not just `proc` itself.
+ *
+ * `proc.kill()` alone signals only that one pid. Since spawnProcess() makes this process
+ * its own group leader (POSIX only — see the comment there), signalling the *negative* of
+ * its pid delivers to the whole group: the agent process and any grandchildren it shelled
+ * out to. Falls back to a plain `proc.kill()` — on win32, where negative-pid group
+ * semantics do not exist, or if the group is already gone (ESRCH, ignored: killAndWait's
+ * caller only cares that the process is no longer running, which it is either way).
+ */
+export function killProcessTree(proc: ChildProcess | null): void {
+  if (!proc) {
+    return;
+  }
+  if (process.platform !== "win32" && proc.pid) {
+    try {
+      process.kill(-proc.pid, "SIGTERM");
+      return;
+    } catch {
+      // Fall through to killing just the direct child.
+    }
+  }
+  proc.kill();
+}
+
 // ─── ACP client factory ───────────────────────────────────────────────────────
+
+/**
+ * Options whose `optionId` escalates the session's *mode* rather than approving the
+ * one tool call in front of us. The agent offers these on `ExitPlanMode`, where every
+ * choice is phrased as a permission but actually reassigns the permission mode for the
+ * rest of the session — `bypassPermissions` disables prompting entirely.
+ *
+ * Verified against a live claude-agent-acp session; `ExitPlanMode` offers, in order:
+ *   [0] allow_always  bypassPermissions  "Yes, and bypass permissions"
+ *   [1] allow_always  auto
+ *   [2] allow_always  acceptEdits
+ *   [3] allow_once    default
+ *   [4] reject_once   plan               "No, keep planning"
+ * `bypassPermissions` is unshifted to the front for any non-root user
+ * (`ALLOW_BYPASS = !IS_ROOT || IS_SANDBOX`), so picking the first allow option picks
+ * the single most permissive one on offer.
+ */
+const MODE_ESCALATING_OPTION_IDS = new Set(["bypassPermissions", "acceptEdits", "auto"]);
+
+/**
+ * Pick an option that approves *this* tool call and nothing beyond it.
+ *
+ * Order matters. `allow_once` is preferred over `allow_always` because it grants the
+ * narrowest thing that unblocks the agent: "always" persists for the session, and on
+ * `ExitPlanMode` it is also a mode switch. Mode-escalating ids are excluded outright —
+ * granting them here would silently widen the agent's authority far past the call being
+ * asked about, which no caller of this function is asking for.
+ *
+ * Returns null when nothing safe is on offer, rather than falling back to
+ * `options[0]` — that fallback is what selected `bypassPermissions`.
+ */
+export function pickNarrowestAllow(options: RequestPermissionRequest["options"]) {
+  const safe = options.filter((o) => !MODE_ESCALATING_OPTION_IDS.has(o.optionId));
+  return (
+    safe.find((o) => o.kind === "allow_once") ?? safe.find((o) => o.kind === "allow_always") ?? null
+  );
+}
 
 function makeClient(session: AcpSession): Client {
   return {
     requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-      const allowOpt =
-        params.options.find((o) => o.kind === "allow_always" || o.kind === "allow_once") ??
-        params.options[0];
+      const allowOpt = pickNarrowestAllow(params.options);
+      if (!allowOpt) {
+        // Every allow option was a mode escalation (or there were none). Refuse rather
+        // than escalate: an agent told "no" retries or explains, but one silently handed
+        // bypassPermissions keeps that authority for every later call in the session.
+        const reject =
+          params.options.find((o) => o.kind === "reject_once") ??
+          params.options.find((o) => o.kind === "reject_always");
+        log.warn("no narrow allow option offered; rejecting", {
+          agentId: session.agentId,
+          offered: params.options.map((o) => `${o.kind}:${o.optionId}`),
+        });
+        return Promise.resolve(
+          reject
+            ? { outcome: { optionId: reject.optionId, outcome: "selected" } }
+            : { outcome: { outcome: "cancelled" } },
+        );
+      }
       return Promise.resolve({
         outcome: { optionId: allowOpt.optionId, outcome: "selected" },
       });
@@ -567,7 +600,7 @@ export class AcpClientManager implements IAgentManager {
           $status: "error",
         });
         sessions.delete(agentId);
-        proc?.kill();
+        killProcessTree(proc);
         onExit(agentId, 1);
       }
     });
@@ -600,7 +633,6 @@ export class AcpClientManager implements IAgentManager {
         state.messages = [...prior.messages];
         state.userMessages = [...prior.userMessages];
         state.toolCalls = [...prior.toolCalls];
-        state.plan = [...prior.plan];
       }
 
       let proc: ChildProcess | null = null;
@@ -760,7 +792,7 @@ export class AcpClientManager implements IAgentManager {
         /* empty */
       });
     }
-    session.proc?.kill();
+    killProcessTree(session.proc);
     sessions.delete(agentId);
     exitCallbacks.delete(agentId);
     agentStmts.updateStatus.run({
@@ -814,6 +846,18 @@ export class AcpClientManager implements IAgentManager {
     return sessions.has(agentId);
   }
 
+  /**
+   * Every agent this process actually has a live session for right now — for shutdown,
+   * which needs to kill what is really running, not what the DB's `status` column last
+   * said. The two can disagree: a crash between a status write and the real exit, a
+   * resumed-but-not-yet-persisted session, or any other window where the DB update and
+   * the process state fall out of step. `sessions` (in-memory, this module) is the one
+   * place that cannot be stale — a session either is in this map or it is not running.
+   */
+  listRunningAgentIds(): string[] {
+    return [...sessions.keys()];
+  }
+
   restore(
     agent: Agent,
     onExit: (agentId: string, code: number) => void = () => {
@@ -846,7 +890,6 @@ export class AcpClientManager implements IAgentManager {
       state.messages = [...prior.messages];
       state.userMessages = [...prior.userMessages];
       state.toolCalls = [...prior.toolCalls];
-      state.plan = [...prior.plan];
       state.status = prior.status === "running" ? "idle" : prior.status;
     }
 

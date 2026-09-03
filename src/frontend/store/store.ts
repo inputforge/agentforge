@@ -5,8 +5,10 @@ import type {
   Agent,
   AcpAgentState,
   AppNotification,
+  DependencyEdge,
   DiffResult,
   GitBranchInfo,
+  PlanningSessionState,
   RemoteConfig,
   Ticket,
   TicketStatus,
@@ -22,17 +24,22 @@ interface AppState {
   // Data
   tickets: Ticket[];
   agents: Record<string, Agent>;
+  /** Every ticket_dependencies edge on the board. Fetched alongside tickets/agents so
+   * TicketCard can compute "is this ticket blocked" (common/blocked.ts) without a
+   * per-card round-trip. */
+  dependencyEdges: DependencyEdge[];
   notifications: AppNotification[];
   remoteConfig: RemoteConfig | null;
   currentBranch: string | null;
   agentDiffs: Record<string, DiffResult>;
   branches: GitBranchInfo[];
   acpStates: Record<string, AcpAgentState>;
+  /** One planning session at a time, unlike agents which are per-ticket and concurrent. */
+  planningState: PlanningSessionState | null;
 
   // UI — single concept: "active ticket" opens both terminal + diff
   activeTicketId: string | null;
   isCreateModalOpen: boolean;
-  isConnected: boolean;
   isFetchingTickets: boolean;
 
   // Derived helpers (computed from activeTicketId)
@@ -41,6 +48,7 @@ interface AppState {
 
   // Ticket actions
   fetchTickets: () => Promise<void>;
+  fetchDependencyEdges: () => Promise<void>;
   addTicket: (ticket: Ticket) => void;
   updateTicket: (id: string, updates: Partial<Ticket>) => void;
   removeTicket: (id: string) => void;
@@ -57,10 +65,17 @@ interface AppState {
   openArchive: () => void;
   closeArchive: () => void;
 
+  // Shell state. Lifted to the store (not local KanbanPage state, unlike Integrations)
+  // because ShellTerminal holds a live PTY that is killed on unmount — if it only
+  // rendered inside KanbanPage, navigating to /agent/:id or /plan (e.g. via an OS
+  // notification click) would silently kill an open shell out from under the user.
+  isShellOpen: boolean;
+  openShell: () => void;
+  closeShell: () => void;
+
   // Agent actions
   setAgent: (agent: Agent) => void;
   updateAgent: (id: string, updates: Partial<Agent>) => void;
-  fetchAgentForTicket: (ticketId: string) => Promise<void>;
 
   // Notification actions
   addNotification: (n: Omit<AppNotification, "id" | "timestamp">) => void;
@@ -70,6 +85,7 @@ interface AppState {
   setCurrentBranch: (branch: string | null) => void;
   setAgentDiff: (agentId: string, diff: DiffResult) => void;
   setAcpState: (agentId: string, state: AcpAgentState) => void;
+  setPlanningState: (state: PlanningSessionState) => void;
 
   // Branch actions
   fetchBranches: () => Promise<void>;
@@ -79,7 +95,6 @@ interface AppState {
   closeTicket: () => void;
   openCreateModal: () => void;
   closeCreateModal: () => void;
-  setConnected: (connected: boolean) => void;
   setRemoteConfig: (config: RemoteConfig | null) => void;
 }
 
@@ -88,10 +103,12 @@ let branchFetchId = 0;
 
 export const useStore = create<AppState>((set, get) => ({
   acpStates: {},
+  planningState: null,
   activeTicketId: null,
   archivedTickets: [],
   isArchiveOpen: false,
   isFetchingArchived: false,
+  isShellOpen: false,
   addNotification: (n) => {
     const id = `notif-${(notifCounter += 1)}`;
     const notif: AppNotification = { ...n, id, timestamp: Date.now() };
@@ -104,6 +121,7 @@ export const useStore = create<AppState>((set, get) => ({
   agentDiffs: {},
   agents: {},
   branches: [],
+  dependencyEdges: [],
   closeCreateModal: () => set({ isCreateModalOpen: false }),
   closeTicket: () => {
     set({ activeTicketId: null });
@@ -165,6 +183,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   closeArchive: () => set({ isArchiveOpen: false }),
+  closeShell: () => set({ isShellOpen: false }),
   dismissNotification: (id) =>
     set((s) => ({ notifications: s.notifications.filter((n) => n.id !== id) })),
   fetchArchivedTickets: async () => {
@@ -185,6 +204,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isArchiveOpen: true });
     get().fetchArchivedTickets();
   },
+  openShell: () => set({ isShellOpen: true }),
   unarchiveTicket: async (ticketId) => {
     const { archivedTickets } = get();
     const ticket = archivedTickets.find((t) => t.id === ticketId);
@@ -204,18 +224,6 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
   },
-  fetchAgentForTicket: async (ticketId) => {
-    const ticket = get().tickets.find((t) => t.id === ticketId);
-    if (!ticket?.agentId) {
-      return;
-    }
-    try {
-      const agent = await api.agents.get(ticket.agentId);
-      set((s) => ({ agents: { ...s.agents, [agent.id]: agent } }));
-    } catch {
-      // agent may not exist yet — that's OK
-    }
-  },
   fetchBranches: async () => {
     const id = (branchFetchId += 1);
     try {
@@ -227,14 +235,32 @@ export const useStore = create<AppState>((set, get) => ({
       // ignore transient errors
     }
   },
+  fetchDependencyEdges: async () => {
+    try {
+      const dependencyEdges = await api.tickets.listDependencies();
+      set({ dependencyEdges });
+    } catch {
+      // A stale BLOCKED badge is a cosmetic miss, not worth a toast over.
+    }
+  },
   fetchTickets: async () => {
     set({ isFetchingTickets: true });
     try {
-      const tickets = await api.tickets.list();
-      set({ tickets });
-      // Also load agents for every ticket with history so older review/done tickets hydrate.
-      const needAgents = tickets.filter((t) => t.agentId);
-      await Promise.all(needAgents.map((t) => get().fetchAgentForTicket(t.id)));
+      // One call each, not one per ticket: `agents.list` mirrors `tickets.list` (both
+      // exclude archived), so this hydrates every agent the board can show. Previously
+      // this fanned out an `agents.get` per ticket with history — 20 tickets meant 20
+      // IPC round-trips on every mount.
+      const [tickets, agentList] = await Promise.all([api.tickets.list(), api.agents.list()]);
+      // Merged, not replaced: this is a hydrate, so it must not evict an agent the store
+      // already holds (one pushed by an `agent-updated` event, or one whose ticket was
+      // archived while its detail panel is open — both are absent from the lists above).
+      set((s) => ({
+        agents: { ...s.agents, ...Object.fromEntries(agentList.map((a) => [a.id, a])) },
+        tickets,
+      }));
+      // Fire-and-forget: dependency edges are needed for the BLOCKED badge, but nothing
+      // else on this initial load depends on them, so they should not delay it.
+      void get().fetchDependencyEdges();
     } catch (error) {
       get().addNotification({
         type: "error",
@@ -255,7 +281,6 @@ export const useStore = create<AppState>((set, get) => ({
     const { activeTicketId, tickets } = get();
     return activeTicketId ? (tickets.find((t) => t.id === activeTicketId) ?? null) : null;
   },
-  isConnected: false,
   isCreateModalOpen: false,
   isFetchingTickets: false,
   moveTicket: async (ticketId, newStatus) => {
@@ -304,10 +329,18 @@ export const useStore = create<AppState>((set, get) => ({
       }
       return { acpStates: { ...s.acpStates, [agentId]: state } };
     }),
+  setPlanningState: (state) =>
+    set((s) => {
+      // Same staleness guard as setAcpState: a planning turn streams many updates and
+      // ordering is not guaranteed, so an older snapshot must not clobber a newer one.
+      if (s.planningState && s.planningState.updatedAt > state.updatedAt) {
+        return s;
+      }
+      return { planningState: state };
+    }),
   setAgent: (agent) => set((s) => ({ agents: { ...s.agents, [agent.id]: agent } })),
   setAgentDiff: (agentId, diff) =>
     set((s) => ({ agentDiffs: { ...s.agentDiffs, [agentId]: diff } })),
-  setConnected: (isConnected) => set({ isConnected }),
   setCurrentBranch: (currentBranch) => set({ currentBranch }),
   setRemoteConfig: (remoteConfig) => set({ remoteConfig }),
   tickets: [],

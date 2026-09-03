@@ -1,7 +1,3 @@
-import { randomUUID } from "node:crypto";
-
-import type { Context, MiddlewareHandler, Next } from "hono";
-
 type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
 type LogFormat = "pretty" | "json";
 type LogMeta = Record<string, unknown>;
@@ -129,51 +125,6 @@ export class Logger {
 }
 
 export const logger = new Logger("agentforge");
-
-function getRequestId(c: Context): string {
-  return c.req.header("x-request-id") ?? randomUUID();
-}
-
-function getRequestPath(c: Context): string {
-  return new URL(c.req.url).pathname;
-}
-
-export function requestLogger(): MiddlewareHandler {
-  const httpLogger = logger.child("http");
-
-  return async (c: Context, next: Next) => {
-    const start = performance.now();
-    const requestId = getRequestId(c);
-    c.header("x-request-id", requestId);
-
-    try {
-      await next();
-    } catch (error) {
-      const durationMs = Math.round(performance.now() - start);
-      httpLogger.error("request failed", {
-        durationMs,
-        method: c.req.method,
-        path: getRequestPath(c),
-        requestId,
-        ...serializeError(error),
-      });
-      markErrorLogged(error);
-      throw error;
-    }
-
-    const durationMs = Math.round(performance.now() - start);
-    const { status } = c.res;
-    const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
-
-    httpLogger[level]("request completed", {
-      durationMs,
-      method: c.req.method,
-      path: getRequestPath(c),
-      requestId,
-      status,
-    });
-  };
-}
 
 export function errorMeta(error: unknown): LogMeta {
   return serializeError(error);

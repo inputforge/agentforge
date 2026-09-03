@@ -30,13 +30,6 @@ export interface AcpToolCall {
   seq?: number;
 }
 
-export interface AcpPlanStep {
-  id: string;
-  title: string;
-  priority?: string | null;
-  status: string;
-}
-
 export interface AcpAgentState {
   agentId: string;
   sessionId: string | null;
@@ -44,7 +37,6 @@ export interface AcpAgentState {
   userMessages: AcpUserMessage[];
   messages: AcpMessage[];
   toolCalls: AcpToolCall[];
-  plan: AcpPlanStep[];
   lastError: string | null;
   updatedAt: number;
 }
@@ -58,10 +50,15 @@ export interface Ticket {
   agentId?: string | null;
   worktree?: string | null;
   branch?: string | null;
-  agentTitle?: string | null;
   archivedAt?: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/** `ticketId` needs `dependsOnTicketId` to land (reach `review` or `done`) first. */
+export interface DependencyEdge {
+  ticketId: string;
+  dependsOnTicketId: string;
 }
 
 export interface Agent {
@@ -183,4 +180,49 @@ export interface CodexStatus {
   authMethod: "apikey" | "chatgpt" | "agentIdentity" | "unknown" | null;
   loginStatusText: string | null;
   error: string | null;
+}
+
+export type NotificationType = "agent-done" | "merge-conflict" | "error" | "info";
+
+/**
+ * A notification as emitted by the backend. `id` and `timestamp` are assigned
+ * by the renderer's store on receipt — see the frontend's `AppNotification`.
+ */
+export interface NotificationPayload {
+  type: NotificationType;
+  message: string;
+  ticketId?: string;
+  agentId?: string;
+}
+
+// ─── Planning ────────────────────────────────────────────────────────────────
+
+/**
+ * An interactive planning session: the conversation that decides what to build.
+ *
+ * Deliberately not an `AcpAgentState`. The two look similar, but a planning session has no
+ * agent, no ticket, no worktree and no branch — it runs read-only in the repo root and its
+ * output is a plan, not a diff.
+ *
+ * `AcpAgentState` (execution agents) used to carry a `plan` field of its own, populated
+ * from ACP `plan` updates — which only ever come from Claude's TodoWrite tool. TodoWrite
+ * is not in the tool set (verified against a live session in both `plan` and `default`
+ * mode), so that field was never once populated and has since been removed. Plan mode
+ * delivers its plan as markdown via `ExitPlanMode` instead, which is what this holds.
+ */
+export interface PlanningSessionState {
+  id: string;
+  status: AcpTurnStatus;
+  userMessages: AcpUserMessage[];
+  messages: AcpMessage[];
+  toolCalls: AcpToolCall[];
+  /** The plan markdown, once ExitPlanMode has offered one. Null until then. */
+  plan: string | null;
+  /**
+   * Where Claude wrote the plan (`~/.claude/plans/<slug>.md`). Hand-editable, and it outlives
+   * the session — worth surfacing rather than hiding the fact that a real file exists.
+   */
+  planFilePath: string | null;
+  lastError: string | null;
+  updatedAt: number;
 }

@@ -10,6 +10,9 @@ import m008 from "./008_add_acp_state.ts";
 import m009 from "./009_add_agent_state.ts";
 import m010 from "./010_add_diff_comments.ts";
 import m011 from "./011_add_archive.ts";
+import m012 from "./012_add_ticket_dependencies.ts";
+import m013 from "./013_add_planning_sessions.ts";
+import m014 from "./014_drop_agent_title.ts";
 export const migrations: Migration[] = [
   m001,
   m002,
@@ -22,4 +25,7 @@ export const migrations: Migration[] = [
   m009,
   m010,
   m011,
+  m012,
+  m013,
+  m014,
 ];

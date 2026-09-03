@@ -1,0 +1,87 @@
+# electron-builder configuration.
+#
+# No rebuild step anywhere: node-pty@1.1.0 is N-API (node-addon-api), so its
+# prebuilt .node binaries are ABI-stable across Node/Electron versions. Electron 43
+# bundles Node 24.18.0 (module ABI 148) and loads the shipped prebuild as-is —
+# @electron/rebuild and node-gyp are not needed and are explicitly disabled below.
+#
+# No auto-update and no mac universal build in this pass.
+
+appId: com.inputforge.agentforge
+productName: AgentForge
+copyright: Copyright © InputForge
+
+directories:
+  output: dist
+  buildResources: build
+
+# Everything the main process needs at runtime. The renderer is served from
+# out/client over the app:// protocol; the backend + main are bundled into
+# out/electron.
+files:
+  # Exclude node_modules WHOLESALE first, then re-add only node-pty.
+  #
+  # This negation is load-bearing: electron-builder copies every *production*
+  # dependency into the asar by default, no matter what `files` lists. Measured
+  # without it — a 152MB asar with 27,786 entries: 10,246 from @icons-pack, 3,927
+  # from lucide-react, 3,886 from date-fns, plus shiki, zod and even hono. Every one
+  # is already inlined into out/electron/main.js by esbuild, so all of it is dead
+  # weight shipped twice.
+  #
+  # Order matters: later patterns win, so node-pty must come after the negation.
+  - "!node_modules/**"
+  - out/electron/**
+  - out/client/**
+  - package.json
+  # The one exception: node-pty is `external` in scripts/build-electron.ts because a
+  # native .node addon cannot be inlined into a JS bundle, so the real module must
+  # ship and be resolvable at runtime.
+  - node_modules/node-pty/**
+
+asar: true
+
+# A native addon cannot be dlopen'd from inside an asar — the OS loader needs a
+# real path on disk. Unpacking rewrites these to app.asar.unpacked/ and node-pty
+# resolves them normally.
+asarUnpack:
+  - node_modules/node-pty/**
+
+# N-API means no rebuild. Leaving these on would invoke node-gyp and fail on any
+# machine without a full C++ toolchain, for no benefit.
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+# Asserts the spawn-helper exec bit and the native's Mach-O arch. See the script —
+# both failures are silent-until-runtime otherwise.
+afterPack: scripts/afterPack.cjs
+
+mac:
+  category: public.app-category.developer-tools
+  # The app spawns agent CLIs and PTYs, which is exactly what hardened runtime
+  # restricts — hence the entitlements below.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Per-arch, NOT universal: a universal build would have to fuse two ~200MB agent
+  # natives per arch into one binary, and `lipo` cannot merge the arch-gated
+  # optional deps these agents resolve at runtime.
+  target:
+    - target: zip
+      arch:
+        - x64
+        - arm64
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+# Linux is deliberately absent. node-pty ships prebuilds for darwin-arm64,
+# darwin-x64, win32-arm64 and win32-x64 only — there is NO Linux prebuild, so it
+# would need a from-source node-gyp build (which npmRebuild: false disables) plus a
+# C++ toolchain on every build machine. Claiming a Linux target we have not built
+# would be worse than not offering one.

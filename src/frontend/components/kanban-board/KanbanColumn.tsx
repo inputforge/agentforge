@@ -1,8 +1,11 @@
 import { useDroppable } from "@dnd-kit/core";
 import { clsx } from "clsx";
-import { Check, CirclePlay, Eye, Inbox } from "lucide-react";
+import { Check, CirclePlay, ClipboardList, Eye, Inbox } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { getUnresolvedBlockers } from "../../../common/blocked";
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
 import { COLUMN_META } from "../../types";
@@ -23,11 +26,40 @@ interface Props {
 export function KanbanColumn({ status, tickets }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const agents = useStore((s) => s.agents);
+  // Board-wide, not this column's own `tickets` prop: a blocker can sit in any column
+  // (in-progress, review — even another backlog ticket), so resolving "is this blocked"
+  // needs the full board, the same reason ticketsToAutoStart and countNeedsAttention do.
+  const allTickets = useStore((s) => s.tickets);
+  const dependencyEdges = useStore((s) => s.dependencyEdges);
+  const navigate = useNavigate();
+  const openPlanning = useCallback(() => navigate("/plan"), [navigate]);
   const meta = COLUMN_META[status];
   const Icon = COLUMN_ICONS[status];
 
+  // Only backlog tickets can meaningfully be "blocked" (see getUnresolvedBlockers'
+  // docstring), so the other three columns skip this entirely rather than compute an
+  // answer nothing will render.
+  const blockersByTicketId = useMemo(() => {
+    if (status !== "backlog") {
+      return null;
+    }
+    const map = new Map<string, Ticket[]>();
+    for (const ticket of tickets) {
+      const blockers = getUnresolvedBlockers(ticket.id, allTickets, dependencyEdges);
+      if (blockers.length > 0) {
+        map.set(ticket.id, blockers);
+      }
+    }
+    return map;
+  }, [status, tickets, allTickets, dependencyEdges]);
+
   return (
-    <div className="flex flex-col min-w-[280px] max-w-[320px] w-full">
+    /* `flex-1` so the four columns divide the window rather than stopping at a fixed
+       320px and stranding ~90px of dead space at the right edge of the default 1440px
+       window — a desktop window is resized, not scrolled to. min/max keep cards
+       readable: below 280px the board scrolls horizontally instead of crushing them,
+       and above 420px they would stretch without gaining anything. */
+    <div className="flex flex-col flex-1 min-w-[280px] max-w-[420px]">
       {/* Column header */}
       <div
         className={clsx(
@@ -47,25 +79,44 @@ export function KanbanColumn({ status, tickets }: Props) {
         />
       </div>
 
-      {/* Drop zone */}
+      {/* Drop zone. No min-h here on purpose: measured at the window's own enforced
+          floor (940x600, windowState.ts's MIN_SIZE) the zone's real height is ~497px —
+          flex-1 alone never lets it shrink smaller than that, so a min-h-[400px] here
+          would be a floor that can never bind. */}
       <div
         ref={setNodeRef}
         className={clsx(
-          "flex-1 flex flex-col gap-2 p-2 border overflow-y-auto min-h-[400px] transition-colors",
+          "flex-1 flex flex-col gap-2 p-2 border overflow-y-auto transition-colors",
           "border-forge-border",
           isOver ? "bg-forge-surface-bright" : "bg-forge-dark",
         )}
       >
-        {tickets.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
-          </div>
-        )}
+        {tickets.length === 0 &&
+          (status === "backlog" ? (
+            // Empty backlog is precisely when planning matters most — the CTA here is the
+            // only route into /plan besides the header button, and this is where a new
+            // user actually lands first.
+            <div className="flex flex-col items-center justify-center h-full gap-3">
+              <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
+              <button
+                className="forge-btn-ghost py-1 px-2.5 flex items-center gap-1.5"
+                onClick={openPlanning}
+              >
+                <ClipboardList size={11} />
+                <span className="text-[10px] uppercase tracking-widest">PLAN SOMETHING</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-forge-text-muted text-xs uppercase tracking-widest">EMPTY</span>
+            </div>
+          ))}
         {tickets.map((ticket) => (
           <TicketCard
             key={ticket.id}
             ticket={ticket}
             agent={ticket.agentId ? agents[ticket.agentId] : undefined}
+            blockedBy={blockersByTicketId?.get(ticket.id)}
           />
         ))}
       </div>

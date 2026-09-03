@@ -9,6 +9,9 @@
     },
     {
       "path": "src/backend"
+    },
+    {
+      "path": "src/electron"
     }
   ],
   "compilerOptions": {

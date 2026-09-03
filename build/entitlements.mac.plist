@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened runtime entitlements.
+
+  AgentForge's whole purpose is to spawn other people's binaries (claude, codex-acp,
+  git, the user's shell) inside PTYs. Hardened runtime blocks most of that by
+  default, so each entitlement below is load-bearing, not boilerplate.
+-->
+<plist version="1.0">
+  <dict>
+    <!--
+      Required to exec the agent CLIs and git. Without it, hardened runtime refuses
+      to load any child executable that is not signed by us — which is every agent
+      binary and every tool on the user's PATH.
+    -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!--
+      The agent natives (claude, codex-acp) are signed by their own publishers, not
+      by us. Library validation would reject them outright.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!--
+      V8 and the agents' JIT need writable+executable pages.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!--
+      Child processes (agents, shells) inherit the sandbox/runtime; they need to
+      keep their own DYLD environment, which hardened runtime otherwise strips.
+    -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+
+    <!--
+      Agents make outbound HTTPS calls (Anthropic/OpenAI APIs), and git talks to
+      remotes over https/ssh.
+    -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!--
+      Not sandboxed: the app reads and writes arbitrary user repos chosen through a
+      picker, creates git worktrees inside them, and execs tools from the user's
+      PATH. That is fundamentally incompatible with the App Sandbox, and this app is
+      distributed directly (zip/dmg), not through the App Store.
+    -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+  </dict>
+</plist>

@@ -9,13 +9,13 @@ interface ShellTerminalProps {
 }
 
 export function ShellTerminal({ onClose }: ShellTerminalProps) {
-  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [cwd, setCwd] = useState("");
-  const { containerRef } = useForgeTerminal(wsUrl);
+  const { containerRef } = useForgeTerminal(sessionId);
 
   useEffect(() => {
     let cancelled = false;
-    let sessionId: string | null = null;
+    let createdId: string | null = null;
 
     api.shell
       .create()
@@ -26,16 +26,16 @@ export function ShellTerminal({ onClose }: ShellTerminalProps) {
           });
           return;
         }
-        sessionId = id;
+        createdId = id;
         setCwd(dir);
-        setWsUrl(`/ws/shell/${id}`);
+        setSessionId(id);
       })
       .catch(console.error);
 
     return () => {
       cancelled = true;
-      if (sessionId) {
-        api.shell.kill(sessionId).catch(() => {
+      if (createdId) {
+        api.shell.kill(createdId).catch(() => {
           /* empty */
         });
       }

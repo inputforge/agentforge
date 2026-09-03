@@ -4,30 +4,40 @@ Get AgentForge running in under five minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) v1.0 or later
-- At least one AI coding agent CLI installed:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — `npm install -g @anthropic-ai/claude-code`
-  - [Codex](https://github.com/openai/codex) — `npm install -g @openai/codex`
-  - Or any other CLI agent (Aider, etc.)
+- [Node.js](https://nodejs.org/) 24 or later, including npm
+- `git`
 - A git repository you want agents to work on
+- **At least one agent CLI, installed by you and on your `PATH`.** AgentForge does not
+  ship them — each is a ~200MB per-architecture native binary, so you install them the
+  same way you install any other CLI:
+  - **Claude Code** → provides `claude`.
+    See [the install docs](https://docs.anthropic.com/en/docs/claude-code).
+  - **Codex** → provides `codex-acp`, the ACP adapter (not the plain `codex` CLI):
+    `npm install -g @zed-industries/codex-acp`
+  - **Custom** — any CLI that speaks ACP; you supply the command.
+
+Check they resolve: `command -v claude` / `command -v codex-acp`. If a binary is
+missing, that agent type reports unavailable in the UI; the rest of the app works.
 
 ## Install and run
 
 ```bash
 git clone https://github.com/your-org/agentforge
 cd agentforge
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+An AgentForge window opens.
 
 ## Connect your repository
 
-AgentForge auto-detects the git repository it is running from. The header shows the repo URL and current branch once detected. To point AgentForge at a different repository, set `REPO_PATH` before starting:
+On first run AgentForge asks you to pick the git repository agents should work in, and
+remembers it for next time. The header shows the repo URL and current branch once
+detected. To point AgentForge at a different repository, set `REPO_PATH`:
 
 ```bash
-REPO_PATH=/path/to/myproject bun run dev
+REPO_PATH=/path/to/myproject npm run dev
 ```
 
 ## Create your first ticket

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    // This process is Electron's main (Node 24.18.0 / ABI 148). Restrict globals
+    // and builtins to the runtime we ship; esbuild only bundles this code.
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../../out/types/electron"
+  },
+  // ../backend as well as ../common: main.ts imports `startBackend` from
+  // ../backend/bootstrap.ts — the backend runs *in* this process, so it is a real
+  // compile-time dependency, not just a type-level one.
+  "references": [{ "path": "../common" }, { "path": "../backend" }],
+  "include": ["./**/*"]
+}

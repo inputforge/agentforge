@@ -4,42 +4,61 @@
 
 AgentForge needs to know which git repository agents should work in.
 
-### Auto-detect
+### Pick a repository
 
-By default AgentForge detects the git repository it was started from (`process.cwd()`). The header displays the repo URL (with an icon for GitHub/GitLab/Bitbucket) and the current branch, refreshed every 5 seconds.
+On first run AgentForge opens a folder picker. Your choice is remembered in
+`repos.json` under Electron's `userData` directory, so subsequent launches reopen it.
+The header displays the repo URL (with an icon for GitHub/GitLab/Bitbucket) and the
+current branch, refreshed every 5 seconds.
+
+One repository is open at a time: the schema is inherently per-repo (`remote_config` is
+pinned to a single row, and worktrees live under that repo).
 
 ### Point to a specific repository
 
-Set `REPO_PATH` before starting AgentForge:
+Set `REPO_PATH` to override the remembered choice:
 
 ```bash
-REPO_PATH=/path/to/myproject bun run start
+REPO_PATH=/path/to/myproject npm run dev
 ```
 
-This overrides auto-detection and persists for the lifetime of that process.
+Note that a repository is now required — AgentForge no longer falls back to the
+current working directory, because a packaged app launched from Finder has a working
+directory of `/`.
 
 ## Environment variables
 
-| Variable    | Default         | Description                                                                         |
-| ----------- | --------------- | ----------------------------------------------------------------------------------- |
-| `PORT`      | `3001`          | Port the backend HTTP and WebSocket server listens on                               |
-| `REPO_PATH` | `process.cwd()` | Path to the git repository AgentForge manages. Overrides auto-detection on startup. |
-
-Set these in your shell or in a `.env` file before running `bun run dev` / `bun run start`.
+| Variable         | Default           | Description                                                         |
+| ---------------- | ----------------- | ------------------------------------------------------------------- |
+| `REPO_PATH`      | registry / picker | Git repository AgentForge manages. Overrides the remembered choice. |
+| `AGENTFORGE_DEV` | unset             | Load the renderer from the Vite dev server instead of `app://`      |
+| `CODEX_ACP_PATH` | PATH lookup       | Path to the `codex-acp` binary                                      |
+| `LOG_LEVEL`      | `info`            | Backend log level                                                   |
+| `LOG_FORMAT`     | pretty            | Set to `json` for structured logs                                   |
 
 ```bash
-# Example: run on a different port, targeting a specific repo
-PORT=4000 REPO_PATH=/home/user/myproject bun run start
+# Example: target a specific repo
+REPO_PATH=/home/user/myproject npm run dev
 ```
 
 ## Data storage
 
-AgentForge stores all state (tickets, agents, remote config) in a SQLite database at `.agentforge/data/agentforge.db` relative to the project root. The file is created automatically on first run; back it up before changing schema if you want to preserve ticket history.
+AgentForge stores all state (tickets, agents, remote config, diff comments, integration
+config) in a SQLite database at `.agentforge/data/agentforge.db` inside the repository it
+manages. The file is created on first run; back it up before changing schema if you want
+to preserve ticket history.
 
-On startup, the backend creates the SQLite file if needed and runs migrations defined in `src/backend/db/migrations/`. Migrations are idempotent TypeScript functions tracked in a `_migrations` table, so re-running a migration is always safe.
+On startup the backend creates the SQLite file if needed and runs migrations defined in
+`src/backend/db/migrations/`. Migrations are idempotent TypeScript functions tracked in a
+`_migrations` table and applied in a transaction, so a failed or re-run migration is safe.
 
-## Claude hooks
+## Agent lifecycle events
 
-When launching a Claude agent, AgentForge writes `.claude/settings.local.json` into the agent's worktree. This file registers HTTP hooks that post lifecycle events (Stop, Notification, PermissionRequest, etc.) back to the backend. You don't need to configure this — it happens automatically.
+Agents communicate over **ACP** (Agent Client Protocol). Claude Code runs in-process;
+`codex` and custom CLIs run as child processes over ndJSON stdio. Lifecycle events
+(turn completion, tool calls, permission requests) arrive on that protocol directly —
+there is nothing to configure.
 
-If you have your own `.claude/settings.local.json` at the repo root, AgentForge's per-agent file takes precedence because it lives in the worktree, not the main checkout.
+Older versions registered HTTP hooks by writing `.claude/settings.local.json` into each
+worktree. That mechanism is gone. If a worktree created by an old version still contains
+such a file, its hooks will fail harmlessly; you can delete it.

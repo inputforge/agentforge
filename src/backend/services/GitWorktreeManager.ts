@@ -1,14 +1,78 @@
+import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-
-import { simpleGit } from "simple-git";
-import type { SimpleGit } from "simple-git";
+import { promisify } from "node:util";
 
 import { isGeneratedFile } from "../../common/generatedFiles.ts";
 import type { DiffResult, GitBranchInfo, RemoteConfig } from "../../common/types.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
 
 const log = logger.child("git");
+const execFileAsync = promisify(execFile);
+const GIT_OUTPUT_LIMIT = 100 * 1024 * 1024;
+
+async function runGit(cwd: string | undefined, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: GIT_OUTPUT_LIMIT,
+    });
+    return stdout;
+  } catch (error) {
+    const stderr =
+      error && typeof error === "object" && "stderr" in error && typeof error.stderr === "string"
+        ? error.stderr.trim()
+        : "";
+    throw new Error(stderr || `git ${args[0] ?? "command"} failed`, { cause: error });
+  }
+}
+
+interface TrackedStatus {
+  conflicted: number;
+  deleted: number;
+  dirty: boolean;
+  modified: number;
+  renamed: number;
+  staged: number;
+}
+
+function parseTrackedStatus(raw: string): TrackedStatus {
+  const status: TrackedStatus = {
+    conflicted: 0,
+    deleted: 0,
+    dirty: false,
+    modified: 0,
+    renamed: 0,
+    staged: 0,
+  };
+  const entries = raw.split("\0");
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (entry.length < 3) {
+      continue;
+    }
+
+    const x = entry[0];
+    const y = entry[1];
+    status.dirty = true;
+    if (x !== " ") status.staged += 1;
+    if (y === "M") status.modified += 1;
+    if (x === "D" || y === "D") status.deleted += 1;
+    if (x === "R" || y === "R") status.renamed += 1;
+    if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(`${x}${y}`)) {
+      status.conflicted += 1;
+    }
+
+    // Porcelain v1 -z emits the original path as a second NUL-delimited field.
+    if (["R", "C"].includes(x) || ["R", "C"].includes(y)) {
+      index += 1;
+    }
+  }
+
+  return status;
+}
 
 /**
  * Detect the git repo at `searchPath` (walks up to find .git).
@@ -17,18 +81,12 @@ const log = logger.child("git");
  */
 export async function detectLocalRepo(searchPath: string): Promise<RemoteConfig | null> {
   try {
-    const git = simpleGit(searchPath);
-    const isRepo = await git.checkIsRepo();
-    if (!isRepo) {
-      return null;
-    }
-
-    const localPath = (await git.revparse(["--show-toplevel"])).trim();
-    const baseBranch = (await git.revparse(["--abbrev-ref", "HEAD"])).trim();
+    const localPath = (await runGit(searchPath, ["rev-parse", "--show-toplevel"])).trim();
+    const baseBranch = (await runGit(searchPath, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
 
     let repoUrl = "";
     try {
-      repoUrl = ((await git.remote(["get-url", "origin"])) || "").trim();
+      repoUrl = (await runGit(searchPath, ["remote", "get-url", "origin"])).trim();
     } catch {
       // no remote configured — that's fine, local-only repo
     }
@@ -40,21 +98,26 @@ export async function detectLocalRepo(searchPath: string): Promise<RemoteConfig 
 }
 
 export class GitWorktreeManager {
-  private baseGit: SimpleGit;
-
-  constructor(private repoPath: string) {
-    this.baseGit = simpleGit(repoPath);
-  }
+  constructor(private repoPath: string) {}
 
   async currentBranch(): Promise<string> {
-    return (await this.baseGit.revparse(["--abbrev-ref", "HEAD"])).trim();
+    return (await runGit(this.repoPath, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
   }
 
   async listBranches(): Promise<GitBranchInfo[]> {
-    const summary = await this.baseGit.branchLocal();
-    return summary.all
-      .filter((name) => !name.startsWith("agent/"))
-      .map((name) => ({ current: name === summary.current, name }));
+    const raw = await runGit(this.repoPath, [
+      "for-each-ref",
+      "--format=%(refname:short)%09%(HEAD)",
+      "refs/heads",
+    ]);
+    return raw
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [name, marker] = line.split("\t");
+        return { current: marker === "*", name };
+      })
+      .filter(({ name }) => !name.startsWith("agent/"));
   }
 
   async clone(url: string, targetPath: string): Promise<void> {
@@ -62,17 +125,17 @@ export class GitWorktreeManager {
     if (!existsSync(parentDir)) {
       mkdirSync(parentDir, { recursive: true });
     }
-    await simpleGit().clone(url, targetPath);
+    await runGit(undefined, ["clone", "--", url, targetPath]);
   }
 
   async pull(baseBranch: string): Promise<void> {
-    await this.baseGit.fetch("origin");
-    await this.baseGit.checkout(baseBranch);
-    await this.baseGit.pull("origin", baseBranch, ["--ff-only"]);
+    await runGit(this.repoPath, ["fetch", "origin"]);
+    await runGit(this.repoPath, ["checkout", baseBranch]);
+    await runGit(this.repoPath, ["pull", "--ff-only", "origin", baseBranch]);
   }
 
   async push(branch: string): Promise<void> {
-    await this.baseGit.push("origin", branch, ["--set-upstream"]);
+    await runGit(this.repoPath, ["push", "--set-upstream", "origin", branch]);
   }
 
   async createWorktree(
@@ -101,11 +164,11 @@ export class GitWorktreeManager {
     try {
       // Create the agent branch from the selected base branch, not whatever
       // happens to be checked out in the main worktree.
-      await this.baseGit.raw(["worktree", "add", "-b", branch, worktreePath, baseBranch]);
+      await runGit(this.repoPath, ["worktree", "add", "-b", branch, worktreePath, baseBranch]);
       log.info("worktree created", { branch, ticketId, worktreePath });
     } catch {
       // Branch already exists (e.g. agent restarted after exit) — check it out without -b
-      await this.baseGit.raw(["worktree", "add", worktreePath, branch]);
+      await runGit(this.repoPath, ["worktree", "add", worktreePath, branch]);
       log.info("worktree created from existing branch", {
         branch,
         ticketId,
@@ -118,7 +181,7 @@ export class GitWorktreeManager {
 
   async removeWorktree(worktreePath: string): Promise<void> {
     try {
-      await this.baseGit.raw(["worktree", "remove", worktreePath, "--force"]);
+      await runGit(this.repoPath, ["worktree", "remove", worktreePath, "--force"]);
       log.info("worktree removed", { worktreePath });
     } catch (error) {
       log.debug("worktree already gone or remove failed", {
@@ -129,24 +192,22 @@ export class GitWorktreeManager {
   }
 
   async getDiff(worktreePath: string, baseBranch: string): Promise<DiffResult> {
-    const worktreeGit = simpleGit(worktreePath);
-
     // Find the fork point so the diff is always relative to where this branch diverged,
     // regardless of any new commits on baseBranch since then.
-    const mergeBase = (await worktreeGit.raw(["merge-base", baseBranch, "HEAD"])).trim();
+    const mergeBase = (await runGit(worktreePath, ["merge-base", baseBranch, "HEAD"])).trim();
 
     // Detect if baseBranch has moved ahead of the fork point — agent branch needs a rebase.
-    const baseBranchHead = (await worktreeGit.raw(["rev-parse", baseBranch])).trim();
+    const baseBranchHead = (await runGit(worktreePath, ["rev-parse", baseBranch])).trim();
     const isDiverged = baseBranchHead !== mergeBase;
 
     const aheadCountStr = (
-      await worktreeGit.raw(["rev-list", "--count", `${mergeBase}..HEAD`])
+      await runGit(worktreePath, ["rev-list", "--count", `${mergeBase}..HEAD`])
     ).trim();
     const aheadCount = Number.parseInt(aheadCountStr, 10) || 0;
 
     // Diff merge-base against the working tree (no second ref) so uncommitted edits
     // are included alongside any committed changes on the agent branch.
-    const rawFull = await worktreeGit.diff([mergeBase]);
+    const rawFull = await runGit(worktreePath, ["diff", "--no-color", "--no-ext-diff", mergeBase]);
     const { filtered, generated } = partitionGeneratedDiff(rawFull, (path) =>
       readWorktreeFile(worktreePath, path),
     );
@@ -162,10 +223,9 @@ export class GitWorktreeManager {
 
   async commitWorktree(worktreePath: string, message: string): Promise<void> {
     log.debug("staging all changes", { worktreePath });
-    const worktreeGit = simpleGit(worktreePath);
-    await worktreeGit.add("-A");
+    await runGit(worktreePath, ["add", "-A"]);
     log.debug("committing", { message, worktreePath });
-    await worktreeGit.commit(message, { "--allow-empty": null });
+    await runGit(worktreePath, ["commit", "--allow-empty", "-m", message]);
     log.info("commit complete", { message, worktreePath });
   }
 
@@ -179,10 +239,8 @@ export class GitWorktreeManager {
       baseBranch,
       worktreePath,
     });
-    const worktreeGit = simpleGit(worktreePath);
-
     try {
-      await worktreeGit.rebase([baseBranch]);
+      await runGit(worktreePath, ["rebase", baseBranch]);
       log.info("rebase complete", { baseBranch, worktreePath });
       return { conflicted: false, success: true };
     } catch (error) {
@@ -194,7 +252,7 @@ export class GitWorktreeManager {
           worktreePath,
         });
         if (abortOnConflict) {
-          await worktreeGit.rebase(["--abort"]).catch((abortErr) => {
+          await runGit(worktreePath, ["rebase", "--abort"]).catch((abortErr) => {
             log.warn("rebase --abort failed", {
               worktreePath,
               ...errorMeta(abortErr),
@@ -213,7 +271,7 @@ export class GitWorktreeManager {
   }
 
   private async findWorktreeForBranch(branch: string): Promise<string | null> {
-    const raw = await this.baseGit.raw(["worktree", "list", "--porcelain"]);
+    const raw = await runGit(this.repoPath, ["worktree", "list", "--porcelain"]);
     const entries = raw.trim().split(/\n\n+/);
     for (const entry of entries) {
       const pathMatch = entry.match(/^worktree (.+)$/m);
@@ -233,21 +291,17 @@ export class GitWorktreeManager {
     log.info("mergeToBase started", { baseBranch, branch, worktreePath });
 
     // Refuse if the main worktree has staged or unstaged tracked-file changes
-    const status = await this.baseGit.status();
-    const hasDirtyTracked =
-      status.staged.length > 0 ||
-      status.modified.length > 0 ||
-      status.deleted.length > 0 ||
-      status.renamed.length > 0 ||
-      status.conflicted.length > 0;
-    if (hasDirtyTracked) {
+    const status = parseTrackedStatus(
+      await runGit(this.repoPath, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]),
+    );
+    if (status.dirty) {
       log.warn("merge blocked: main worktree has dirty tracked files", {
         branch,
-        conflicted: status.conflicted.length,
-        deleted: status.deleted.length,
-        modified: status.modified.length,
-        renamed: status.renamed.length,
-        staged: status.staged.length,
+        conflicted: status.conflicted,
+        deleted: status.deleted,
+        modified: status.modified,
+        renamed: status.renamed,
+        staged: status.staged,
       });
       return {
         conflicted: false,
@@ -272,15 +326,14 @@ export class GitWorktreeManager {
           branch,
           checkedOutAt,
         });
-        const wtGit = simpleGit(checkedOutAt);
-        await wtGit.merge(["--ff-only", branch]);
+        await runGit(checkedOutAt, ["merge", "--ff-only", branch]);
       } else {
         // baseBranch is not checked out anywhere — safe to update ref via fetch.
         log.debug("fast-forward updating base branch ref via fetch", {
           baseBranch,
           branch,
         });
-        await this.baseGit.raw(["fetch", ".", `${branch}:${baseBranch}`]);
+        await runGit(this.repoPath, ["fetch", ".", `${branch}:${baseBranch}`]);
       }
       log.info("fast-forward merge complete", { baseBranch, branch });
       return { conflicted: false, success: true };

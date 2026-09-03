@@ -1,13 +1,12 @@
-import type { TicketStatus } from "../../common/types";
+import type { NotificationPayload, TicketStatus } from "../../common/types";
 
-export type NotificationType = "agent-done" | "merge-conflict" | "error" | "info";
-
-export interface AppNotification {
+/**
+ * A backend `NotificationPayload` after the store has stamped it with an id and
+ * a receipt timestamp. `NotificationType` is re-exported from `../../common/types`
+ * via the `../types` barrel — it must not be redeclared here.
+ */
+export interface AppNotification extends NotificationPayload {
   id: string;
-  type: NotificationType;
-  message: string;
-  ticketId?: string;
-  agentId?: string;
   timestamp: number;
 }
 

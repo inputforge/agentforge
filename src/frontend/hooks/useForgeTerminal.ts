@@ -1,22 +1,17 @@
-import { AttachAddon } from "@xterm/addon-attach";
 import { FitAddon } from "@xterm/addon-fit";
 import { useEffect, useMemo } from "react";
 import type { RefObject } from "react";
 
+import { BRIDGE_KEY } from "../../common/ipc";
 import { TERMINAL_OPTIONS } from "../lib/terminalConfig";
-import { useSessionSocket } from "./useSessionSocket";
 import { useXTerm } from "./useXTerm";
 
-export function useForgeTerminal(wsUrl: string | null): {
+/** Attaches an xterm instance to the PTY session `sessionId` over the IPC bridge. */
+export function useForgeTerminal(sessionId: string | null): {
   containerRef: RefObject<HTMLDivElement>;
 } {
   const fitAddon = useMemo(() => new FitAddon(), []);
   const { ref, instance } = useXTerm(TERMINAL_OPTIONS);
-  const { send } = useSessionSocket();
-
-  // terminalId is the last path segment: /ws/agent/<id> or /ws/shell/<id>
-  const parts = wsUrl?.split("/");
-  const terminalId = parts ? parts[parts.length - 1] : null;
 
   // Load FitAddon once when terminal is ready
   useEffect(() => {
@@ -26,7 +21,7 @@ export function useForgeTerminal(wsUrl: string | null): {
     instance.loadAddon(fitAddon);
   }, [instance, fitAddon]);
 
-  // ResizeObserver → fit + send resize over session channel
+  // ResizeObserver → fit + tell the PTY its new dimensions
   useEffect(() => {
     if (!instance || !ref.current) {
       return;
@@ -39,83 +34,52 @@ export function useForgeTerminal(wsUrl: string | null): {
     };
     const observer = new ResizeObserver(() => {
       safeFit();
-      if (terminalId) {
-        send({
-          agentId: terminalId,
-          cols: instance.cols,
-          rows: instance.rows,
-          type: "resize",
-        });
+      if (sessionId) {
+        window[BRIDGE_KEY].pty.resize(sessionId, instance.cols, instance.rows);
       }
     });
     observer.observe(container);
     requestAnimationFrame(safeFit);
     return () => observer.disconnect();
-  }, [instance, ref, fitAddon, send, terminalId]);
+  }, [instance, ref, fitAddon, sessionId]);
 
-  // Data WS — AttachAddon owns it entirely (pure raw PTY)
+  // PTY stream over IPC — raw bytes in both directions
   useEffect(() => {
-    if (!wsUrl || !instance) {
+    if (!sessionId || !instance) {
       return;
     }
-    let disposed = false;
-    let attachAddon: AttachAddon | null = null;
-    let dataSocket: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const { pty } = window[BRIDGE_KEY];
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    // Main replays scrollback on subscribe, so clear first to avoid duplicating
+    // history when re-attaching to a live session.
+    instance.clear();
 
-    const connect = () => {
-      if (disposed) {
-        return;
-      }
-      const ws = new WebSocket(`${protocol}//${window.location.host}${wsUrl}`);
-      dataSocket = ws;
+    const inputDisposable = instance.onData((data) => pty.write(sessionId, data));
 
-      ws.addEventListener("open", () => {
-        instance.clear();
-        attachAddon?.dispose();
-        attachAddon = new AttachAddon(ws);
-        instance.loadAddon(attachAddon);
-        // Sync PTY dimensions to the actual xterm size immediately so
-        // Claude Code's cursor-movement sequences are calculated for the
-        // right column count from the first byte of output.
-        try {
-          fitAddon.fit();
-        } catch {}
-        if (terminalId) {
-          send({
-            agentId: terminalId,
-            cols: instance.cols,
-            rows: instance.rows,
-            type: "resize",
-          });
-        }
-      });
-      ws.addEventListener("close", () => {
-        attachAddon?.dispose();
-        attachAddon = null;
-        instance.write("\r\n\u001B[33m[disconnected]\u001B[0m\r\n");
-        if (!disposed) {
-          reconnectTimer = setTimeout(connect, 3000);
-        }
-      });
-      ws.addEventListener("error", () => {
-        instance.write("\r\n\u001B[31m[connection error]\u001B[0m\r\n");
-      });
-    };
+    const unsubscribe = pty.subscribe(
+      sessionId,
+      (data) => instance.write(data),
+      () => {
+        // The session is gone. Main already wrote its `[process exited with
+        // code N]` line into the data stream, so leave the terminal as-is and
+        // just stop forwarding keystrokes to a dead PTY. Nothing to reconnect.
+        inputDisposable.dispose();
+      },
+    );
 
-    connect();
+    // Sync PTY dimensions to the actual xterm size immediately so Claude Code's
+    // cursor-movement sequences are calculated for the right column count from
+    // the first byte of output.
+    try {
+      fitAddon.fit();
+    } catch {}
+    pty.resize(sessionId, instance.cols, instance.rows);
 
     return () => {
-      disposed = true;
-      if (reconnectTimer !== null) {
-        clearTimeout(reconnectTimer);
-      }
-      attachAddon?.dispose();
-      dataSocket?.close();
+      inputDisposable.dispose();
+      unsubscribe();
     };
-  }, [wsUrl, instance, terminalId, send, fitAddon]);
+  }, [sessionId, instance, fitAddon]);
 
   return { containerRef: ref as RefObject<HTMLDivElement> };
 }

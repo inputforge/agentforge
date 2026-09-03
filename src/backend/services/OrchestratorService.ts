@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 
+import { ticketsToAutoStart } from "../../common/autoStart.ts";
 import type { Agent, AgentType } from "../../common/types.ts";
-import { agentStmts, remoteStmts, ticketStmts } from "../db/index.ts";
+import { agentStmts, remoteStmts, ticketDependencyStmts, ticketStmts } from "../db/index.ts";
 import { errorMeta, logger } from "../lib/logger.ts";
-import { broadcastNotification } from "../ws/hub.ts";
 import { acpClientManager } from "./AcpClientManager.ts";
 import { gitWatcher } from "./GitWatcher.ts";
 import { GitWorktreeManager } from "./GitWorktreeManager.ts";
@@ -27,6 +27,15 @@ function titleFromDescription(description: string): string | null {
   return candidate.length > 72 ? `${candidate.slice(0, 69).trimEnd()}…` : candidate;
 }
 
+/**
+ * How this service reaches the renderer. Injected via the constructor rather than imported
+ * so it is substitutable in tests — `bootstrap.ts` passes the real `broadcastNotification`.
+ *
+ * Every broadcast in this class must go through `this.broadcast`. `handleAgentExit` used to
+ * call the imported `broadcastNotification` directly: identical at runtime (bootstrap injects
+ * that very function), but it silently bypassed the seam, so a test substituting a fake
+ * captured nothing from the exit path — the one path most worth asserting on.
+ */
 type BroadcastFn = (event: object) => void;
 
 function buildCommand(agentType: AgentType, customCommand?: string): string {
@@ -66,7 +75,20 @@ export class OrchestratorService {
     this.broadcast({ tickets, type: "kanban-sync" });
   }
 
-  async spawnAgent(ticketId: string, agentType: AgentType, customCommand?: string): Promise<void> {
+  /**
+   * `branchFromRef` overrides what the worktree branches FROM, without changing
+   * `baseBranch` — the field diff/merge always read. Used only by `autoStartDependents`:
+   * a stacked dependent must see its blocker's files immediately (branch from
+   * `agent/<blockerId>`), but its own eventual merge target must stay the real base
+   * (main), not the blocker's branch. See ticketsToAutoStart's docstring for why
+   * conflating the two would strand the dependent's work on an already-spent branch.
+   */
+  async spawnAgent(
+    ticketId: string,
+    agentType: AgentType,
+    customCommand?: string,
+    branchFromRef?: string,
+  ): Promise<void> {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket) {
       throw new Error("ticket not found");
@@ -89,7 +111,7 @@ export class OrchestratorService {
 
     if (git && config) {
       try {
-        const result = await git.createWorktree(ticketId, baseBranch);
+        const result = await git.createWorktree(ticketId, branchFromRef ?? baseBranch);
         ({ worktreePath } = result);
         ({ branch } = result);
       } catch (error) {
@@ -198,6 +220,61 @@ export class OrchestratorService {
     }
   }
 
+  /**
+   * Start whatever the plan called independent of `landedTicketId` but waiting on it —
+   * the moment it is ready for review, not after it merges. See `ticketsToAutoStart`
+   * (common/autoStart.ts) for the full trigger rule and why it is scoped to a single
+   * blocker per dependent.
+   *
+   * Runs the same two steps a manual start does (updateStatus, then spawnAgent) — there is
+   * no human here to pick an agent type, so this always uses claude-code, the only
+   * always-available in-process option.
+   */
+  private async autoStartDependents(landedTicketId: string): Promise<void> {
+    const toStart = ticketsToAutoStart(
+      ticketStmts.list.all(),
+      ticketDependencyStmts.listAll.all(),
+      agentStmts.list.all(),
+      landedTicketId,
+    );
+
+    for (const { ticketId, branchFromRef } of toStart) {
+      ticketStmts.updateStatus.run({
+        $id: ticketId,
+        $status: "in-progress",
+        $updatedAt: Date.now(),
+      });
+      const ticket = ticketStmts.get.get(ticketId);
+      if (ticket) {
+        this.broadcast({ ticket, type: "ticket-updated" });
+      }
+
+      try {
+        // Sequential on purpose: each spawn runs `git worktree add` against the same base
+        // repo, and git gives no guarantee that concurrent worktree-add calls on one repo
+        // are safe. Running these in parallel trades a lint warning for a real risk of a
+        // corrupted worktree.
+        // oxlint-disable-next-line no-await-in-loop
+        await this.spawnAgent(ticketId, "claude-code", undefined, branchFromRef);
+      } catch (error) {
+        log.error("auto-start failed to spawn dependent", {
+          ticketId,
+          ...errorMeta(error),
+        });
+        continue;
+      }
+
+      this.broadcast({
+        notification: {
+          message: `Auto-started "${ticket?.title ?? ticketId}" — its blocker reached review`,
+          ticketId,
+          type: "info",
+        },
+        type: "notification",
+      });
+    }
+  }
+
   private cleanupTicket(ticketId: string): void {
     const ticket = ticketStmts.get.get(ticketId);
     if (!ticket?.agentId) {
@@ -216,32 +293,58 @@ export class OrchestratorService {
     gitWatcher.unwatchWorktree(agentId);
     const updatedAgent = agentStmts.get.get(agentId);
     if (updatedAgent) {
-      broadcastNotification({ agent: updatedAgent, type: "agent-updated" });
+      this.broadcast({ agent: updatedAgent, type: "agent-updated" });
     }
 
     const currentTicket = ticketStmts.get.get(ticketId);
-    if (exitCode === 0 && currentTicket?.status === "in-progress") {
-      ticketStmts.updateStatus.run({
-        $id: ticketId,
-        $status: "review",
-        $updatedAt: Date.now(),
-      });
-      const ticket = ticketStmts.get.get(ticketId);
-      if (ticket) {
-        broadcastNotification({ ticket, type: "ticket-updated" });
+    // Only speak up while the ticket still claims to be in progress. If it has been moved
+    // on (dragged to done, merged), the user has already dealt with it and how the agent
+    // exited is moot.
+    if (currentTicket?.status === "in-progress") {
+      if (exitCode === 0) {
+        ticketStmts.updateStatus.run({
+          $id: ticketId,
+          $status: "review",
+          $updatedAt: Date.now(),
+        });
+        const ticket = ticketStmts.get.get(ticketId);
+        if (ticket) {
+          this.broadcast({ ticket, type: "ticket-updated" });
+        }
+        this.broadcast({
+          notification: {
+            agentId,
+            message: `Agent on "${ticketTitle}" finished — ready for review`,
+            ticketId,
+            type: "agent-done",
+          },
+          type: "notification",
+        });
+        await this.autoStartDependents(ticketId);
+      } else {
+        // The agent died on its own. Previously this branch did not exist: only a clean
+        // exit was announced, so the outcome you most need to hear about — it broke while
+        // you were away — was the one that said nothing at all. The ticket stays in
+        // `in-progress` (the agent row is already `error`), which is what surfaces the
+        // RELAUNCH button and what countNeedsAttention() counts.
+        //
+        // Any non-zero exit reaching here is a genuine failure, never a user-initiated
+        // kill: kill() sets session.finalized before killing, and every exit callback in
+        // AcpClientManager is guarded on !finalized, so a deliberate kill never fires one.
+        log.warn("agent exited non-zero", { agentId, exitCode, ticketId });
+        this.broadcast({
+          notification: {
+            agentId,
+            message: `Agent on "${ticketTitle}" failed (exit ${exitCode}) — needs attention`,
+            ticketId,
+            type: "error",
+          },
+          type: "notification",
+        });
       }
-      broadcastNotification({
-        notification: {
-          agentId,
-          message: `Agent on "${ticketTitle}" finished — ready for review`,
-          ticketId,
-          type: "agent-done",
-        },
-        type: "notification",
-      });
     }
 
-    broadcastNotification({
+    this.broadcast({
       tickets: ticketStmts.list.all(),
       type: "kanban-sync",
     });

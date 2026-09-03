@@ -71,7 +71,12 @@ export function KanbanBoard() {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-3 h-full overflow-x-auto px-4 py-3">
+      {/* `justify-center-safe`, not `justify-center`: past ~1750px the columns hit their
+          max width and the leftover space would otherwise all pool at the right edge.
+          The `-safe` variant degrades to flex-start once the columns overflow — plain
+          `center` in a scroll container pushes the overflow off the *start* side, where
+          it cannot be scrolled to, stranding the BACKLOG column in a narrow window. */}
+      <div className="flex gap-3 h-full overflow-x-auto px-4 py-3 justify-center-safe">
         {COLUMN_ORDER.map((status) => (
           <KanbanColumn key={status} status={status} tickets={ticketsByStatus[status]} />
         ))}

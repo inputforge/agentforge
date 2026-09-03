@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { isGeneratedFile } from "../../common/generatedFiles.ts";
 import { filterGeneratedDiff } from "../services/GitWorktreeManager.ts";

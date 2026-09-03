@@ -1,26 +1,12 @@
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle,
-  Circle,
-  Clock,
-  FileText,
-  Globe,
-  RefreshCw,
-  Search,
-  Send,
-  Square,
-  Terminal,
-  Zap,
-} from "lucide-react";
+import { AlertTriangle, Bot, RefreshCw, Send, Square, Zap } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, ComponentProps, KeyboardEvent } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import type { ChangeEvent, KeyboardEvent } from "react";
 
 import { api } from "../lib/api";
+import { toolKindIcon } from "../lib/toolKindIcon";
 import { useStore } from "../store";
-import type { AcpMessage, AcpToolCall, AcpTurnStatus, AcpPlanStep } from "../types";
+import type { AcpMessage, AcpToolCall, AcpTurnStatus } from "../types";
+import { MarkdownContent } from "./Markdown";
 
 interface AgentAcpPanelProps {
   agentId: string;
@@ -47,70 +33,6 @@ function mergeTurns(serverTurns: LocalTurn[], localTurns: LocalTurn[]): LocalTur
       (t) => !serverIds.has(t.id) && !(t.clientId && confirmedClientIds.has(t.clientId)),
     ),
   ];
-}
-
-const mdRemarkPlugins = [remarkGfm];
-
-const mdComponents: ComponentProps<typeof ReactMarkdown>["components"] = {
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="text-forge-accent underline underline-offset-2"
-    >
-      {children}
-    </a>
-  ),
-  blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-forge-accent/30 pl-3 my-1 text-forge-text-dim text-xs">
-      {children}
-    </blockquote>
-  ),
-  code: ({ className, children }) => {
-    const lang = /language-(\w+)/.exec(className ?? "")?.[1];
-    if (lang) {
-      return (
-        <div className="my-2 overflow-x-auto bg-forge-green/5 border-l-2 border-l-forge-green/50">
-          <div className="px-3 pt-1.5 pb-0 text-[9px] uppercase tracking-widest text-forge-green/50">
-            {lang}
-          </div>
-          <pre className="px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap font-mono text-forge-green">
-            {String(children).replace(/\n$/, "")}
-          </pre>
-        </div>
-      );
-    }
-    return (
-      <code className="font-mono text-xs text-forge-green bg-forge-surface px-1">{children}</code>
-    );
-  },
-  em: ({ children }) => <em className="text-forge-text-dim italic">{children}</em>,
-  h1: ({ children }) => <h1 className="text-sm font-mono text-forge-accent my-2">{children}</h1>,
-  h2: ({ children }) => <h2 className="text-xs font-mono text-forge-accent my-2">{children}</h2>,
-  h3: ({ children }) => <h3 className="text-xs font-mono text-forge-text-dim my-1">{children}</h3>,
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  ol: ({ children }) => (
-    <ol className="text-xs text-forge-text list-decimal list-inside my-1 space-y-0.5">
-      {children}
-    </ol>
-  ),
-  p: ({ children }) => <p className="text-xs leading-relaxed text-forge-text my-1">{children}</p>,
-  pre: ({ children }) => <>{children}</>,
-  strong: ({ children }) => (
-    <strong className="text-forge-text-bright font-mono">{children}</strong>
-  ),
-  ul: ({ children }) => (
-    <ul className="text-xs text-forge-text list-disc list-inside my-1 space-y-0.5">{children}</ul>
-  ),
-};
-
-function MarkdownContent({ text }: { text: string }) {
-  return (
-    <ReactMarkdown remarkPlugins={mdRemarkPlugins} components={mdComponents}>
-      {text}
-    </ReactMarkdown>
-  );
 }
 
 function UserMessage({ text }: { text: string }) {
@@ -207,28 +129,6 @@ function StatusBadge({ status }: { status: AcpTurnStatus }) {
   );
 }
 
-function toolKindIcon(kind: string) {
-  switch (kind) {
-    case "edit":
-    case "delete":
-    case "move": {
-      return FileText;
-    }
-    case "execute": {
-      return Terminal;
-    }
-    case "search": {
-      return Search;
-    }
-    case "fetch": {
-      return Globe;
-    }
-    default: {
-      return Terminal;
-    }
-  }
-}
-
 function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
   const isRunning = toolCall.status === "running" || toolCall.status === "pending";
   const isError = toolCall.status === "error";
@@ -236,7 +136,7 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
 
   return (
     <div
-      className={`animate-fade-in border-l-2 px-3 py-1.5 flex items-center gap-2 ${
+      className={`animate-fade-in border-l-2 px-3 py-1.5 ${
         isRunning
           ? "border-l-forge-amber/50 bg-forge-amber/4"
           : isError
@@ -244,82 +144,44 @@ function ToolCallItem({ toolCall }: { toolCall: AcpToolCall }) {
             : "border-l-forge-accent/20 bg-white/[0.015]"
       }`}
     >
-      <Icon
-        size={9}
-        className={`flex-shrink-0 ${
-          isRunning
-            ? "text-forge-amber animate-status-blink"
-            : isError
-              ? "text-forge-red/60"
-              : "text-forge-accent/50"
-        }`}
-      />
-      <span className="text-xs text-forge-text truncate flex-1">{toolCall.title}</span>
-      {toolCall.location && (
-        <span className="text-[10px] text-forge-text-dim/70 font-mono truncate max-w-[160px]">
-          {toolCall.location.split("/").slice(-2).join("/")}
+      <div className="flex items-center gap-2">
+        <Icon
+          size={9}
+          className={`flex-shrink-0 ${
+            isRunning
+              ? "text-forge-amber animate-status-blink"
+              : isError
+                ? "text-forge-red/60"
+                : "text-forge-accent/50"
+          }`}
+        />
+        <span className="text-xs text-forge-text truncate flex-1">{toolCall.title}</span>
+        {toolCall.location && (
+          <span className="text-[10px] text-forge-text-dim/70 font-mono truncate max-w-[160px]">
+            {toolCall.location.split("/").slice(-2).join("/")}
+          </span>
+        )}
+        <span
+          className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${
+            isRunning
+              ? "text-forge-amber/70"
+              : isError
+                ? "text-forge-red/60"
+                : "text-forge-text-dim/50"
+          }`}
+        >
+          {isRunning ? "RUNNING" : toolCall.status}
         </span>
+      </div>
+      {/* Captured, persisted and broadcast by the backend (extractResultSummary, up to
+          300 chars) but never rendered until now: the card said a tool ran, never what it
+          returned. Hidden while running — resultSummary is only ever set by
+          tool_call_update, so there is nothing to show yet. */}
+      {toolCall.resultSummary && (
+        <p className="mt-1 pl-[17px] text-[10px] text-forge-text-dim/60 font-mono leading-relaxed line-clamp-2 whitespace-pre-wrap">
+          {toolCall.resultSummary}
+        </p>
       )}
-      <span
-        className={`text-[9px] uppercase tracking-widest flex-shrink-0 ${
-          isRunning
-            ? "text-forge-amber/70"
-            : isError
-              ? "text-forge-red/60"
-              : "text-forge-text-dim/50"
-        }`}
-      >
-        {isRunning ? "RUNNING" : toolCall.status}
-      </span>
-    </div>
-  );
-}
-
-function PlanPanel({ plan }: { plan: AcpPlanStep[] }) {
-  if (plan.length === 0) {
-    return null;
-  }
-  return (
-    <div className="mx-4 mt-3 mb-1 border border-forge-border bg-forge-panel/50">
-      <div className="px-3 py-1.5 border-b border-forge-border">
-        <span className="text-[9px] uppercase tracking-widest text-forge-text-dim">PLAN</span>
-      </div>
-      <div className="flex flex-col">
-        {plan.map((step) => {
-          const StatusIcon =
-            step.status === "completed"
-              ? CheckCircle
-              : step.status === "in_progress"
-                ? Clock
-                : Circle;
-          return (
-            <div
-              key={step.id}
-              className="flex items-start gap-2 px-3 py-1.5 border-b border-forge-border/50 last:border-b-0"
-            >
-              <StatusIcon
-                size={10}
-                className={`flex-shrink-0 mt-0.5 ${
-                  step.status === "completed"
-                    ? "text-forge-green"
-                    : step.status === "in_progress"
-                      ? "text-forge-amber animate-status-blink"
-                      : "text-forge-text-dim/40"
-                }`}
-              />
-              <span
-                className={`text-xs leading-relaxed ${
-                  step.status === "completed"
-                    ? "text-forge-text-dim/60 line-through"
-                    : "text-forge-text"
-                }`}
-              >
-                {step.title}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -341,7 +203,6 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
 
   const allMessages = useMemo<AcpMessage[]>(() => acpState?.messages ?? [], [acpState?.messages]);
   const toolCalls = useMemo(() => acpState?.toolCalls ?? [], [acpState?.toolCalls]);
-  const plan = useMemo(() => acpState?.plan ?? [], [acpState?.plan]);
 
   const status = acpState?.status ?? "idle";
   const isRunning = status === "running";
@@ -509,9 +370,6 @@ export function AgentAcpPanel({ agentId }: AgentAcpPanelProps) {
 
       {/* Scrollable area */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto bg-forge-black pb-2">
-        {/* Plan */}
-        <PlanPanel plan={plan} />
-
         {/* Interleaved timeline */}
         {timeline.length > 0 || pendingTurns.length > 0 ? (
           <div className="flex flex-col gap-3 pt-4 px-4">

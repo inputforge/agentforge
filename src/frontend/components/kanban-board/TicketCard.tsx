@@ -1,15 +1,20 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { clsx } from "clsx";
-import { Archive, ChevronRight, Play, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Lock, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { latestToolCall } from "../../../common/latestToolCall";
+import { toolKindIcon } from "../../lib/toolKindIcon";
 import { useStore } from "../../store";
 import type { Agent, Ticket } from "../../types";
 
 interface Props {
   ticket: Ticket;
   agent?: Agent;
+  /** Unresolved blockers (common/blocked.ts) — undefined for any non-backlog ticket,
+   * whose column never computes this in the first place. */
+  blockedBy?: Ticket[];
 }
 
 const AGENT_STATUS_CLASSES: Record<string, string> = {
@@ -30,7 +35,42 @@ const AGENT_STATUS_LABEL: Record<string, string> = {
   running: "RUNNING",
 };
 
-export function TicketCard({ ticket, agent }: Props) {
+/**
+ * What the agent is doing right now, on the card itself.
+ *
+ * Without this the board is a worse list: a card only ever said "RUNNING", so seeing
+ * whether four running agents are on track meant opening all four detail panels. This is
+ * the one line Cline's own postmortem singles out as the fix for exactly that complaint —
+ * push the latest tool call onto the card face.
+ *
+ * Reads `acpStates` directly rather than fetching: `useSessionSocket` already applies every
+ * `acp-state-updated` broadcast to the store unconditionally; no detail panel needs to have
+ * ever been opened for this to populate. Shown only while running — once an agent finishes
+ * the ticket moves to review/done, where the diff tells the fuller story.
+ */
+function AgentActivityLine({ agentId }: { agentId: string }) {
+  const toolCalls = useStore((s) => s.acpStates[agentId]?.toolCalls);
+  const toolCall = useMemo(() => latestToolCall(toolCalls ?? []), [toolCalls]);
+  if (!toolCall) {
+    return null;
+  }
+  const Icon = toolKindIcon(toolCall.kind);
+  const isRunning = toolCall.status === "running" || toolCall.status === "pending";
+  return (
+    <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
+      <Icon
+        size={10}
+        className={clsx(
+          "flex-shrink-0",
+          isRunning ? "text-forge-blue animate-status-blink" : "text-forge-text-muted",
+        )}
+      />
+      <span className="text-forge-text-dim text-xs truncate">{toolCall.title}</span>
+    </div>
+  );
+}
+
+export function TicketCard({ ticket, agent, blockedBy }: Props) {
   const { openTicket, activeTicketId, discardTicket, moveTicket, archiveTicket } = useStore();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
@@ -159,11 +199,19 @@ export function TicketCard({ ticket, agent }: Props) {
           {ticket.title}
         </p>
 
-        {ticket.agentTitle && (
-          <p className="text-forge-accent text-xs leading-snug mb-1.5 font-mono opacity-80">
-            ↳ {ticket.agentTitle}
-          </p>
+        {blockedBy && blockedBy.length > 0 && (
+          <div
+            className="flex items-center gap-1.5 mb-1.5 min-w-0"
+            title={`Waiting on: ${blockedBy.map((b) => b.title).join(", ")}`}
+          >
+            <Lock size={10} className="text-forge-amber/70 flex-shrink-0" />
+            <span className="text-forge-amber/80 text-xs truncate">
+              BLOCKED · waiting on {blockedBy.map((b) => b.title).join(", ")}
+            </span>
+          </div>
         )}
+
+        {agent?.status === "running" && <AgentActivityLine agentId={agent.id} />}
 
         {ticket.description && (
           <p className="text-forge-text-dim text-xs leading-relaxed mb-2.5 line-clamp-2">

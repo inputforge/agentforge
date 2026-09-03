@@ -6,13 +6,17 @@
     "lib": ["ES2022"],
     "strict": true,
     "skipLibCheck": true,
-    "types": ["bun"],
+    // The backend runs in Electron's main process (Node 24.18.0). Restrict globals
+    // and builtins to the runtime we ship so incompatible APIs fail type-checking.
+    "types": ["node"],
     "allowImportingTsExtensions": true,
     "composite": true,
     "declaration": true,
-    "noEmit": true,
+    // `noEmit` removed: it contradicts `emitDeclarationOnly` and, with `composite`,
+    // suppresses the .d.ts output that src/electron now consumes as a project
+    // reference. Declarations only — esbuild does the real bundling.
     "emitDeclarationOnly": true,
-    "outDir": "../../out/backend"
+    "outDir": "../../out/types/backend"
   },
   "references": [{ "path": "../common" }],
   "include": ["./**/*"]

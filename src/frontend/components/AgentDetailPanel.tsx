@@ -340,8 +340,10 @@ export function AgentDetailPanel() {
 
   return (
     <div className="flex flex-col h-full bg-forge-black">
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-forge-border bg-forge-panel flex-shrink-0">
+      {/* Panel header. Doubles as the window title bar: this route fills the window, so
+          it is what the macOS traffic lights land on. Fixed h-10 rather than py-2 so the
+          lights stay vertically centred in it, matching layout/Header.tsx. */}
+      <div className="app-titlebar flex items-center justify-between pr-4 h-10 border-b border-forge-border bg-forge-panel flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-forge-text-dim text-xs uppercase tracking-widest flex-shrink-0">
             AGENT

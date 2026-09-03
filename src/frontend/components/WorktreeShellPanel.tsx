@@ -8,13 +8,13 @@ interface WorktreeShellPanelProps {
 }
 
 export function WorktreeShellPanel({ agentId }: WorktreeShellPanelProps) {
-  const [wsUrl, setWsUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [shellError, setShellError] = useState<Error | null>(null);
-  const { containerRef } = useForgeTerminal(wsUrl);
+  const { containerRef } = useForgeTerminal(sessionId);
 
   useEffect(() => {
     let cancelled = false;
-    let sessionId: string | null = null;
+    let createdId: string | null = null;
 
     api.agents
       .createShell(agentId)
@@ -25,8 +25,8 @@ export function WorktreeShellPanel({ agentId }: WorktreeShellPanelProps) {
           });
           return;
         }
-        sessionId = id;
-        setWsUrl(`/ws/shell/${id}`);
+        createdId = id;
+        setSessionId(id);
       })
       .catch((error: Error) => {
         console.error(error);
@@ -37,8 +37,8 @@ export function WorktreeShellPanel({ agentId }: WorktreeShellPanelProps) {
 
     return () => {
       cancelled = true;
-      if (sessionId) {
-        api.shell.kill(sessionId).catch(() => {
+      if (createdId) {
+        api.shell.kill(createdId).catch(() => {
           /* empty */
         });
       }

@@ -5,22 +5,25 @@ A Kanban board that spawns AI coding agents (Claude Code, Codex, or any CLI) in 
 ## Getting started
 
 ```bash
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The backend runs on port `3001`.
+An AgentForge window opens. On first run it asks you to pick a git repository.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) runtime
-- At least one AI coding agent installed (e.g. `claude`, `codex`, `aider`)
+- [Node.js](https://nodejs.org/) 24 or later, including npm
+- `git`
+- At least one agent CLI on your `PATH` — AgentForge does not ship them:
+  - **Claude Code** → `claude`
+  - **Codex** → `codex-acp` (`npm install -g @zed-industries/codex-acp`)
 
 ## Usage
 
 ### 1. Connect your repository
 
-Set the `REPO_PATH` environment variable to point at the repository you want agents to work in, or run AgentForge from inside that repo. The header shows the active repo URL and current branch once detected.
+On first run AgentForge opens a folder picker; choose the repository you want agents to work in. It remembers your choice, and `REPO_PATH` overrides it when set. The header shows the active repo URL and current branch once detected.
 
 ### 2. Create a ticket
 
@@ -51,28 +54,32 @@ You can also drag tickets between columns manually at any point, **KILL** a runn
 ## Commands
 
 ```bash
-bun run dev           # frontend + backend with hot-reload
-bun run dev:backend   # backend only
-bun run dev:frontend  # frontend only (Vite on :5173)
-bun run typecheck     # type-check all packages
-bun run build         # production build
-bun run start         # run production build
+npm run dev           # Vite dev server + Electron
+npm run dev:frontend  # renderer only (Vite on :5173)
+npm run typecheck     # type-check all four projects
+npm test              # backend tests (vitest on Node)
+npm run check         # format + lint
+npm run build         # production build
+npm run package:dir   # unsigned .app for local testing
 ```
 
 ## Configuration
 
-| Environment variable | Default         | Purpose                        |
-| -------------------- | --------------- | ------------------------------ |
-| `PORT`               | `3001`          | Backend port                   |
-| `REPO_PATH`          | `process.cwd()` | Git repo for agents to work in |
+| Environment variable | Default           | Purpose                                              |
+| -------------------- | ----------------- | ---------------------------------------------------- |
+| `REPO_PATH`          | registry / picker | Git repo for agents to work in; overrides the picker |
+| `CODEX_ACP_PATH`     | PATH lookup       | Path to the `codex-acp` binary                       |
+| `LOG_LEVEL`          | `info`            | Backend log level                                    |
 
 ## Stack
 
-|          |                                    |
-| -------- | ---------------------------------- |
-| Runtime  | Bun                                |
-| Backend  | Hono + Bun WebSockets              |
-| Database | SQLite (`bun:sqlite`)              |
-| Frontend | React 18, Zustand, Tailwind CSS v4 |
-| Terminal | xterm.js + node-pty                |
-| Git      | simple-git (worktrees)             |
+|           |                                                      |
+| --------- | ---------------------------------------------------- |
+| Shell     | Electron 43 (renderer over a custom `app://` scheme) |
+| Transport | Electron IPC — no HTTP server, no WebSocket          |
+| Backend   | TypeScript in Electron's main process                |
+| Database  | SQLite (`node:sqlite`)                               |
+| Frontend  | React 18, Zustand, Tailwind CSS v4                   |
+| Terminal  | xterm.js + node-pty                                  |
+| Agents    | ACP (Agent Client Protocol)                          |
+| Git       | simple-git (worktrees)                               |

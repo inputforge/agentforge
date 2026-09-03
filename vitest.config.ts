@@ -1,0 +1,37 @@
+import { defineConfig } from "vitest/config";
+
+/**
+ * Node-side test config: `src/backend` and `src/common`.
+ *
+ * Deliberately separate from vite.config.ts: vitest would otherwise inherit the
+ * renderer's React and Tailwind plugins, which have nothing to do with backend code
+ * running in Node. Vitest prefers vitest.config.* over vite.config.*, so this wins.
+ *
+ * The backend's target runtime is Electron's main process (Node 24), so these tests
+ * run on Node as well.
+ *
+ * `src/common` is included because it is plain Node-compatible TypeScript — shared types
+ * and pure functions, no React, no DOM. Its consumers are main and the renderer rather
+ * than the backend, so filing its tests under `src/backend/` would misstate what owns
+ * them; they belong beside the code.
+ *
+ * `src/electron` is included too, but its tests must mock `electron` wholesale: imported
+ * outside an Electron process the module resolves to the executable's path, not the API.
+ * That limits what is worth testing here to decision logic (which notification to show,
+ * what the badge should count) rather than anything that needs a real window.
+ */
+export default defineConfig({
+  test: {
+    environment: "node",
+    include: ["src/{backend,common,electron}/**/*.test.ts"],
+    // Native N-API addons (node-pty) are loaded per-test-file. Worker threads and
+    // native addons are a known hazard; a forked child process is a plain Node process,
+    // which is exactly what the addon expects. This is also vitest's default — pinned
+    // explicitly so a future default flip cannot silently break the pty suite.
+    pool: "forks",
+    // The pty suite polls real shells for output (spawn -> prompt -> exec -> exit).
+    // Vitest's 5s default is not enough headroom for a cold shell under load.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+  },
+});
