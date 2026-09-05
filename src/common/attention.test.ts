@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countNeedsAttention } from "./attention.ts";
+import { countNeedsAttention, ticketNeedsAttention } from "./attention.ts";
 import type { Agent, Ticket } from "./types.ts";
 
 function ticket(over: Partial<Ticket> & Pick<Ticket, "id" | "status">): Ticket {
@@ -101,5 +101,35 @@ describe("countNeedsAttention", () => {
 
     // 2 review + 1 errored in-progress
     expect(countNeedsAttention(tickets, agents)).toBe(3);
+  });
+});
+
+describe("ticketNeedsAttention", () => {
+  it("flags a review ticket regardless of agent", () => {
+    expect(ticketNeedsAttention(ticket({ id: "a", status: "review" }), undefined)).toBe(true);
+  });
+
+  it("flags an in-progress ticket whose agent errored", () => {
+    const t = ticket({ agentId: "ag1", id: "a", status: "in-progress" });
+    expect(ticketNeedsAttention(t, agent({ id: "ag1", status: "error" }))).toBe(true);
+  });
+
+  it("does not flag an in-progress ticket whose agent is still running", () => {
+    const t = ticket({ agentId: "ag1", id: "a", status: "in-progress" });
+    expect(ticketNeedsAttention(t, agent({ id: "ag1", status: "running" }))).toBe(false);
+  });
+
+  it("does not flag an in-progress ticket with no agent", () => {
+    expect(ticketNeedsAttention(ticket({ id: "a", status: "in-progress" }), undefined)).toBe(false);
+  });
+
+  it("does not flag backlog or done tickets even with an errored agent", () => {
+    const erroredAgent = agent({ id: "ag1", status: "error" });
+    expect(
+      ticketNeedsAttention(ticket({ agentId: "ag1", id: "a", status: "backlog" }), erroredAgent),
+    ).toBe(false);
+    expect(
+      ticketNeedsAttention(ticket({ agentId: "ag1", id: "a", status: "done" }), erroredAgent),
+    ).toBe(false);
   });
 });

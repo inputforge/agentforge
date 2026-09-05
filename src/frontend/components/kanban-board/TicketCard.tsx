@@ -5,6 +5,11 @@ import { Archive, ChevronRight, Lock, Play, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { latestToolCall } from "../../../common/latestToolCall";
+import {
+  AGENT_STATUS_CLASSES,
+  AGENT_STATUS_DOT,
+  AGENT_STATUS_LABEL,
+} from "../../lib/agentStatusBadge";
 import { toolKindIcon } from "../../lib/toolKindIcon";
 import { useStore } from "../../store";
 import type { Agent, Ticket } from "../../types";
@@ -16,24 +21,6 @@ interface Props {
    * whose column never computes this in the first place. */
   blockedBy?: Ticket[];
 }
-
-const AGENT_STATUS_CLASSES: Record<string, string> = {
-  done: "text-forge-green border-forge-green",
-  error: "text-forge-red border-forge-red",
-  running: "text-forge-blue border-forge-blue",
-};
-
-const AGENT_STATUS_DOT: Record<string, string> = {
-  done: "status-dot-done",
-  error: "status-dot-error",
-  running: "status-dot-running",
-};
-
-const AGENT_STATUS_LABEL: Record<string, string> = {
-  done: "DONE",
-  error: "ERROR",
-  running: "RUNNING",
-};
 
 /**
  * What the agent is doing right now, on the card itself.

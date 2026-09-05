@@ -1,22 +1,14 @@
 import { useDroppable } from "@dnd-kit/core";
 import { clsx } from "clsx";
-import { Check, CirclePlay, ClipboardList, Eye, Inbox } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getUnresolvedBlockers } from "../../../common/blocked";
 import { useStore } from "../../store";
 import type { Ticket, TicketStatus } from "../../types";
-import { COLUMN_META } from "../../types";
+import { COLUMN_ICONS, COLUMN_META } from "../../types";
 import { TicketCard } from "./TicketCard";
-
-const COLUMN_ICONS: Record<TicketStatus, LucideIcon> = {
-  backlog: Inbox,
-  done: Check,
-  "in-progress": CirclePlay,
-  review: Eye,
-};
 
 interface Props {
   status: TicketStatus;
