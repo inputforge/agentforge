@@ -6,6 +6,7 @@ import { CreateTicketModal } from "./components/CreateTicketModal";
 import { IntegrationsModal } from "./components/IntegrationsModal";
 import { KanbanBoard } from "./components/kanban-board/KanbanBoard";
 import { Header } from "./components/layout/Header";
+import { TicketListView } from "./components/list-view/TicketListView";
 import { NotificationToast } from "./components/NotificationToast";
 import { ShellTerminal } from "./components/ShellTerminal";
 import { SessionSocketProvider } from "./hooks/useSessionSocket";
@@ -23,7 +24,7 @@ function NavigateFnRegistrar() {
 
 function KanbanPage() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
-  const { isArchiveOpen, openArchive, closeArchive } = useStore();
+  const { isArchiveOpen, openArchive, closeArchive, viewMode } = useStore();
   const openIntegrations = useCallback(() => setIntegrationsOpen(true), []);
   const closeIntegrations = useCallback(() => setIntegrationsOpen(false), []);
 
@@ -31,7 +32,7 @@ function KanbanPage() {
     <div className="h-full flex flex-col bg-forge-black overflow-hidden">
       <Header onOpenIntegrations={openIntegrations} onOpenArchive={openArchive} />
       <main className="flex-1 overflow-hidden">
-        <KanbanBoard />
+        {viewMode === "list" ? <TicketListView /> : <KanbanBoard />}
       </main>
       <CreateTicketModal />
       <IntegrationsModal open={integrationsOpen} onClose={closeIntegrations} />
