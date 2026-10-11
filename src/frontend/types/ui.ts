@@ -1,3 +1,6 @@
+import { Check, CirclePlay, Eye, Inbox } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
 import type { NotificationPayload, TicketStatus } from "../../common/types";
 
 /**
@@ -40,4 +43,15 @@ export const COLUMN_META: Record<
     dimColor: "bg-forge-amber-dim",
     label: "REVIEW",
   },
+};
+
+/**
+ * One icon per `TicketStatus`, shared by the kanban column header and the list view's
+ * group headers/row markers so both views use the same status vocabulary.
+ */
+export const COLUMN_ICONS: Record<TicketStatus, LucideIcon> = {
+  backlog: Inbox,
+  done: Check,
+  "in-progress": CirclePlay,
+  review: Eye,
 };

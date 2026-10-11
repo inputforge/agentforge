@@ -19,6 +19,22 @@
 import type { Agent, Ticket } from "./types.ts";
 
 /**
+ * Whether a single ticket needs attention: it is in `review`, or it is `in-progress`
+ * with a dead agent. Takes the ticket's own agent (already resolved by the caller, the
+ * same lookup every board/list view already does to render agent state) rather than the
+ * whole board, so a per-row check like the list view's doesn't need to rebuild a Set for
+ * one ticket. `countNeedsAttention` below is this rule applied board-wide.
+ *
+ * See `countNeedsAttention` for why `review` and a dead `in-progress` agent are the two
+ * cases, and why `done`/`backlog` never qualify.
+ */
+export function ticketNeedsAttention(ticket: Ticket, agent: Agent | undefined): boolean {
+  return (
+    ticket.status === "review" || (ticket.status === "in-progress" && agent?.status === "error")
+  );
+}
+
+/**
  * Tickets in `review`, plus `in-progress` tickets whose agent died.
  *
  * `review` is the canonical "agent finished, your turn" state. Dead agents are the less
@@ -36,14 +52,8 @@ import type { Agent, Ticket } from "./types.ts";
  * agent also errored is one thing needing attention, not two.
  */
 export function countNeedsAttention(tickets: Ticket[], agents: Agent[]): number {
-  const erroredAgentIds = new Set(
-    agents.filter((agent) => agent.status === "error").map((agent) => agent.id),
-  );
-  const hasDeadAgent = (ticket: Ticket): boolean =>
-    ticket.agentId !== null && ticket.agentId !== undefined && erroredAgentIds.has(ticket.agentId);
-
-  return tickets.filter(
-    (ticket) =>
-      ticket.status === "review" || (ticket.status === "in-progress" && hasDeadAgent(ticket)),
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+  return tickets.filter((ticket) =>
+    ticketNeedsAttention(ticket, ticket.agentId ? agentsById.get(ticket.agentId) : undefined),
   ).length;
 }

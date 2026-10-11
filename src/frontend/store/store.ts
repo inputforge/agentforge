@@ -41,6 +41,10 @@ interface AppState {
   activeTicketId: string | null;
   isCreateModalOpen: boolean;
   isFetchingTickets: boolean;
+  /** Board (columns by status) vs list (Linear-style rows grouped by status). Not
+   * persisted — a fresh launch always starts on the board, same as every other UI flag
+   * here (isShellOpen, isArchiveOpen, etc). */
+  viewMode: "board" | "list";
 
   // Derived helpers (computed from activeTicketId)
   getActiveTicket: () => Ticket | null;
@@ -96,6 +100,7 @@ interface AppState {
   openCreateModal: () => void;
   closeCreateModal: () => void;
   setRemoteConfig: (config: RemoteConfig | null) => void;
+  setViewMode: (mode: "board" | "list") => void;
 }
 
 let notifCounter = 0;
@@ -109,6 +114,8 @@ export const useStore = create<AppState>((set, get) => ({
   isArchiveOpen: false,
   isFetchingArchived: false,
   isShellOpen: false,
+  viewMode: "board",
+  setViewMode: (mode) => set({ viewMode: mode }),
   addNotification: (n) => {
     const id = `notif-${(notifCounter += 1)}`;
     const notif: AppNotification = { ...n, id, timestamp: Date.now() };
